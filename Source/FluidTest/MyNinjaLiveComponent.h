@@ -1,14 +1,14 @@
-// MyNinjaLiveComponent.h — 复刻 FluidNinjaLive 的 NinjaLiveComponent 蓝图（第一步：C++ 父类）
+// MyNinjaLiveComponent.h — 复刻 FluidNinjaLive 的 NinjaLiveComponent 蓝图（逐步迁移）
 //
 // 迁移策略（小步增量，逐步替换蓝图）：
-//   第 1 步（本文件）：创建极简 C++ 父类，蓝图 NinjaLiveComponent 改为继承它。
-//                      此阶段父类**不添加任何逻辑/子对象**，仅提供骨架；
-//                      蓝图原有逻辑完全不变，替换后应无任何行为差异。
+//   第 1 步：创建极简 C++ 父类，蓝图 NinjaLiveComponent 改为继承它（已完成）。
+//   第 2 步（本文件）：迁移蓝图函数 ResetTempArrays 及其 40 个临时数组变量到 C++。
+//             蓝图原有逻辑保持可用；C++ 侧新增同名（带 My 前缀）实现供逐步替换。
 //   后续步骤：每次把蓝图中的一个函数/变量迁移为 C++ 虚函数/属性，
 //             迁移一次、测试一次，直到完整替换。
 //
 // 蓝图位置：/Game/_MyTest/Fluid/Bp/NinjaLiveComponent（已从原 FluidNinjaLive 目录移入测试目录）
-// 类名前缀 My：避免与蓝图内同名类型混淆。
+// 类名/函数/变量前缀 My：避免与蓝图内同名类型混淆。
 // 注意：修改蓝图父类的操作在编辑器中进行（改蓝图后需重新编译保存），
 //       C++ 侧只负责提供父类骨架。
 
@@ -20,9 +20,10 @@
 
 /**
  * NinjaLiveComponent 蓝图组件的 C++ 父类。
- * 极简空壳：仅继承 UActorComponent，不添加默认子对象、不启用额外 Tick，
- * 保证蓝图替换父类后原有组件与逻辑完全不受影响。
- * Blueprintable + BlueprintType：允许被蓝图继承/在蓝图中创建。
+ * 已迁移内容：
+ *   - 函数 ResetTempArrays → MyResetTempArrays（清空 40 个临时 Name 数组）
+ *   - 变量 TempArray0~TempArray39 → MyTempArray0~MyTempArray39
+ * 蓝图侧同名函数/变量保留，待逐步迁移后删除。
  */
 UCLASS(Blueprintable, BlueprintType, ClassGroup = (FluidSim), meta = (BlueprintSpawnableComponent))
 class FLUIDTEST_API UMyNinjaLiveComponent : public UActorComponent
@@ -31,4 +32,128 @@ class FLUIDTEST_API UMyNinjaLiveComponent : public UActorComponent
 
 public:
 	UMyNinjaLiveComponent();
+
+	// ------------------------------------------------------------------
+	// 临时数组（复刻蓝图 TempArray0~TempArray39）
+	// 蓝图类型为 Name 数组，对应 C++ TArray<FName>
+	// ------------------------------------------------------------------
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray1;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray2;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray3;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray4;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray5;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray6;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray7;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray8;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray9;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray10;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray11;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray12;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray13;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray14;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray15;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray16;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray17;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray18;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray19;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray20;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray21;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray22;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray23;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray24;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray25;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray26;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray27;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray28;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray29;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray30;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray31;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray32;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray33;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray34;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray35;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray36;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray37;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray38;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	TArray<FName> MyTempArray39;
+
+	// ------------------------------------------------------------------
+	// 复刻蓝图函数 ResetTempArrays
+	// 蓝图实现：按顺序对 TempArray0~39 调用 Array_Clear
+	// ------------------------------------------------------------------
+	/** 清空全部临时数组（复刻蓝图 ResetTempArrays） */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Temp")
+	void MyResetTempArrays();
+
+	// ------------------------------------------------------------------
+	// 复刻蓝图函数 GetTempArray
+	// 蓝图实现：40 选项 Select，按 Index 返回 TempArray0~39 中对应数组
+	// ------------------------------------------------------------------
+	/** 按索引返回对应的临时数组引用（复刻蓝图 GetTempArray，Index 范围 0~39）。
+	 *  返回引用：蓝图下游对数组的修改（如 Array_Add）会直接写回组件内部数组，
+	 *  与原版蓝图 Select 的引用传递语义一致。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Temp")
+	TArray<FName>& MyGetTempArray(int32 Index);
+
+	// ------------------------------------------------------------------
+	// 复刻蓝图 Array_Add：向指定临时数组添加一个元素
+	// ------------------------------------------------------------------
+	/** 向指定临时数组添加一个元素（复刻蓝图 Array_Add，ArrayIndex 范围 0~39） */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Temp")
+	void MyAddToTempArray(int32 ArrayIndex, FName Item);
+
+	// ------------------------------------------------------------------
+	// 复刻蓝图 Array_Clear：清空指定临时数组
+	// ------------------------------------------------------------------
+	/** 清空指定临时数组（复刻蓝图 Array_Clear，ArrayIndex 范围 0~39） */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Temp")
+	void MyClearTempArray(int32 ArrayIndex);
+
+	// ------------------------------------------------------------------
+	// 复刻蓝图 Array_Append：把另一个数组追加到指定临时数组末尾
+	// ------------------------------------------------------------------
+	/** 把另一个数组追加到指定临时数组末尾（复刻蓝图 Array_Append，ArrayIndex 范围 0~39） */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Temp")
+	void MyAppendToTempArray(int32 ArrayIndex, const TArray<FName>& Items);
 };

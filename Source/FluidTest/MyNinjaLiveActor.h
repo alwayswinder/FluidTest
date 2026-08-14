@@ -1,15 +1,16 @@
-// MyNinjaLiveActor.h — 复刻 FluidNinjaLive 的 NinjaLive 蓝图（第一步：C++ 父类）
+// MyNinjaLiveActor.h — 复刻 FluidNinjaLive 的 NinjaLive 蓝图（逐步迁移）
 //
 // 迁移策略（小步增量，逐步替换蓝图）：
-//   第 1 步（本文件）：创建极简 C++ 父类，蓝图 NinjaLive 改为继承它。
-//                      此阶段父类**不添加任何组件**，避免与蓝图内已有组件冲突；
-//                      蓝图原有逻辑完全不变，替换后应无任何行为差异。
+//   第 1 步：创建极简 C++ 父类，蓝图 NinjaLive 改为继承它（已完成）。
+//   第 2 步（本文件）：提供组件访问辅助 GetNinjaLiveComponent()。
+//             数组与数组函数（TempArray0~39 / ResetTempArrays / GetTempArray）
+//             属于 NinjaLiveComponent，已迁移到 UMyNinjaLiveComponent，
+//             Actor 蓝图通过组件引用访问它们（与蓝图原实现一致）。
 //   后续步骤：每次把蓝图中的一个函数/变量迁移为 C++ 虚函数/属性，
 //             迁移一次、测试一次，直到完整替换。
 //
-// 类名前缀 My：避免与蓝图内同名类型混淆。
-// 注意：修改蓝图父类的操作在编辑器中进行（改蓝图后需重新编译保存），
-//       C++ 侧只负责提供父类骨架。
+// 蓝图位置：/Game/_MyTest/Fluid/Bp/NinjaLive（Actor 蓝图，内含 NinjaLiveComponent 组件实例）
+// 类名/函数前缀 My：避免与蓝图内同名类型混淆。
 
 #pragma once
 
@@ -17,11 +18,12 @@
 #include "GameFramework/Actor.h"
 #include "MyNinjaLiveActor.generated.h"
 
+class UMyNinjaLiveComponent;
+
 /**
  * NinjaLive 蓝图 Actor 的 C++ 父类。
- * 极简空壳：仅继承 AActor，无默认子对象、无 Tick、无额外依赖，
- * 保证蓝图替换父类后原有组件与逻辑完全不受影响。
- * Blueprintable + BlueprintType：允许被蓝图继承/在蓝图中创建。
+ * Actor 自身不持有临时数组；数组属于其 NinjaLiveComponent 组件，
+ * 通过 GetNinjaLiveComponent() 获取类型化组件引用后访问。
  */
 UCLASS(Blueprintable, BlueprintType)
 class FLUIDTEST_API AMyNinjaLiveActor : public AActor
@@ -30,4 +32,8 @@ class FLUIDTEST_API AMyNinjaLiveActor : public AActor
 
 public:
 	AMyNinjaLiveActor();
+
+	/** 获取 NinjaLiveComponent 组件引用（对应蓝图中的 NinjaLiveComponent 组件） */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Component")
+	UMyNinjaLiveComponent* GetNinjaLiveComponent() const;
 };

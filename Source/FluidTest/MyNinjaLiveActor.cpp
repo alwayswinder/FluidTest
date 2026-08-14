@@ -1,11 +1,18 @@
-// MyNinjaLiveActor.cpp — AMyNinjaLiveActor 极简父类实现
-// 第一步仅提供空构造函数：不添加组件、不启用 Tick，保证蓝图替换父类后零行为差异。
+// MyNinjaLiveActor.cpp — AMyNinjaLiveActor 实现
+// Actor 不持有临时数组；数组属于 NinjaLiveComponent 组件，通过组件引用访问。
 
 #include "MyNinjaLiveActor.h"
 
+#include "MyNinjaLiveComponent.h"
+
 AMyNinjaLiveActor::AMyNinjaLiveActor()
 {
-	// 极简空壳：不创建任何默认子对象。
-	// 蓝图侧已有的组件（如 NinjaLiveComponent、TraceMesh 等）不受影响。
+	// 不创建任何默认子对象（蓝图侧组件不受影响），不启用 Tick。
 	PrimaryActorTick.bCanEverTick = false;
+}
+
+UMyNinjaLiveComponent* AMyNinjaLiveActor::GetNinjaLiveComponent() const
+{
+	// 按类型查找组件（蓝图中的 NinjaLiveComponent 实例）
+	return FindComponentByClass<UMyNinjaLiveComponent>();
 }
