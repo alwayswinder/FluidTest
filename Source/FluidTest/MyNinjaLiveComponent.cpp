@@ -144,3 +144,39 @@ void UMyNinjaLiveComponent::MyCompareMapLength(int32 FirstIndex, int32 LastIndex
 	const int32 Tmp = Added + MyMapLengthTmp;
 	Equal = (Tmp == MapLength);
 }
+
+void UMyNinjaLiveComponent::MyVelocityHandlerForSimArea(double CoEff, double& X, double& Y, double& Z) const
+{
+	// 复刻蓝图 VelocityHandlerForSimArea（已核对完整节点数据，含默认值）：
+	//   节点0  NotEqual:   VeloFromSimAreaMotion != 0.0            → bPickA
+	//   节点88 Multiply:   VeloFromSimAreaMotion * CoEff
+	//   节点39 Subtract:   TraceMeshParentPos - TraceMeshParentLastPos
+	//   节点8  Multiply:   (差值) * 20.0                            （B 默认 20）
+	//   节点546 MakeTransform: Rotation=TraceMeshComponent 旋转, Location/Scale 默认
+	//   节点545 InverseTransformDirection: 世界方向 → 局部方向
+	//   节点237 Multiply:   LocalDir * (VeloFromSimAreaMotion * CoEff)
+	//   节点266 SelectVector: bPickA ? 计算值 : (0,0,0)
+	//   节点388 BreakVector → X/Z；Y 经节点0 Multiply(-1) 取反
+	FVector Velocity = FVector::ZeroVector;
+
+	if (MyVeloFromSimAreaMotion != 0.0)
+	{
+		// 世界空间位移方向（乘 20）
+		const FVector WorldDir = (MyTraceMeshParentPos - MyTraceMeshParentLastPos) * 20.0;
+
+		// 用 TraceMesh 组件的旋转构造 Transform（仅旋转，位置/缩放默认）
+		const FTransform TraceMeshTransform(MyTraceMeshComponent
+			? MyTraceMeshComponent->GetComponentRotation()
+			: FRotator::ZeroRotator);
+
+		// 世界方向 → TraceMesh 局部方向（InverseTransformDirection）
+		const FVector LocalDir = TraceMeshTransform.InverseTransformVectorNoScale(WorldDir);
+
+		// 乘速度系数
+		Velocity = LocalDir * (MyVeloFromSimAreaMotion * CoEff);
+	}
+
+	X = Velocity.X;
+	Y = Velocity.Y * -1.0;   // 蓝图 Y 分量乘 -1
+	Z = Velocity.Z;
+}

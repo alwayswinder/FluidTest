@@ -16,6 +16,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "MyNinjaLiveComponent.generated.h"
 
@@ -134,6 +135,25 @@ public:
 	int32 MyMapLengthTmp = 0;
 
 	// ------------------------------------------------------------------
+	// 复刻蓝图变量（VelocityHandlerForSimArea 用）
+	// ------------------------------------------------------------------
+	/** 模拟区域运动速度（复刻蓝图 VeloFromSimAreaMotion，double） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	double MyVeloFromSimAreaMotion = 0.0;
+
+	/** TraceMesh 组件引用（复刻蓝图 TraceMeshComponent） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	TObjectPtr<UStaticMeshComponent> MyTraceMeshComponent = nullptr;
+
+	/** TraceMesh 父级当前位置（复刻蓝图 TraceMeshParentPos） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	FVector MyTraceMeshParentPos = FVector::ZeroVector;
+
+	/** TraceMesh 父级上一帧位置（复刻蓝图 TraceMeshParentLastPos） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	FVector MyTraceMeshParentLastPos = FVector::ZeroVector;
+
+	// ------------------------------------------------------------------
 	// 复刻蓝图函数 ResetTempArrays
 	// 蓝图实现：按顺序对 TempArray0~39 调用 Array_Clear
 	// ------------------------------------------------------------------
@@ -184,4 +204,20 @@ public:
 	 *        Equal=(Added+MapLengthTmp) == MapLength */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Temp")
 	void MyCompareMapLength(int32 FirstIndex, int32 LastIndex, int32& MapLength, bool& Equal, int32& Added) const;
+
+	// ------------------------------------------------------------------
+	// 复刻蓝图函数 VelocityHandlerForSimArea
+	// 蓝图实现（已核对完整节点数据，含默认值）：
+	//   if (VeloFromSimAreaMotion != 0):
+	//     WorldDir = (TraceMeshParentPos - TraceMeshParentLastPos) * 20.0
+	//     LocalDir = InverseTransformDirection(TraceMeshTransform, WorldDir)
+	//     Velocity = LocalDir * (VeloFromSimAreaMotion * CoEff)
+	//   else: Velocity = (0,0,0)
+	//   X = Velocity.X; Y = Velocity.Y * -1; Z = Velocity.Z
+	//   TraceMeshTransform = MakeTransform(Location=(0,0,0), Rotation=TraceMeshComponent 旋转, Scale=(1,1,1))
+	// ------------------------------------------------------------------
+	/** 处理模拟区域速度（复刻蓝图 VelocityHandlerForSimArea）。
+	 *  输入 CoEff（默认 -0.01）；输出分解后的 X/Y/Z 分量（Y 取反）。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Velocity")
+	void MyVelocityHandlerForSimArea(double CoEff, double& X, double& Y, double& Z) const;
 };
