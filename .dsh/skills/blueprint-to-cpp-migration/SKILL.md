@@ -9,23 +9,23 @@ description: 蓝图→C++ 迁移指南（FluidTest / UE 5.7）。记录将 Fluid
 
 ## 1. 命名规范（强制规则，必须遵守）
 
-**所有迁移到 C++ 的类名、函数名、参数名、变量名都必须添加 `My` 前缀**，避免与蓝图内同名类型/变量混淆：
+**核心原则：只有类成员变量需要 `My` 前缀（避免与蓝图内现有同名变量冲突）；函数参数与蓝图保持一致，不加前缀。**
 
-| 蓝图 | C++（带 My 前缀） |
-|---|---|
-| 类 `NinjaLiveComponent` | `UMyNinjaLiveComponent` |
-| 类 `NinjaLive`（Actor） | `AMyNinjaLiveActor` |
-| 函数 `ResetTempArrays` | `MyResetTempArrays()` |
-| 函数 `GetTempArray` | `MyGetTempArray(Index)` |
-| 函数参数 `FirstIndex` | `MyFirstIndex`（参数名同样加前缀） |
-| 变量 `TempArray0` | `MyTempArray0` |
-| 变量 `MapLengthTmp` | `MyMapLengthTmp` |
+| 蓝图 | C++ | 前缀规则 |
+|---|---|---|
+| 类 `NinjaLiveComponent` | `UMyNinjaLiveComponent` | 类名加 `My` |
+| 类 `NinjaLive`（Actor） | `AMyNinjaLiveActor` | 类名加 `My` |
+| 函数 `ResetTempArrays` | `MyResetTempArrays()` | 函数名加 `My` |
+| 函数 `GetTempArray` | `MyGetTempArray(Index)` | 函数名加 `My`，**参数不加** |
+| 函数参数 `FirstIndex` | `FirstIndex`（不变） | **参数不加前缀**，与蓝图一致 |
+| 变量 `TempArray0` | `MyTempArray0` | 类成员变量加 `My` |
+| 变量 `MapLengthTmp` | `MyMapLengthTmp` | 类成员变量加 `My` |
 
 **规则细则：**
-- 类名：C++ 惯例前缀（`U`/`A`）+ `My` + 蓝图名，如 `UMyNinjaLiveComponent`
-- 函数名：`My` + 蓝图函数名，如 `MyGetTempArray`
-- **参数名**：`My` + 蓝图参数名，如 `MyFirstIndex`、`MyLastIndex`
-- **变量名**：`My` + 蓝图变量名，如 `MyTempArray0`、`MyRenderTargetsMap`
+- 类名：C++ 惯例前缀（`U`/`A`）+ `My` + 蓝图名，如 `UMyNinjaLiveComponent`、`AMyNinjaLiveActor`
+- 函数名：`My` + 蓝图函数名，如 `MyGetTempArray`、`MyResetTempArrays`
+- **函数参数名：不加前缀，与蓝图参数名保持一致**（如 `MyGetTempArray(int32 Index)` 的参数就是 `Index`）
+- **类成员变量名：加 `My` 前缀**（避免与蓝图内同名变量冲突），如 `MyTempArray0`、`MyRenderTargetsMap`、`MyMapLengthTmp`
 - Category 统一用 `FluidSim|Temp`（或对应领域）
 - 迁移前必须确认蓝图原名（用 `manage_blueprint` 读取，见 `mcp-automation-bridge` 技能）
 
@@ -62,7 +62,7 @@ struct MyNinjaLiveComponent_eventMyGetTempArray_Parms
 **做法 A：封装 BlueprintCallable 操作函数（内部用引用完成修改）**
 ```cpp
 UFUNCTION(BlueprintCallable, Category = "FluidSim|Temp")
-void MyAddToTempArray(int32 MyArrayIndex, FName MyItem);  // 内部 GetRef().Add(MyItem)
+void MyAddToTempArray(int32 ArrayIndex, FName Item);  // 内部 GetRef().Add(Item)；参数名与蓝图一致，不加前缀
 ```
 
 **做法 B：直接用 BlueprintReadWrite 变量**
