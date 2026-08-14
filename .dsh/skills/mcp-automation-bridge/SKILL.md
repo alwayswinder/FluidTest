@@ -117,12 +117,7 @@ Native MCP 暴露 23 个 canonical 工具；WebSocket 用 `action` 字段 + payl
 
 **注意**：UE Python API 无法读取蓝图函数图（`EdGraph.Nodes` 受保护、`Blueprint.function_graphs` 无 Python 反射）；uasset 二进制里节点是序列化数据不可读。**`manage_blueprint` 的 get_graph_details 是唯一可靠的读取途径。**
 
-## 3.2 蓝图 VM 引用限制（重要：已实测验证）
-
-- **UFUNCTION 返回引用在蓝图层无效**：即使 C++ 写 `TArray<FName>& MyGetTempArray()`，UHT 生成的 thunk 参数结构仍是 `TArray<FName> ReturnValue`（值拷贝）。蓝图调用它拿到的永远是拷贝，下游修改不会写回。
-- **C++ 内部调用返回引用有效**：C++ 代码里 `TArray<FName>& Ref = MyGetTempArray(0); Ref.Add(x);` 是真引用，直接改组件内部数组。
-- **结论**：需要"蓝图修改数组"的操作，必须封装成 `BlueprintCallable` 函数（内部用引用完成修改），例如 `MyAddToTempArray(Index, Item)` / `MyClearTempArray(Index)` / `MyAppendToTempArray(Index, Items)`。
-- **或者**：直接用 `BlueprintReadWrite` 的数组变量（蓝图 Get/Set 变量是引用语义，Array_Add 直接改变量本身）。
+> 💡 蓝图函数返回值/引用相关的 C++ 知识（蓝图 VM 引用限制、数组修改模式）见 `unreal-cpp-guide` 技能。
 
 ## 4. 已验证测试记录（2026 会话）
 
