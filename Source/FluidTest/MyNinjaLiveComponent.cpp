@@ -3,6 +3,11 @@
 
 #include "MyNinjaLiveComponent.h"
 
+#include "GameFramework/Actor.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "MyNinjaLiveActor.h"
+
 UMyNinjaLiveComponent::UMyNinjaLiveComponent()
 {
 	// 不启用 Tick（蓝图侧若需要 Tick，可在蓝图里自行开启）。
@@ -179,4 +184,48 @@ void UMyNinjaLiveComponent::MyVelocityHandlerForSimArea(double CoEff, double& X,
 	X = Velocity.X;
 	Y = Velocity.Y * -1.0;   // 蓝图 Y 分量乘 -1
 	Z = Velocity.Z;
+}
+
+void UMyNinjaLiveComponent::MyEnableOwnerInput()
+{
+	// 复刻蓝图复合节点 "Enable OWNER Input"（已核对完整节点数据）：
+	//   枚举不等: UserInputBasedInteraction != NewEnumerator0（No user input，数值 0）
+	//   CheckComponentOwner 宏: Owner 是否为 NinjaLive 类（此处用 IsA<AMyNinjaLiveActor> 判断）
+	//   Actor::EnableInput(GetPlayerController(0))
+	//   if (ShowMouseCursor): PC->bShowMouseCursor = true
+	// 注意：原蓝图 Cast 到 NinjaLive_C（/Game/_MyTest/Fluid/Bp/NinjaLive），
+	//       此处用 C++ 父类 AMyNinjaLiveActor 判断（蓝图类是其子类，IsA 成立）。
+
+	// 输入方式为"无输入"时不处理（蓝图 EnumInequality 的 false 分支直接跳过）
+	if (MyUserInputBasedInteraction == EMyUserInput::None)
+	{
+		return;
+	}
+
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return;
+	}
+
+	// CheckComponentOwner：Owner 是否为 NinjaLive 类
+	if (!OwnerActor->IsA<AMyNinjaLiveActor>())
+	{
+		return;
+	}
+
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	if (!PC)
+	{
+		return;
+	}
+
+	// 启用 Owner 输入
+	OwnerActor->EnableInput(PC);
+
+	// 按需显示鼠标光标
+	if (MyShowMouseCursor)
+	{
+		PC->bShowMouseCursor = true;
+	}
 }

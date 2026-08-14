@@ -16,6 +16,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "MyNinjaFluidEnums.h"
 #include "MyNinjaLiveActor.generated.h"
 
 class UMyNinjaLiveComponent;
@@ -36,4 +37,12 @@ public:
 	/** 获取 NinjaLiveComponent 组件引用（对应蓝图中的 NinjaLiveComponent 组件） */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Component")
 	UMyNinjaLiveComponent* GetNinjaLiveComponent() const;
+
+	// ------------------------------------------------------------------
+	// 复刻蓝图变量 UserInputBasedInteraction（UserInput_Enum）
+	// 默认 Mouse single，与蓝图 UserInput_Enum 显示名一致
+	// ------------------------------------------------------------------
+	/** 用户输入方式（复刻蓝图 UserInputBasedInteraction，默认 Mouse single） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Input")
+	EMyUserInput MyUserInputBasedInteraction = EMyUserInput::MouseSingle;
 };

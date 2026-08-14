@@ -18,6 +18,7 @@
 #include "Components/ActorComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "MyNinjaFluidEnums.h"
 #include "MyNinjaLiveComponent.generated.h"
 
 /**
@@ -154,6 +155,17 @@ public:
 	FVector MyTraceMeshParentLastPos = FVector::ZeroVector;
 
 	// ------------------------------------------------------------------
+	// 复刻蓝图变量（Enable OWNER Input 复合节点用）
+	// ------------------------------------------------------------------
+	/** 用户输入方式（复刻蓝图 UserInputBasedInteraction，UserInput_Enum，默认 None） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Input")
+	EMyUserInput MyUserInputBasedInteraction = EMyUserInput::None;
+
+	/** 是否显示鼠标光标（复刻蓝图 ShowMouseCursor） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Input")
+	bool MyShowMouseCursor = true;
+
+	// ------------------------------------------------------------------
 	// 复刻蓝图函数 ResetTempArrays
 	// 蓝图实现：按顺序对 TempArray0~39 调用 Array_Clear
 	// ------------------------------------------------------------------
@@ -220,4 +232,17 @@ public:
 	 *  输入 CoEff（默认 -0.01）；输出分解后的 X/Y/Z 分量（Y 取反）。 */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Velocity")
 	void MyVelocityHandlerForSimArea(double CoEff, double& X, double& Y, double& Z) const;
+
+	// ------------------------------------------------------------------
+	// 复刻蓝图复合节点 "Enable OWNER Input"（EventGraph 内折叠图）
+	// 蓝图实现（已核对完整节点数据）：
+	//   if (UserInputBasedInteraction != MOUSE_SINGLE):
+	//     if (Owner 是 NinjaLive 类):
+	//       Owner.EnableInput(GetPlayerController(0))
+	//       if (ShowMouseCursor): PC.bShowMouseCursor = true
+	// ------------------------------------------------------------------
+	/** 启用 Owner 的输入（复刻蓝图 "Enable OWNER Input" 复合节点）。
+	 *  输入方式非鼠标时，若 Owner 是 NinjaLive Actor 则启用其输入并按需显示鼠标光标。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Input")
+	void MyEnableOwnerInput();
 };
