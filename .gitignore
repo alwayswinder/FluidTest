@@ -77,4 +77,10 @@ DerivedDataCache/*
 .idea/.idea.FluidTest/.idea/encodings.xml
 .idea/.idea.FluidTest/.idea/indexLayout.xml
 
-/Content/FluidNinjaLive
+/Content/FluidNinjaLive/
+/Content/__ExternalActors__/
+/Content/__ExternalObjects__/
+/Content/Characters/
+/Content/ThirdPerson/
+/Content/LevelPrototyping/
+/Content/Input/
