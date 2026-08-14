@@ -76,3 +76,5 @@ DerivedDataCache/*
 .idea/.idea.FluidTest/.idea/.gitignore
 .idea/.idea.FluidTest/.idea/encodings.xml
 .idea/.idea.FluidTest/.idea/indexLayout.xml
+
+/Content/FluidNinjaLive
