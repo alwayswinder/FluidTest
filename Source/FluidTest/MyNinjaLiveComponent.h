@@ -16,6 +16,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "MyNinjaLiveComponent.generated.h"
 
 /**
@@ -119,6 +120,20 @@ public:
 	TArray<FName> MyTempArray39;
 
 	// ------------------------------------------------------------------
+	// 复刻蓝图变量 RenderTargetsMap（Map：string → TextureRenderTarget2D）
+	// ------------------------------------------------------------------
+	/** RenderTarget 映射表（复刻蓝图 RenderTargetsMap，键为 string） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
+	TMap<FString, TObjectPtr<UTextureRenderTarget2D>> MyRenderTargetsMap;
+
+	// ------------------------------------------------------------------
+	// 复刻蓝图变量 MapLengthTmp（int）
+	// ------------------------------------------------------------------
+	/** Map 长度临时值（复刻蓝图 MapLengthTmp） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
+	int32 MyMapLengthTmp = 0;
+
+	// ------------------------------------------------------------------
 	// 复刻蓝图函数 ResetTempArrays
 	// 蓝图实现：按顺序对 TempArray0~39 调用 Array_Clear
 	// ------------------------------------------------------------------
@@ -156,4 +171,17 @@ public:
 	/** 把另一个数组追加到指定临时数组末尾（复刻蓝图 Array_Append，ArrayIndex 范围 0~39） */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Temp")
 	void MyAppendToTempArray(int32 ArrayIndex, const TArray<FName>& Items);
+
+	// ------------------------------------------------------------------
+	// 复刻蓝图函数 CompareMapLength
+	// 蓝图实现（已核对完整节点数据）：
+	//   MapLength = RenderTargetsMap.Length
+	//   Added     = (LastIndex + 1) - FirstIndex
+	//   Equal     = (Added + MapLengthTmp) == MapLength
+	// ------------------------------------------------------------------
+	/** 比较 Map 长度（复刻蓝图 CompareMapLength）。
+	 *  输出：MapLength=当前 Map 长度；Added=(LastIndex+1)-FirstIndex；
+	 *        Equal=(Added+MapLengthTmp) == MapLength */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Temp")
+	void MyCompareMapLength(int32 FirstIndex, int32 LastIndex, int32& MapLength, bool& Equal, int32& Added) const;
 };

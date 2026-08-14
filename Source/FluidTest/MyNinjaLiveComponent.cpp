@@ -130,3 +130,17 @@ void UMyNinjaLiveComponent::MyAppendToTempArray(int32 ArrayIndex, const TArray<F
 	TArray<FName>& ArrayRef = MyGetTempArray(ArrayIndex);
 	ArrayRef.Append(Items);
 }
+
+void UMyNinjaLiveComponent::MyCompareMapLength(int32 FirstIndex, int32 LastIndex, int32& MapLength, bool& Equal, int32& Added) const
+{
+	// 复刻蓝图 CompareMapLength（已核对完整节点数据，含默认值）：
+	//   节点46 Add:      LastIndex + 1                     （B 为默认值 1）
+	//   节点292 Subtract: (LastIndex + 1) - FirstIndex     → Added
+	//   节点47 Add:      Added + MapLengthTmp
+	//   节点236 Length:  MyRenderTargetsMap.Num()          → MapLength
+	//   节点240 Equal:   (Added + MapLengthTmp) == MapLength → Equal
+	MapLength = MyRenderTargetsMap.Num();
+	Added = (LastIndex + 1) - FirstIndex;
+	const int32 Tmp = Added + MyMapLengthTmp;
+	Equal = (Tmp == MapLength);
+}
