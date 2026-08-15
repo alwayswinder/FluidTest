@@ -84,3 +84,6 @@ DerivedDataCache/*
 /Content/LevelPrototyping/
 /Content/Input/
 
+# DSH 运行日志
+Docs/dsh-web.log
+

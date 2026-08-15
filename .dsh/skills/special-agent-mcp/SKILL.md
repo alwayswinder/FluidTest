@@ -9,7 +9,7 @@ description: 指导通过 SpecialAgent 插件（Artisan Gameworks，MCP Server f
 
 ## 1. 当前环境事实（已验证）
 
-- 项目：`E:\Unreal\Projects\_TEST\FluidTest`，UE 5.7
+- 项目：FluidTest（UE 5.7，项目根 = `.dsh` 所在目录，跨电脑无需改路径）
 - 编辑器进程：`UnrealEditor`（FluidTest - Unreal Editor）
 - **MCP 服务器端口：`8767`**（127.0.0.1，默认开启，HTTP/SSE 原生传输）
 - 端点：

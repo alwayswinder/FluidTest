@@ -9,7 +9,7 @@ description: 指导通过 McpAutomationBridge 插件（Unreal MCP，ChiR24/Unrea
 
 ## 1. 当前环境事实（已验证）
 
-- 项目：`E:\Unreal\Projects\_TEST\FluidTest`，UE 5.7
+- 项目：FluidTest（UE 5.7，项目根 = `.dsh` 所在目录，跨电脑无需改路径）
 - 编辑器进程：`UnrealEditor`（FluidTest - Unreal Editor）
 - **WebSocket 桥接端口：`8090` / `8091`（127.0.0.1，默认开启，未启用 TLS）**
 - Native MCP（HTTP/SSE）：默认端口 `3000`，地址 `http://localhost:3000/mcp`（需在项目设置开启 `Enable Native MCP`，当前环境未开启）
