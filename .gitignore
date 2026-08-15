@@ -73,9 +73,8 @@ Plugins/**/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
-.idea/.idea.FluidTest/.idea/.gitignore
-.idea/.idea.FluidTest/.idea/encodings.xml
-.idea/.idea.FluidTest/.idea/indexLayout.xml
+.idea/
+
 
 /Content/FluidNinjaLive/
 /Content/__ExternalActors__/
@@ -84,3 +83,4 @@ DerivedDataCache/*
 /Content/ThirdPerson/
 /Content/LevelPrototyping/
 /Content/Input/
+
