@@ -205,3 +205,26 @@ void UMyNinjaLiveComponent::MyEnableOwnerInput()
 		PC->bShowMouseCursor = true;
 	}
 }
+
+int32 UMyNinjaLiveComponent::MyQuantizerValues(EMyQuantizerMode InQuantizerMode) const
+{
+	switch (InQuantizerMode)
+	{
+	case EMyQuantizerMode::NoQuantizerNoTextureOffset:						return -3;
+	case EMyQuantizerMode::NoQuantizerTextureOffsetManuallySet:			return -2;
+	case EMyQuantizerMode::NoQuantizerTextureOffsetAutomaticExtremesCorrected:	return -1;
+	case EMyQuantizerMode::NoQuantizerTextureOffsetAutomatic:				return 0;
+	case EMyQuantizerMode::Step1mTextureOffsetAutomatic:					return 1;
+	case EMyQuantizerMode::Step2mTextureOffsetAutomatic:					return 2;
+	case EMyQuantizerMode::Step3mTextureOffsetAutomatic:					return 3;
+	case EMyQuantizerMode::Step4mTextureOffsetAutomatic:					return 4;
+	case EMyQuantizerMode::Step5mTextureOffsetAutomatic:					return 5;
+	case EMyQuantizerMode::Step10mTextureOffsetAutomatic:					return 10;
+	case EMyQuantizerMode::Step20mTextureOffsetAutomatic:					return 20;
+	case EMyQuantizerMode::Step30mTextureOffsetAutomatic:					return 30;
+	case EMyQuantizerMode::Step50mTextureOffsetAutomatic:					return 50;
+	case EMyQuantizerMode::Step100mTextureOffsetAutomatic:					return 100;
+	case EMyQuantizerMode::Step500mTextureOffsetAutomatic:					return 500;
+	default:																return 0;
+	}
+}

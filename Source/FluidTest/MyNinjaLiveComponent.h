@@ -182,4 +182,8 @@ public:
 	/** 启用 Owner 的输入（输入方式非无输入且 Owner 是 NinjaLive 类时） */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Input")
 	void MyEnableOwnerInput();
+
+	/** 根据量化模式返回对应的步长值（米），用于纹理偏移量化 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Quantizer")
+	int32 MyQuantizerValues(EMyQuantizerMode InQuantizerMode) const;
 };

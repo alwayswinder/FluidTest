@@ -28,4 +28,12 @@ public:
 	/** 用户输入方式（UserInput_Enum，默认 Mouse single） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Input")
 	EMyUserInput MyUserInputBasedInteraction = EMyUserInput::MouseSingle;
+
+	/** 是否在 Pawn 靠近时激活模拟（性能优化，关闭则始终运行） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	bool MySimActivatedByPawnProximity = false;
+
+	/** 是否禁用蓝图（关闭模拟） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	bool MyDisableBlueprint = false;
 };
