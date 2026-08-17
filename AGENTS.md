@@ -31,8 +31,11 @@
   或 `BlueprintReadWrite` 变量
 - **编译**：编辑器运行中无法命令行编译（Live Coding），需先关编辑器再 `Build.bat`；
   include 路径基于 `Source` 根，写 `"FluidTest/X.h"`
+- **注释**：只写功能说明（一句话即可），不粘贴蓝图节点还原；不确定的暂留大概，随迁移补充
 - 已迁移：`ResetTempArrays → MyResetTempArrays`、`GetTempArray → MyGetTempArray`、
-  `MyAddToTempArray` / `MyClearTempArray` / `MyAppendToTempArray`、40 个 `MyTempArray0~39`
+  `MyAddToTempArray` / `MyClearTempArray` / `MyAppendToTempArray`、40 个 `MyTempArray0~39`、
+  `CompareMapLength → MyCompareMapLength`、`VelocityHandlerForSimArea → MyVelocityHandlerForSimArea`、
+  `CheckComponentOwner（复合节点）→ MyCheckComponentOwner`、`Enable OWNER Input → MyEnableOwnerInput`
 
 ## 常用操作
 

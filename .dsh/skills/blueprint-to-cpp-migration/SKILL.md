@@ -89,10 +89,18 @@ void MyAddToTempArray(int32 ArrayIndex, FName Item);  // 内部 GetRef().Add(Ite
 4. **用户测试**：用户在编辑器里改蓝图（父类继承 / 函数体替换为调用 C++ 版本），确认效果不变
 5. **小步增量**：每次只迁移一个函数/变量，迁移一次测试一次，不批量堆叠
 
+### 注释规范（重要，必须遵守）
+
+- **注释只写功能说明**：一句话说明该函数/变量是干什么的即可（用途、关键参数/返回值、必要注意事项），**不要大段粘贴蓝图节点还原**（如"已核对完整节点数据：节点46 Add..."这类逐节点描述必须删掉）
+- **不确定/不准确没关系**：暂时拿不准的实现细节、含义模糊的参数，可以只写大致功能，甚至留空——随迁移推进逐步补充、完善，不要为了"准确"写长篇注释
+- **代码 > 注释**：注释与代码行数应保持合理比例，复杂的蓝图逻辑注释应远少于对应实现代码；能用清晰命名表达的，不重复注释
+- 反例：`// 复刻蓝图 xxx（已核对完整节点数据）：节点0 NotEqual → bPickA、节点88 Multiply...`（8 行节点级注释）
+- 正例：`/** 处理模拟区域速度：输出 X/Y/Z 分量（Y 取反），CoEff 默认 -0.01 */`
+
 ### 架构原则
 - **组件持有数据，Actor 通过组件引用访问**：Actor 蓝图里的数组/数据实际属于组件（`GetNinjaLiveComponent() → 组件数据`），Actor 自身不复制数据
 - **C++ 只提供父类骨架**：蓝图改继承（Class Settings → Parent Class）由用户在编辑器操作
-- 已迁移示例：`ResetTempArrays → MyResetTempArrays`、`GetTempArray → MyGetTempArray`、`MyAddToTempArray` / `MyClearTempArray` / `MyAppendToTempArray`
+- 已迁移示例：`ResetTempArrays → MyResetTempArrays`、`GetTempArray → MyGetTempArray`、`MyAddToTempArray` / `MyClearTempArray` / `MyAppendToTempArray`、`CompareMapLength → MyCompareMapLength`、`VelocityHandlerForSimArea → MyVelocityHandlerForSimArea`、`CheckComponentOwner（复合节点）→ MyCheckComponentOwner`、`Enable OWNER Input → MyEnableOwnerInput`
 
 ## 5. 相关技能
 

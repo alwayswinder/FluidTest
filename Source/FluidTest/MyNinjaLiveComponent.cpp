@@ -1,5 +1,4 @@
 // MyNinjaLiveComponent.cpp — UMyNinjaLiveComponent 实现
-// 已迁移：MyResetTempArrays（复刻蓝图 ResetTempArrays）
 
 #include "MyNinjaLiveComponent.h"
 
@@ -10,13 +9,13 @@
 
 UMyNinjaLiveComponent::UMyNinjaLiveComponent()
 {
-	// 不启用 Tick（蓝图侧若需要 Tick，可在蓝图里自行开启）。
+	// 不启用 Tick（蓝图侧若需要可在蓝图里自行开启）
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
 void UMyNinjaLiveComponent::MyResetTempArrays()
 {
-	// 复刻蓝图 ResetTempArrays：按顺序清空 TempArray0~TempArray39（Array_Clear）
+	// 清空 TempArray0~39
 	MyTempArray0.Empty();
 	MyTempArray1.Empty();
 	MyTempArray2.Empty();
@@ -61,9 +60,7 @@ void UMyNinjaLiveComponent::MyResetTempArrays()
 
 TArray<FName>& UMyNinjaLiveComponent::MyGetTempArray(int32 Index)
 {
-	// 复刻蓝图 GetTempArray：40 选项 Select，按 Index 返回 TempArray0~39 中对应数组。
-	// 返回引用：蓝图下游对数组的修改（如 Array_Add）会直接写回组件内部数组。
-	// Index 越界时返回静态空数组。
+	// 按 Index 返回 TempArray0~39 中对应数组；越界返回静态空数组
 	switch (Index)
 	{
 	case 0:  return MyTempArray0;
@@ -108,7 +105,6 @@ TArray<FName>& UMyNinjaLiveComponent::MyGetTempArray(int32 Index)
 	case 39: return MyTempArray39;
 	default:
 	{
-		// 越界：返回静态空数组引用（不能返回临时对象的引用）
 		static TArray<FName> EmptyArray;
 		return EmptyArray;
 	}
@@ -117,33 +113,21 @@ TArray<FName>& UMyNinjaLiveComponent::MyGetTempArray(int32 Index)
 
 void UMyNinjaLiveComponent::MyAddToTempArray(int32 ArrayIndex, FName Item)
 {
-	// 复刻蓝图 Array_Add：向指定临时数组添加一个元素
-	TArray<FName>& ArrayRef = MyGetTempArray(ArrayIndex);
-	ArrayRef.Add(Item);
+	MyGetTempArray(ArrayIndex).Add(Item);
 }
 
 void UMyNinjaLiveComponent::MyClearTempArray(int32 ArrayIndex)
 {
-	// 复刻蓝图 Array_Clear：清空指定临时数组
-	TArray<FName>& ArrayRef = MyGetTempArray(ArrayIndex);
-	ArrayRef.Empty();
+	MyGetTempArray(ArrayIndex).Empty();
 }
 
 void UMyNinjaLiveComponent::MyAppendToTempArray(int32 ArrayIndex, const TArray<FName>& Items)
 {
-	// 复刻蓝图 Array_Append：把另一个数组追加到指定临时数组末尾
-	TArray<FName>& ArrayRef = MyGetTempArray(ArrayIndex);
-	ArrayRef.Append(Items);
+	MyGetTempArray(ArrayIndex).Append(Items);
 }
 
 void UMyNinjaLiveComponent::MyCompareMapLength(int32 FirstIndex, int32 LastIndex, int32& MapLength, bool& Equal, int32& Added) const
 {
-	// 复刻蓝图 CompareMapLength（已核对完整节点数据，含默认值）：
-	//   节点46 Add:      LastIndex + 1                     （B 为默认值 1）
-	//   节点292 Subtract: (LastIndex + 1) - FirstIndex     → Added
-	//   节点47 Add:      Added + MapLengthTmp
-	//   节点236 Length:  MyRenderTargetsMap.Num()          → MapLength
-	//   节点240 Equal:   (Added + MapLengthTmp) == MapLength → Equal
 	MapLength = MyRenderTargetsMap.Num();
 	Added = (LastIndex + 1) - FirstIndex;
 	const int32 Tmp = Added + MyMapLengthTmp;
@@ -152,51 +136,45 @@ void UMyNinjaLiveComponent::MyCompareMapLength(int32 FirstIndex, int32 LastIndex
 
 void UMyNinjaLiveComponent::MyVelocityHandlerForSimArea(double CoEff, double& X, double& Y, double& Z) const
 {
-	// 复刻蓝图 VelocityHandlerForSimArea（已核对完整节点数据，含默认值）：
-	//   节点0  NotEqual:   VeloFromSimAreaMotion != 0.0            → bPickA
-	//   节点88 Multiply:   VeloFromSimAreaMotion * CoEff
-	//   节点39 Subtract:   TraceMeshParentPos - TraceMeshParentLastPos
-	//   节点8  Multiply:   (差值) * 20.0                            （B 默认 20）
-	//   节点546 MakeTransform: Rotation=TraceMeshComponent 旋转, Location/Scale 默认
-	//   节点545 InverseTransformDirection: 世界方向 → 局部方向
-	//   节点237 Multiply:   LocalDir * (VeloFromSimAreaMotion * CoEff)
-	//   节点266 SelectVector: bPickA ? 计算值 : (0,0,0)
-	//   节点388 BreakVector → X/Z；Y 经节点0 Multiply(-1) 取反
+	// VeloFromSimAreaMotion 非零时：TraceMesh 前后帧位移 ×20 → 局部方向 × (速度×系数)
 	FVector Velocity = FVector::ZeroVector;
 
 	if (MyVeloFromSimAreaMotion != 0.0)
 	{
-		// 世界空间位移方向（乘 20）
 		const FVector WorldDir = (MyTraceMeshParentPos - MyTraceMeshParentLastPos) * 20.0;
 
-		// 用 TraceMesh 组件的旋转构造 Transform（仅旋转，位置/缩放默认）
 		const FTransform TraceMeshTransform(MyTraceMeshComponent
 			? MyTraceMeshComponent->GetComponentRotation()
 			: FRotator::ZeroRotator);
 
-		// 世界方向 → TraceMesh 局部方向（InverseTransformDirection）
 		const FVector LocalDir = TraceMeshTransform.InverseTransformVectorNoScale(WorldDir);
 
-		// 乘速度系数
 		Velocity = LocalDir * (MyVeloFromSimAreaMotion * CoEff);
 	}
 
 	X = Velocity.X;
-	Y = Velocity.Y * -1.0;   // 蓝图 Y 分量乘 -1
+	Y = Velocity.Y * -1.0;   // Y 取反
 	Z = Velocity.Z;
+}
+
+bool UMyNinjaLiveComponent::MyCheckComponentOwner(AMyNinjaLiveActor*& AsNinjaLive) const
+{
+	// Owner 是否为 NinjaLive 类（用 C++ 父类判断，蓝图类继承自它）
+	AsNinjaLive = nullptr;
+
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor || !OwnerActor->IsA<AMyNinjaLiveActor>())
+	{
+		return false;
+	}
+
+	AsNinjaLive = Cast<AMyNinjaLiveActor>(OwnerActor);
+	return true;
 }
 
 void UMyNinjaLiveComponent::MyEnableOwnerInput()
 {
-	// 复刻蓝图复合节点 "Enable OWNER Input"（已核对完整节点数据）：
-	//   枚举不等: UserInputBasedInteraction != NewEnumerator0（No user input，数值 0）
-	//   CheckComponentOwner 宏: Owner 是否为 NinjaLive 类（此处用 IsA<AMyNinjaLiveActor> 判断）
-	//   Actor::EnableInput(GetPlayerController(0))
-	//   if (ShowMouseCursor): PC->bShowMouseCursor = true
-	// 注意：原蓝图 Cast 到 NinjaLive_C（/Game/_MyTest/Fluid/Bp/NinjaLive），
-	//       此处用 C++ 父类 AMyNinjaLiveActor 判断（蓝图类是其子类，IsA 成立）。
-
-	// 输入方式为"无输入"时不处理（蓝图 EnumInequality 的 false 分支直接跳过）
+	// 输入方式为"无输入"时不处理
 	if (MyUserInputBasedInteraction == EMyUserInput::None)
 	{
 		return;
@@ -208,7 +186,7 @@ void UMyNinjaLiveComponent::MyEnableOwnerInput()
 		return;
 	}
 
-	// CheckComponentOwner：Owner 是否为 NinjaLive 类
+	// Owner 必须是 NinjaLive 类
 	if (!OwnerActor->IsA<AMyNinjaLiveActor>())
 	{
 		return;
@@ -220,10 +198,8 @@ void UMyNinjaLiveComponent::MyEnableOwnerInput()
 		return;
 	}
 
-	// 启用 Owner 输入
 	OwnerActor->EnableInput(PC);
 
-	// 按需显示鼠标光标
 	if (MyShowMouseCursor)
 	{
 		PC->bShowMouseCursor = true;
