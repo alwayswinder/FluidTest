@@ -5,6 +5,7 @@
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/EngineVersion.h"
 #include "MyNinjaLiveActor.h"
 
 UMyNinjaLiveComponent::UMyNinjaLiveComponent()
@@ -228,3 +229,77 @@ int32 UMyNinjaLiveComponent::MyQuantizerValues(EMyQuantizerMode InQuantizerMode)
 	default:																return 0;
 	}
 }
+
+void UMyNinjaLiveComponent::MyProximityActivationMasterVarsQuantizerOutMat()
+{
+	// In2 路径（不检查 Owner）：
+	// 量化与 CameraFacing 冲突时强制关闭量化（Quantizer 与 CameraFacing 不兼容）
+	if ((int32)MyTraceMeshMovingInWorldSpace > 3 && MyCameraFacingTraceMesh)
+	{
+		MyTraceMeshMovingInWorldSpace = EMyQuantizerMode::NoQuantizerTextureOffsetAutomatic;
+	}
+
+	// UsePAINTER_V2 且非 SingleTargetMode_LEGACY 时启用画笔双缓冲
+	if (MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY)
+	{
+		MyEnablePainterDoubleBuffering = true;
+	}
+
+	// MasterVars 初始化
+	MyInitDone = false;
+	MyMaterialInstacesDone = false;
+
+	// 预设名过滤条件设为 NinjaLive（蓝图默认值）
+	MyPresetNameFilterCriteria = FName(TEXT("NinjaLive"));
+
+	// UE5 EA 版本检测（GetEngineVersion Contains "EarlyAccess" → NOT）
+	MyUE5EAFLAG = !FEngineVersion::Current().ToString().Contains(TEXT("EarlyAccess"));
+
+	// QuantizerStepSize = MyQuantizerValues(TraceMeshMovingInWorldSpace)
+	MyQuantizerStepSize = MyQuantizerValues(MyTraceMeshMovingInWorldSpace);
+
+	// OutMat 数组为空时补 M_Null 占位材质
+	if (MyOutputMaterials.Num() == 0)
+	{
+		// 蓝图行为：添加空占位，后续由其他逻辑填充实际材质
+		MyOutputMaterials.Add(nullptr);
+	}
+}
+
+void UMyNinjaLiveComponent::MyProximityActivationMasterVarsQuantizerOutMatFromOwner()
+{
+	// In1 路径（含 CheckComponentOwner）：
+	//   Owner 是 NinjaLive 类 → 从 Owner 同步 Disable/Proximity 设置；
+	//   Owner 不是 NinjaLive 类 → 与 In2 汇合（直接初始化）
+	AMyNinjaLiveActor* NinjaLive = nullptr;
+	if (MyCheckComponentOwner(NinjaLive))
+	{
+		// 从 Owner 同步激活设置（对应蓝图 VariableSet_23/20）
+		MyDisableComponent = NinjaLive->MyDisableBlueprint;
+		MyComponentActivatedByPawnProximity = NinjaLive->MySimActivatedByPawnProximity;
+
+		// Disable=true：不初始化（蓝图 then 分支空）
+		if (MyDisableComponent)
+		{
+			return;
+		}
+		// Proximity=true：量化修正 + 双缓冲 + 抑制 BeginPlay（等 Pawn 靠近再激活）
+		if (MyComponentActivatedByPawnProximity)
+		{
+			if ((int32)MyTraceMeshMovingInWorldSpace > 3 && MyCameraFacingTraceMesh)
+			{
+				MyTraceMeshMovingInWorldSpace = EMyQuantizerMode::NoQuantizerTextureOffsetAutomatic;
+			}
+			if (MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY)
+			{
+				MyEnablePainterDoubleBuffering = true;
+			}
+			MyBeginPlaySupressed = true;
+			return;
+		}
+	}
+	// Owner 非 NinjaLive 或 Proximity=false：走完整初始化
+	MyProximityActivationMasterVarsQuantizerOutMat();
+}
+
+

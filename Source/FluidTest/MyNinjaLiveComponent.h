@@ -7,6 +7,7 @@
 #include "Components/ActorComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Materials/MaterialInterface.h"
 #include "MyNinjaFluidEnums.h"
 #include "MyNinjaLiveComponent.generated.h"
 
@@ -186,4 +187,76 @@ public:
 	/** 根据量化模式返回对应的步长值（米），用于纹理偏移量化 */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Quantizer")
 	int32 MyQuantizerValues(EMyQuantizerMode InQuantizerMode) const;
+
+	// ------------------------------------------------------------------
+	// ProximityActivation-MasterVars-Quantizer-OutMat 复合节点相关变量
+	// ------------------------------------------------------------------
+	/** 是否已由 Pawn 靠近激活（运行时从 Owner 同步，蓝图 NONPUBLICLiveActivation） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	bool MyComponentActivatedByPawnProximity = false;
+
+	/** 组件是否被禁用（运行时从 Owner 同步，蓝图 Live Activation） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	bool MyDisableComponent = false;
+
+	/** 是否抑制 BeginPlay 初始化 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|System")
+	bool MyBeginPlaySupressed = false;
+
+	/** 初始化是否完成 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|System")
+	bool MyInitDone = false;
+
+	/** 材质实例是否已创建完成 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|System")
+	bool MyMaterialInstacesDone = false;
+
+	/** 预设名过滤条件 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|System")
+	FName MyPresetNameFilterCriteria = NAME_None;
+
+	/** UE5 早期访问版本标志（早于 UE 5.4 的版本为 false，用于修复物理速度 bug） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|System")
+	bool MyUE5EAFLAG = false;
+
+	/** 量化步长（米），由 MyQuantizerValues 计算 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Quantizer")
+	int32 MyQuantizerStepSize = 0;
+
+	/** 是否启用画笔双缓冲（PaintBuffer WorldSpace 偏移或 Painter v2 时需要） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Quantizer")
+	bool MyEnablePainterDoubleBuffering = false;
+
+	/** TraceMesh 是否在世界空间移动（量化模式） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Quantizer")
+	EMyQuantizerMode MyTraceMeshMovingInWorldSpace = EMyQuantizerMode::NoQuantizerTextureOffsetAutomatic;
+
+	/** 输出材质数组 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TArray<TObjectPtr<UMaterialInterface>> MyOutputMaterials;
+
+	/** 是否使用 Painter v2 追踪物体（强制双缓冲） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
+	bool MyUsePAINTER_V2_ToTrackObjects = true;
+
+	/** TraceMesh 是否面向相机（与量化不兼容） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
+	bool MyCameraFacingTraceMesh = false;
+
+	/** 旧版单目标模式 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
+	bool MySingleTargetMode_LEGACY = false;
+
+	// ------------------------------------------------------------------
+	// ProximityActivation-MasterVars-Quantizer-OutMat 复合节点
+	// 蓝图实现：In1=Owner 激活设置（含 CheckComponentOwner），In2=直接初始化；
+	// 内部依次：量化与 CameraFacing 冲突修正、画笔双缓冲、MasterVars 初始化、OutMat 空数组补占位材质
+	// ------------------------------------------------------------------
+	/** 初始化复合节点主流程（In2 路径：跳过 Owner 激活设置） */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
+	void MyProximityActivationMasterVarsQuantizerOutMat();
+
+	/** 从 Owner 读取激活设置后走初始化（In1 路径：含 CheckComponentOwner） */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
+	void MyProximityActivationMasterVarsQuantizerOutMatFromOwner();
 };
