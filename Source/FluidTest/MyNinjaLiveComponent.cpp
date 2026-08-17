@@ -6,6 +6,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/EngineVersion.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "MyNinjaLiveActor.h"
 
 UMyNinjaLiveComponent::UMyNinjaLiveComponent()
@@ -302,4 +303,43 @@ void UMyNinjaLiveComponent::MyProximityActivationMasterVarsQuantizerOutMatFromOw
 	MyProximityActivationMasterVarsQuantizerOutMat();
 }
 
+
+
+void UMyNinjaLiveComponent::MyLightDirectionProviderCheck()
+{
+	// LightDirectionProviderCheck 复合节点：
+	// EnableRayMarching 关闭时直接跳过
+	if (!MyEnableRayMarching)
+	{
+		return;
+	}
+
+	// LightDirectionProvider 已有效时跳过初始化
+	if (IsValid(MyLightDirectionProvider))
+	{
+		return;
+	}
+
+	// 无效：从 Owner 初始化并提供默认太阳参数
+	AActor* OwnerActor = GetOwner();
+	if (OwnerActor)
+	{
+		MyLightDirectionProvider = OwnerActor;
+	}
+
+	MyLightDirectionSourceIsRotation_NOT_Pos = true;
+	MySunLatitude = 1000.0;
+	MySunLongitude = 1000.0;
+	MySunHeight = 5000.0;
+	MyForceManualSunPosition = true;
+
+	// 调试输出（对齐蓝图 PrintString 行为）
+	if (MySaveDebugMessagesToDefaultLog)
+	{
+		const FString OwnerName = OwnerActor ? OwnerActor->GetName() : TEXT("None");
+		UKismetSystemLibrary::PrintString(this,
+			TEXT("1. RAYMARCHING is enabled\\r\\n2. No ") + OwnerName + TEXT(" ---- WARNING"),
+			true, true, FLinearColor(1.0f, 0.572f, 0.09f), 12.0f, TEXT("12.0"));
+	}
+}
 

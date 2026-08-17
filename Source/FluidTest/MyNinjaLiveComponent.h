@@ -259,4 +259,44 @@ public:
 	/** 从 Owner 读取激活设置后走初始化（In1 路径：含 CheckComponentOwner） */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
 	void MyProximityActivationMasterVarsQuantizerOutMatFromOwner();
+	// ------------------------------------------------------------------
+	// LightDirectionProviderCheck 复合节点
+	// 蓝图：EnableRayMarching 开启时检查 LightDirectionProvider 是否有效，
+	// 无效则用 Owner 初始化并设置默认太阳参数（手动太阳位置）
+	// ------------------------------------------------------------------
+	/** 是否启用光线追踪（RayMarching） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	bool MyEnableRayMarching = false;
+
+	/** 光线方向提供者（默认取 Owner） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	TObjectPtr<AActor> MyLightDirectionProvider = nullptr;
+
+	/** 光源方向是否来自旋转而非位置 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	bool MyLightDirectionSourceIsRotation_NOT_Pos = false;
+
+	/** 太阳纬度 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	double MySunLatitude = 0.0;
+
+	/** 太阳经度 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	double MySunLongitude = 0.0;
+
+	/** 太阳高度 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	double MySunHeight = 0.0;
+
+	/** 是否强制手动太阳位置 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	bool MyForceManualSunPosition = false;
+
+	/** 是否将调试消息保存到默认日志 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Debug")
+	bool MySaveDebugMessagesToDefaultLog = false;
+
+	/** 检查并初始化光线方向提供者（EnableRayMarching 开启时有效） */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Light")
+	void MyLightDirectionProviderCheck();
 };
