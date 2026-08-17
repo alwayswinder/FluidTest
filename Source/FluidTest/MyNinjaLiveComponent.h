@@ -292,11 +292,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	bool MyForceManualSunPosition = false;
 
-	/** 是否将调试消息保存到默认日志 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Debug")
-	bool MySaveDebugMessagesToDefaultLog = false;
 
 	/** 检查并初始化光线方向提供者（EnableRayMarching 开启时有效） */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Light")
 	void MyLightDirectionProviderCheck();
 };
+

@@ -6,7 +6,6 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/EngineVersion.h"
-#include "Kismet/KismetSystemLibrary.h"
 #include "MyNinjaLiveActor.h"
 
 UMyNinjaLiveComponent::UMyNinjaLiveComponent()
@@ -333,13 +332,6 @@ void UMyNinjaLiveComponent::MyLightDirectionProviderCheck()
 	MySunHeight = 5000.0;
 	MyForceManualSunPosition = true;
 
-	// 调试输出（对齐蓝图 PrintString 行为）
-	if (MySaveDebugMessagesToDefaultLog)
-	{
-		const FString OwnerName = OwnerActor ? OwnerActor->GetName() : TEXT("None");
-		UKismetSystemLibrary::PrintString(this,
-			TEXT("1. RAYMARCHING is enabled\\r\\n2. No ") + OwnerName + TEXT(" ---- WARNING"),
-			true, true, FLinearColor(1.0f, 0.572f, 0.09f), 12.0f, TEXT("12.0"));
-	}
 }
+
 
