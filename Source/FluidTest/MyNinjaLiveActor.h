@@ -6,6 +6,8 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "MyNinjaFluidEnums.h"
+#include "Components/BoxComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "MyNinjaLiveActor.generated.h"
 
 class UMyNinjaLiveComponent;
@@ -36,4 +38,22 @@ public:
 	/** 是否禁用蓝图（关闭模拟） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
 	bool MyDisableBlueprint = false;
+
+	/** 是否使用 TraceMesh 作为交互体积 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	bool MyUseTraceMeshAsInteractionVolume = false;
+
+	/** 根 SceneComponent */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Activation")
+	TObjectPtr<USceneComponent> MyRoot = nullptr;
+
+	/** 激活体积（BoxCollision，Pawn 进入时激活模拟，挂载在 MyRoot 下） */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Activation")
+	TObjectPtr<UBoxComponent> MyActivationVolume = nullptr;
+	/** 交互体积（BoxCollision，用于交互输入） */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Interaction")
+	TObjectPtr<UBoxComponent> MyInteractionVolume = nullptr;
+	/** 追踪网格（StaticMesh，用于射线检测交互） */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Trace")
+	TObjectPtr<UStaticMeshComponent> MyTraceMesh = nullptr;
 };
