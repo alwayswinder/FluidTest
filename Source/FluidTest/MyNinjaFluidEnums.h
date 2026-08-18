@@ -60,3 +60,11 @@ enum class EMyQuantizerMode : uint8
 	/** 步长 500 米，自动纹理偏移 */
 	Step500mTextureOffsetAutomatic = 14 UMETA(DisplayName = "Step: 500 meters - Texture Offset Automatic")
 };
+
+/** 模拟精度（对齐蓝图 SimPrecision_Enum）。 */
+UENUM(BlueprintType)
+enum class EMySimPrecision : uint8
+{
+	Bit16 = 0 UMETA(DisplayName = "16 bit"),
+	Bit32 = 1 UMETA(DisplayName = "32 bit")
+};

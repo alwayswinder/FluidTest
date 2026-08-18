@@ -366,6 +366,53 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MySetTraceMeshProperties();
 
+	// ------------------------------------------------------------------
+	// FPS-PRECISION-RESOLUTION 复合节点
+	// ------------------------------------------------------------------
+	/** 流体模拟横向分辨率，低于 8 时由初始化逻辑回退到 256。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	int32 MyResolutionX = 256;
+
+	/** 流体模拟纵向分辨率，低于 8 时由初始化逻辑回退到 256。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	int32 MyResolutionY = 256;
+
+	/** 允许的最高采样帧率，用于计算采样间隔。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	int32 MyMaxSamplingFPS = 60;
+
+	/** 当前实际使用的采样帧率。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	int32 MySamplingFPS = 60;
+
+	/** 自定义 Tick 间隔，等于最高采样帧率的倒数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	double MyTickRateCustom = 1.0 / 60.0;
+
+	/** 流体求解使用的数值精度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	EMySimPrecision MySimPrecision = EMySimPrecision::Bit16;
+
+	/** 精度枚举转换后的材质选择索引，16 位为 0、32 位为 1。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	int32 MySimPrecisionIndex = 0;
+
+	/** 是否连接 Painter v2 追踪点生成轨迹线。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
+	bool MyPV2_Connect_TrackpointsWithLines = false;
+
+	/** 是否由 Painter v2 根据追踪点位移生成速度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
+	bool MyPV2_GenerateVelocity = false;
+
+	/** Painter v2 是否启用位置插值，取轨迹线和速度生成需求的逻辑或。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
+	bool MyPV2_Interpolation = false;
+
+	/** 初始化采样频率、精度索引、分辨率兜底及 Painter v2 联动参数。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
+	void MyFPSPrecisionResolution();
+
 private:
 	/** 对应 SetTraceMeshProperties 内未连接 Reset 引脚的 DoOnce 状态。 */
 	UPROPERTY(Transient)

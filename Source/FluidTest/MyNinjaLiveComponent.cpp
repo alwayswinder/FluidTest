@@ -456,3 +456,25 @@ void UMyNinjaLiveComponent::MySetTraceMeshProperties()
 		: 1.0;
 }
 
+void UMyNinjaLiveComponent::MyFPSPrecisionResolution()
+{
+	// 分辨率过小会导致流体材质采样越界，蓝图用 256x256 兜底。
+	if (MyResolutionX < 8 || MyResolutionY < 8)
+	{
+		MyResolutionX = 256;
+		MyResolutionY = 256;
+	}
+
+	// 采样频率直接取上限，并将其转换为每次 Tick 的时间间隔。
+	MySamplingFPS = MyMaxSamplingFPS;
+	MyTickRateCustom = MyMaxSamplingFPS > 0
+		? 1.0 / static_cast<double>(MyMaxSamplingFPS)
+		: 0.0;
+
+	MySimPrecisionIndex = (MySimPrecision == EMySimPrecision::Bit32) ? 1 : 0;
+
+	// Painter v2 的速度生成和轨迹连线共用插值开关。
+	MyPV2_Interpolation = MyPV2_Connect_TrackpointsWithLines || MyPV2_GenerateVelocity;
+	MyPV2_Connect_TrackpointsWithLines = MyPV2_Interpolation;
+}
+
