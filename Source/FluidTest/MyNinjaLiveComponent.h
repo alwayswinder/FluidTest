@@ -338,5 +338,38 @@ public:
 	/** 判断使用场景捕捉还是输入材质：有输入材质且场景捕捉相机无效时使用输入材质 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
 	void MySceneCapCameraVSInputMaterials();
+
+	// ------------------------------------------------------------------
+	// SetTraceMeshProperties 相关（追踪网格碰撞与派生参数）
+	// ------------------------------------------------------------------
+	/** 追踪网格尺寸系数，由包围盒最大分量换算 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	double MyTraceMeshSizeCoeff = 0.0;
+
+	/** 是否按追踪网格尺寸反向缩放画笔 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	bool MyBrushScaledInverselyByTraceMeshSize = false;
+
+	/** 追踪网格初始化旋转 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	FRotator MyTraceMeshInitialRotation = FRotator::ZeroRotator;
+
+	/** 追踪网格半透明排序优先级 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	int32 MyTraceMeshTranslucentSortPrio = 0;
+
+	/** 追踪网格是否同时承担交互体积功能 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	bool MyTraceMeshIsAlsoInteractionVolume = false;
+
+	/** 配置 TraceMesh 的碰撞、重叠、排序及尺寸参数 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	void MySetTraceMeshProperties();
+
+private:
+	/** 对应 SetTraceMeshProperties 内未连接 Reset 引脚的 DoOnce 状态。 */
+	UPROPERTY(Transient)
+	bool bMyTraceMeshInitialRotationCaptured = false;
+
 };
 

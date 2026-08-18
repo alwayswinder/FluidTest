@@ -83,11 +83,20 @@ void MyAddToTempArray(int32 ArrayIndex, FName Item);  // 内部 GetRef().Add(Ite
 
 ## 4. 迁移流程（必须遵守）
 
-1. **读取蓝图实现**：用 `manage_blueprint` → `get_graph_details`（见 `mcp-automation-bridge` 技能）读取目标函数/变量的完整图结构，不要猜测
+1. **读取蓝图实现**：用 `manage_blueprint` → `get_graph_details`（见 `mcp-automation-bridge` 技能）读取目标函数/变量的完整图结构，不要猜测；导出文本过长被终端截断时，必须按节点名、连接关系分段读取原文件
 2. **实现 C++**：按 §1 命名规范，在对应 C++ 父类中实现（类/函数/参数/变量全加 `My` 前缀）
 3. **编译验证**：关闭编辑器 → `Build.bat` 编译通过
 4. **用户测试**：用户在编辑器里改蓝图（父类继承 / 函数体替换为调用 C++ 版本），确认效果不变
 5. **小步增量**：每次只迁移一个函数/变量，迁移一次测试一次，不批量堆叠
+
+### 特殊蓝图节点语义核对（强制）
+
+迁移前必须逐一识别并在 C++ 中保留会改变执行时序、次数或状态的节点；不得因其不是普通计算节点而省略。
+
+- `Delay`、`Retriggerable Delay`、Timeline、异步/Latent 节点：保留延迟、重入和回调时机；可使用 `FTimerManager` 或等价的异步机制，不能改成同步执行。
+- `DoOnce`、Gate、FlipFlop、Sequence、循环及重试分支：保留状态、初始状态和 Reset/关闭条件；未连接 Reset 的 `DoOnce` 在同一对象生命周期内只能执行一次。
+- `IsValid`、分支、Select：分别保留有效/无效路径、默认值及每个选项的差异，不能只实现主路径。
+- 迁移完成后按执行线复核一次：输入、分支、状态变化、潜伏回调、输出副作用均应有对应 C++ 行为。
 
 ### 注释规范（重要，必须遵守）
 

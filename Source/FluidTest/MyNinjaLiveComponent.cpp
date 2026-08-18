@@ -413,3 +413,46 @@ void UMyNinjaLiveComponent::MySceneCapCameraVSInputMaterials()
 	MyUseInputMaterials = (MyInputMaterials.Num() > 0) && MyInputSceneCaptureCamera.Get() == nullptr;
 }
 
+void UMyNinjaLiveComponent::MySetTraceMeshProperties()
+{
+	AMyNinjaLiveActor* NinjaLive = nullptr;
+	if (MyCheckComponentOwner(NinjaLive) && NinjaLive)
+	{
+		MyTraceMeshIsAlsoInteractionVolume = NinjaLive->MyUseTraceMeshAsInteractionVolume;
+		if (NinjaLive->MyActivationVolume)
+		{
+			NinjaLive->MyActivationVolume->SetGenerateOverlapEvents(NinjaLive->MySimActivatedByPawnProximity);
+		}
+	}
+	else
+	{
+		MyTraceMeshIsAlsoInteractionVolume = false;
+	}
+
+	UStaticMeshComponent* TraceMesh = MyTraceMeshComponent.Get();
+	if (!IsValid(TraceMesh))
+	{
+		return;
+	}
+
+	TraceMesh->SetTranslucentSortPriority(MyTraceMeshTranslucentSortPrio);
+	if (!bMyTraceMeshInitialRotationCaptured)
+	{
+		MyTraceMeshInitialRotation = TraceMesh->GetComponentRotation();
+		bMyTraceMeshInitialRotationCaptured = true;
+	}
+
+	TraceMesh->SetGenerateOverlapEvents(MyTraceMeshIsAlsoInteractionVolume);
+	TraceMesh->CanCharacterStepUpOn = ECB_No;
+	TraceMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	TraceMesh->SetCollisionObjectType(MyTraceMeshIsAlsoInteractionVolume ? ECC_WorldDynamic : ECC_WorldStatic);
+	TraceMesh->SetCollisionResponseToAllChannels(
+		MyTraceMeshIsAlsoInteractionVolume ? ECR_Overlap : ECR_Ignore);
+	TraceMesh->SetCollisionResponseToChannel(MyCollisionChannel, ECR_Block);
+
+	const double SizeInMeters = FMath::Max3(TraceMesh->Bounds.BoxExtent.X, TraceMesh->Bounds.BoxExtent.Y, TraceMesh->Bounds.BoxExtent.Z) * 0.001;
+	MyTraceMeshSizeCoeff = MyBrushScaledInverselyByTraceMeshSize
+		? (SizeInMeters == 0.0 ? 0.0 : (1.0 / SizeInMeters))
+		: 1.0;
+}
+
