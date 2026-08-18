@@ -9,6 +9,7 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "Materials/MaterialInterface.h"
 #include "MyNinjaFluidEnums.h"
+#include "Engine/SceneCapture2D.h"
 #include "MyNinjaLiveComponent.generated.h"
 
 class AMyNinjaLiveActor;
@@ -319,5 +320,23 @@ public:
 	/** 自动查找追踪通道：遍历 ETraceTypeQuery 和 ECollisionChannel，匹配 PreferredTraceChannelName 并设置对应通道 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTraceChannelAutoFind();
+	// ------------------------------------------------------------------
+	// SceneCapCamera-VS-InputMaterials 相关（场景捕捉 vs 输入材质的切换）
+	// ------------------------------------------------------------------
+	/** 输入材质数组（用于替代场景捕捉） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TArray<TObjectPtr<UMaterialInterface>> MyInputMaterials;
+
+	/** 输入场景捕捉相机（有效时优先使用，替代输入材质） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<ASceneCapture2D> MyInputSceneCaptureCamera = nullptr;
+
+	/** 是否使用输入材质（由 MySceneCapCameraVSInputMaterials 自动计算） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	bool MyUseInputMaterials = false;
+
+	/** 判断使用场景捕捉还是输入材质：有输入材质且场景捕捉相机无效时使用输入材质 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
+	void MySceneCapCameraVSInputMaterials();
 };
 

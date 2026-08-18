@@ -407,3 +407,9 @@ CollisionChannelSearch:
 	MyTraceChannelsSet = true;
 }
 
+void UMyNinjaLiveComponent::MySceneCapCameraVSInputMaterials()
+{
+	// 判断：有输入材质 且 场景捕捉相机无效 → 使用输入材质
+	MyUseInputMaterials = (MyInputMaterials.Num() > 0) && MyInputSceneCaptureCamera.Get() == nullptr;
+}
+
