@@ -296,5 +296,28 @@ public:
 	/** 检查并初始化光线方向提供者（EnableRayMarching 开启时有效） */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Light")
 	void MyLightDirectionProviderCheck();
+
+	// ------------------------------------------------------------------
+	// TraceChannelAutoFind 相关（追踪通道自动查找）
+	// ------------------------------------------------------------------
+	/** 追踪通道（ETraceTypeQuery，默认 TraceTypeQuery1） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	TEnumAsByte<ETraceTypeQuery> MyTraceChannel = TraceTypeQuery1;
+
+	/** 碰撞通道（ECollisionChannel，默认 ECC_WorldStatic） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	TEnumAsByte<ECollisionChannel> MyCollisionChannel = ECC_WorldStatic;
+
+	/** 首选追踪通道名称（默认 "FluidTrace"） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	FString MyPreferredTraceChannelName = TEXT("FluidTrace");
+
+	/** 追踪通道是否已设置完毕 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	bool MyTraceChannelsSet = false;
+
+	/** 自动查找追踪通道：遍历 ETraceTypeQuery 和 ECollisionChannel，匹配 PreferredTraceChannelName 并设置对应通道 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	void MyTraceChannelAutoFind();
 };
 

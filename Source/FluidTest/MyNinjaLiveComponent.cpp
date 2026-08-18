@@ -335,3 +335,75 @@ void UMyNinjaLiveComponent::MyLightDirectionProviderCheck()
 }
 
 
+void UMyNinjaLiveComponent::MyTraceChannelAutoFind()
+{
+	// 设置安全标志：追踪通道尚未设置
+	MyTraceChannelsSet = false;
+
+	// PreferredTraceChannelName 为空时设为默认值 "FluidTrace"
+	if (MyPreferredTraceChannelName.IsEmpty())
+	{
+		MyPreferredTraceChannelName = TEXT("FluidTrace");
+	}
+
+	// 检查当前 TraceChannel 是否已匹配 PreferredTraceChannelName
+	{
+		const UEnum* TraceTypeEnum = StaticEnum<ETraceTypeQuery>();
+		if (TraceTypeEnum)
+		{
+			const FString CurrentName = TraceTypeEnum->GetNameStringByValue(MyTraceChannel);
+			if (CurrentName == MyPreferredTraceChannelName)
+			{
+				// 已匹配，跳过 ETraceTypeQuery 遍历
+				goto CollisionChannelSearch;
+			}
+		}
+	}
+
+	// 遍历 ETraceTypeQuery，查找匹配的通道名
+	{
+		const UEnum* TraceTypeEnum = StaticEnum<ETraceTypeQuery>();
+		if (TraceTypeEnum)
+		{
+			for (int32 i = 0; i < TraceTypeEnum->NumEnums(); i++)
+			{
+				if (TraceTypeEnum->HasMetaData(TEXT("Hidden"), i))
+				{
+					continue;
+				}
+				const FString EnumName = TraceTypeEnum->GetNameStringByIndex(i);
+				if (EnumName == MyPreferredTraceChannelName)
+				{
+					MyTraceChannel = static_cast<ETraceTypeQuery>(TraceTypeEnum->GetValueByIndex(i));
+					break;
+				}
+			}
+		}
+	}
+
+CollisionChannelSearch:
+	// 遍历 ECollisionChannel，查找匹配的通道名
+	{
+		const UEnum* CollisionEnum = StaticEnum<ECollisionChannel>();
+		if (CollisionEnum)
+		{
+			for (int32 i = 0; i < CollisionEnum->NumEnums(); i++)
+			{
+				if (CollisionEnum->HasMetaData(TEXT("Hidden"), i))
+				{
+					continue;
+				}
+				const FString EnumName = CollisionEnum->GetNameStringByIndex(i);
+				if (EnumName == MyPreferredTraceChannelName)
+				{
+					MyCollisionChannel = static_cast<ECollisionChannel>(CollisionEnum->GetValueByIndex(i));
+					break;
+				}
+			}
+		}
+	}
+
+	// 追踪通道已设置完毕
+	MyTraceChannelsSet = true;
+}
+
