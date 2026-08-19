@@ -26,13 +26,5 @@ public:
 		bool Clamping = false,
 		TEnumAsByte<TextureGroup> LODgroup = TEXTUREGROUP_World,
 		TEnumAsByte<TextureFilter> Filter = TF_Bilinear);
-
-	/** 从指定格式的 RenderTarget 池中取得一个空闲条目并登记到结果 Map。 */
-	UFUNCTION(BlueprintCallable, Category = "FluidSim|MemoryPool")
-	static void MyAcquireRenderTargetsFromPool(
-		int32 Request,
-		int32 HostRenderTGListIndex,
-		const TArray<FString>& RenderTargetList,
-		AMyNinjaLiveMemoryPoolManager* MemoryPoolManager,
-		TMap<FString, UTextureRenderTarget2D*>& RenderTargetsMapTmp);
+	
 };

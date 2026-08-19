@@ -417,18 +417,7 @@ public:
 	/** 初始化采样频率、精度索引、分辨率兜底及 Painter v2 联动参数。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyFPSPrecisionResolution();
-
-	// ------------------------------------------------------------------
-	// MemoryManagerConnection 复合节点
-	// ------------------------------------------------------------------
-	/** 是否自动查找场景中的内存池管理器。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
-	bool MyAutoConnectToMemoryPoolIfFound = false;
-
-	/** 找到内存池管理器后是否覆盖组件本地设置。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
-	bool MyPoolManagerOverridesLocalSettings = false;
-
+	
 	/** 是否使用简单画笔模式；该模式跳过内存池连接。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
 	bool MySimplePainterMode = false;
@@ -436,18 +425,6 @@ public:
 	/** 是否使用 RGB 输入材质，连接流程初始化为 false。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
 	bool MyRGBInputMaterial = false;
-
-	/** 当前连接到的内存池管理器。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
-	TObjectPtr<AMyNinjaLiveMemoryPoolManager> MyMemoryPoolManager = nullptr;
-
-	/** 是否已检测到有效的内存池管理器。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
-	bool MyMemPoolManagerDetected = false;
-
-	/** 查找内存池 Actor，并按覆盖选项同步其模拟设置。 */
-	UFUNCTION(BlueprintCallable, Category = "FluidSim|MemoryPool")
-	void MyMemoryManagerConnection();
 
 private:
 	/** 对应 SetTraceMeshProperties 内未连接 Reset 引脚的 DoOnce 状态。 */
