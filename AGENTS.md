@@ -37,7 +37,8 @@
   `CompareMapLength → MyCompareMapLength`、`VelocityHandlerForSimArea → MyVelocityHandlerForSimArea`、
   `CheckComponentOwner（复合节点）→ MyCheckComponentOwner`、`Enable OWNER Input → MyEnableOwnerInput`、
   `ProximityActivation-MasterVars-Quantizer-OutMat（复合节点）→ MyProximityActivationMasterVarsQuantizerOutMat*`、
-  `EMyQuantizerMode` 枚举 + `MyQuantizerValues`
+  `EMyQuantizerMode` 枚举 + `MyQuantizerValues`、
+  `CreateOrAcquireRenderTargets（复合节点）→ MyCreateOrAcquireRenderTargets`
 
 ## 常用操作
 

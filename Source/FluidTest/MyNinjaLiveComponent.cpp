@@ -7,12 +7,22 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/EngineVersion.h"
 #include "MyNinjaLiveActor.h"
+#include "FluidTest/MyNinjaLiveFunctions.h"
 #include "MyNinjaLiveMemoryPoolManager.h"
 
 UMyNinjaLiveComponent::UMyNinjaLiveComponent()
 {
 	// 不启用 Tick（蓝图侧若需要可在蓝图里自行开启）
 	PrimaryComponentTick.bCanEverTick = false;
+	MyRenderTargetsList = {
+		TEXT("RT_Composite"),
+		TEXT("RT_Advection"),
+		TEXT("RT_Painter"),
+		TEXT("RT_PressureDivergence"),
+		TEXT("RT_PressureDivergenceTemp"),
+		TEXT("RT_DensityInputMaterial"),
+		TEXT("RT_Output")
+	};
 }
 
 void UMyNinjaLiveComponent::MyResetTempArrays()
@@ -477,6 +487,78 @@ void UMyNinjaLiveComponent::MyFPSPrecisionResolution()
 	// Painter v2 的速度生成和轨迹连线共用插值开关。
 	MyPV2_Interpolation = MyPV2_Connect_TrackpointsWithLines || MyPV2_GenerateVelocity;
 	MyPV2_Connect_TrackpointsWithLines = MyPV2_Interpolation;
+}
+
+void UMyNinjaLiveComponent::MyCreateOrAcquireRenderTargets()
+{
+	MyRenderTargetsMap.Empty();
+	MyMapLengthTmp = MyRenderTargetsMap.Num();
+
+	const int32 FullWidth = FMath::Max(1, MyResolutionX);
+	const int32 FullHeight = FMath::Max(1, MyResolutionY);
+	const ETextureRenderTargetFormat RGBAFormat =
+		MySimPrecisionIndex == 0 ? RTF_RGBA16f : RTF_RGBA32f;
+	const ETextureRenderTargetFormat RGFormat =
+		MySimPrecisionIndex == 0 ? RTF_RG16f : RTF_RG32f;
+
+	auto AddRenderTarget = [this](const FString& Name, int32 Width, int32 Height,
+		ETextureRenderTargetFormat Format, bool bClamp)
+	{
+		UTextureRenderTarget2D* RenderTarget = UMyNinjaLiveFunctions::MyCreateRenderTarget(
+			this, Width, Height, Format, bClamp, TEXTUREGROUP_RenderTarget, TF_Bilinear);
+		if (IsValid(RenderTarget))
+		{
+			MyRenderTargetsMap.Add(Name, RenderTarget);
+		}
+	};
+
+	if (MySimplePainterMode)
+	{
+		const bool bUse8BitPainterFormat =
+			MyForce8bitSimplePainterBuffers && !MyUsePAINTER_V2_ToTrackObjects;
+		const ETextureRenderTargetFormat PainterFormat = bUse8BitPainterFormat ? RTF_RGBA8 : RGBAFormat;
+		AddRenderTarget(TEXT("RT_Painter"), FullWidth, FullHeight, PainterFormat, MySimAreaClamp);
+
+		if (MyEnablePainterDoubleBuffering)
+		{
+			AddRenderTarget(TEXT("RT_Composite"), FullWidth, FullHeight, PainterFormat, MySimAreaClamp);
+		}
+		return;
+	}
+
+	for (int32 Index = 0; Index <= 2; ++Index)
+	{
+		if (MyRenderTargetsList.IsValidIndex(Index))
+		{
+			AddRenderTarget(MyRenderTargetsList[Index], FullWidth, FullHeight, RGBAFormat, MySimAreaClamp);
+		}
+	}
+
+	const int32 PressureDivisor = MyHalfResPressureAndDivergenceBuffers ? 2 : 1;
+	const int32 PressureWidth = FullWidth / PressureDivisor;
+	const int32 PressureHeight = FullHeight / PressureDivisor;
+	for (int32 Index = 3; Index <= 4; ++Index)
+	{
+		if (MyRenderTargetsList.IsValidIndex(Index))
+		{
+			AddRenderTarget(MyRenderTargetsList[Index], PressureWidth, PressureHeight, RGFormat, MySimAreaClamp);
+		}
+	}
+
+	const bool bHasDensityInput = MyInputMaterials.Num() > 0 || IsValid(MyInputSceneCaptureCamera);
+	if (bHasDensityInput && MyRenderTargetsList.IsValidIndex(5))
+	{
+		AddRenderTarget(MyRenderTargetsList[5], FullWidth, FullHeight, RTF_R8, false);
+	}
+
+	if (MyRenderTargetsMap.Num() == 6 &&
+		(MyMake1stOutputAvailableFor2ndOutput || MyMake1stOutputAvailableForNiagara))
+	{
+		const int32 OutputMultiplier = MyForce2xResolutionOutputBuffer ? 2 : 1;
+		const ETextureRenderTargetFormat OutputFormat = MyForce8bitOutputBuffer ? RTF_RGBA8 : RGBAFormat;
+		AddRenderTarget(TEXT("RT_Output"), FullWidth * OutputMultiplier, FullHeight * OutputMultiplier,
+			OutputFormat, MySimAreaClamp);
+	}
 }
 
 

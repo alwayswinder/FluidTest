@@ -116,6 +116,34 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
 	TMap<FString, TObjectPtr<UTextureRenderTarget2D>> MyRenderTargetsMap;
 
+	/** RenderTarget 名称列表；保留给蓝图按索引访问创建结果。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
+	TArray<FString> MyRenderTargetsList;
+
+	/** 模拟区域边界采样是否使用 Clamp 地址模式。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
+	bool MySimAreaClamp = false;
+
+	/** 强制输出缓冲使用 8 位格式。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
+	bool MyForce8bitOutputBuffer = false;
+
+	/** 简单 Painter 模式下强制 Painter 缓冲使用 8 位格式。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
+	bool MyForce8bitSimplePainterBuffers = false;
+
+	/** 输出缓冲是否使用两倍模拟分辨率。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
+	bool MyForce2xResolutionOutputBuffer = false;
+
+	/** 是否额外创建第二个输出缓冲。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
+	bool MyMake1stOutputAvailableFor2ndOutput = false;
+
+	/** 是否让第一个输出缓冲可供 Niagara 使用。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
+	bool MyMake1stOutputAvailableForNiagara = false;
+
 	/** Map 长度临时值 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Temp")
 	int32 MyMapLengthTmp = 0;
@@ -417,6 +445,10 @@ public:
 	/** 初始化采样频率、精度索引、分辨率兜底及 Painter v2 联动参数。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyFPSPrecisionResolution();
+
+	/** 按当前模拟配置创建或重建所有需要的 RenderTarget。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|RenderTarget")
+	void MyCreateOrAcquireRenderTargets();
 	
 	/** 是否使用简单画笔模式；该模式跳过内存池连接。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
