@@ -7,6 +7,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/EngineVersion.h"
 #include "MyNinjaLiveActor.h"
+#include "MyNinjaLiveMemoryPoolManager.h"
 
 UMyNinjaLiveComponent::UMyNinjaLiveComponent()
 {
@@ -476,5 +477,41 @@ void UMyNinjaLiveComponent::MyFPSPrecisionResolution()
 	// Painter v2 的速度生成和轨迹连线共用插值开关。
 	MyPV2_Interpolation = MyPV2_Connect_TrackpointsWithLines || MyPV2_GenerateVelocity;
 	MyPV2_Connect_TrackpointsWithLines = MyPV2_Interpolation;
+}
+
+void UMyNinjaLiveComponent::MyMemoryManagerConnection()
+{
+	MyMemPoolManagerDetected = false;
+	MyRGBInputMaterial = false;
+
+	// 简单画笔模式明确跳过内存池管理。
+	if (MySimplePainterMode || !MyAutoConnectToMemoryPoolIfFound)
+	{
+		return;
+	}
+
+	TArray<AActor*> Managers;
+	UGameplayStatics::GetAllActorsOfClass(this, AMyNinjaLiveMemoryPoolManager::StaticClass(), Managers);
+	if (Managers.Num() == 0)
+	{
+		return;
+	}
+
+	AMyNinjaLiveMemoryPoolManager* Manager = Cast<AMyNinjaLiveMemoryPoolManager>(Managers[0]);
+	if (!IsValid(Manager) || (!Manager->MyDisableMemoryManager && !Manager->MyMMInitFinished))
+	{
+		return;
+	}
+
+	MyMemoryPoolManager = Manager;
+	MyMemPoolManagerDetected = true;
+
+	if (MyPoolManagerOverridesLocalSettings)
+	{
+		MySimPrecision = Manager->MyPrecision;
+		MyHalfResPressureAndDivergenceBuffers = Manager->MyHalfResPressureAndDivergenceBuffers;
+		MyResolutionX = Manager->MyResolutionX;
+		MyResolutionY = Manager->MyResolutionY;
+	}
 }
 

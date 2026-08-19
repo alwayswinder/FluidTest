@@ -13,6 +13,7 @@
 #include "MyNinjaLiveComponent.generated.h"
 
 class AMyNinjaLiveActor;
+class AMyNinjaLiveMemoryPoolManager;
 
 /**
  * NinjaLiveComponent 蓝图组件的 C++ 父类。
@@ -397,6 +398,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	int32 MySimPrecisionIndex = 0;
 
+	/** 是否使用半分辨率压力和散度缓冲区。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	bool MyHalfResPressureAndDivergenceBuffers = false;
+
 	/** 是否连接 Painter v2 追踪点生成轨迹线。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MyPV2_Connect_TrackpointsWithLines = false;
@@ -412,6 +417,37 @@ public:
 	/** 初始化采样频率、精度索引、分辨率兜底及 Painter v2 联动参数。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyFPSPrecisionResolution();
+
+	// ------------------------------------------------------------------
+	// MemoryManagerConnection 复合节点
+	// ------------------------------------------------------------------
+	/** 是否自动查找场景中的内存池管理器。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
+	bool MyAutoConnectToMemoryPoolIfFound = false;
+
+	/** 找到内存池管理器后是否覆盖组件本地设置。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
+	bool MyPoolManagerOverridesLocalSettings = false;
+
+	/** 是否使用简单画笔模式；该模式跳过内存池连接。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
+	bool MySimplePainterMode = false;
+
+	/** 是否使用 RGB 输入材质，连接流程初始化为 false。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
+	bool MyRGBInputMaterial = false;
+
+	/** 当前连接到的内存池管理器。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
+	TObjectPtr<AMyNinjaLiveMemoryPoolManager> MyMemoryPoolManager = nullptr;
+
+	/** 是否已检测到有效的内存池管理器。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
+	bool MyMemPoolManagerDetected = false;
+
+	/** 查找内存池 Actor，并按覆盖选项同步其模拟设置。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|MemoryPool")
+	void MyMemoryManagerConnection();
 
 private:
 	/** 对应 SetTraceMeshProperties 内未连接 Reset 引脚的 DoOnce 状态。 */
