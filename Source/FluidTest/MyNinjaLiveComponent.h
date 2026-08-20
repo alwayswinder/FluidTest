@@ -11,12 +11,14 @@
 #include "Materials/MaterialInterface.h"
 #include "MyNinjaFluidEnums.h"
 #include "Engine/SceneCapture2D.h"
+#include "TimerManager.h"
 #include "MyNinjaLiveComponent.generated.h"
 
 class AMyNinjaLiveActor;
 class AMyNinjaLiveMemoryPoolManager;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
+class UFileMediaSource;
 class UMediaPlayer;
 class UMediaTexture;
 
@@ -588,6 +590,12 @@ public:
 	/** 媒体输入对应的播放器对象。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	TObjectPtr<UMediaPlayer> MyInputMediaPlayer = nullptr;
+	/** 媒体输入的文件源。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	TObjectPtr<UFileMediaSource> MyInputMediaSource = nullptr;
+	/** 媒体输入循环时长（秒）；非正值时不启用循环重播。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input", meta = (ClampMin = "0.0"))
+	double MyInputMediaLoopLength = 0.0;
 	/** 是否优先使用 InputRenderTarget 作为密度输入。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	bool MyUseRenderTargetAsInput = false;
@@ -604,6 +612,10 @@ public:
 	/** 按蓝图的默认遮罩名称规则更新碰撞遮罩状态。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Input")
 	void MyUpdateCollisionMaskIsNonDefault();
+
+	/** 配置场景捕捉或媒体源作为 Composite 的密度输入。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Input")
+	void MyAlternativeInputsFedToCompositeDensityInput();
 
 	/** 创建所有模拟所需的动态材质实例，并绑定当前 RenderTarget。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
@@ -646,6 +658,12 @@ public:
 	bool MyRGBInputMaterial = false;
 
 private:
+	/** 媒体输入循环重播的定时器。 */
+	FTimerHandle MyInputMediaLoopTimer;
+
+	/** 倒带并重播当前媒体输入。 */
+	void MyRestartInputMedia();
+
 	/** 对应 SetTraceMeshProperties 内未连接 Reset 引脚的 DoOnce 状态。 */
 	UPROPERTY(Transient)
 	bool bMyTraceMeshInitialRotationCaptured = false;

@@ -2,18 +2,22 @@
 
 #include "MyNinjaLiveComponent.h"
 
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "FileMediaSource.h"
 #include "MediaPlayer.h"
 #include "MediaTexture.h"
 #include "Misc/EngineVersion.h"
 #include "MyNinjaLiveActor.h"
 #include "FluidTest/MyNinjaLiveFunctions.h"
 #include "MyNinjaLiveMemoryPoolManager.h"
+#include "TimerManager.h"
 
 UMyNinjaLiveComponent::UMyNinjaLiveComponent()
 {
@@ -845,6 +849,52 @@ void UMyNinjaLiveComponent::MyUpdateCollisionMaskIsNonDefault()
 	// 蓝图逻辑：遮罩有效且显示名不是默认 T_maskframe_256 时，视为自定义遮罩。
 	MyCollisionMaskIsNonDefault = IsValid(MyCollisionMask) &&
 		UKismetSystemLibrary::GetDisplayName(MyCollisionMask) != TEXT("T_maskframe_256");
+}
+
+void UMyNinjaLiveComponent::MyAlternativeInputsFedToCompositeDensityInput()
+{
+	// 场景捕捉优先写入密度输入 RT，并禁用输入材质分支。
+	if (IsValid(MyInputSceneCaptureCamera))
+	{
+		const TObjectPtr<UTextureRenderTarget2D>* DensityInputTarget =
+			MyRenderTargetsMap.Find(TEXT("RT_DensityInputMaterial"));
+		if (USceneCaptureComponent2D* CaptureComponent = MyInputSceneCaptureCamera->GetCaptureComponent2D())
+		{
+			CaptureComponent->TextureTarget = DensityInputTarget ? DensityInputTarget->Get() : nullptr;
+		}
+		MyUseInputMaterials = false;
+	}
+
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		World->GetTimerManager().ClearTimer(MyInputMediaLoopTimer);
+	}
+
+	// 蓝图依次执行 SetMediaPlayer、OpenUrl、Play；缺少任一媒体对象时不启动该分支。
+	if (!IsValid(MyInputMediaPlayer) || !IsValid(MyMediaTexture) || !IsValid(MyInputMediaSource))
+	{
+		return;
+	}
+
+	MyMediaTexture->SetMediaPlayer(MyInputMediaPlayer);
+	MyInputMediaPlayer->OpenUrl(MyInputMediaSource->GetUrl());
+	MyInputMediaPlayer->Play();
+
+	if (World && MyInputMediaLoopLength > 0.0)
+	{
+		World->GetTimerManager().SetTimer(MyInputMediaLoopTimer, this,
+			&UMyNinjaLiveComponent::MyRestartInputMedia, MyInputMediaLoopLength, true);
+	}
+}
+
+void UMyNinjaLiveComponent::MyRestartInputMedia()
+{
+	if (IsValid(MyInputMediaPlayer))
+	{
+		MyInputMediaPlayer->Rewind();
+		MyInputMediaPlayer->Play();
+	}
 }
 
 
