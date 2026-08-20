@@ -6,6 +6,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Materials/MaterialInterface.h"
 #include "MyNinjaFluidEnums.h"
@@ -182,6 +183,49 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Input")
 	bool MyShowMouseCursor = true;
 
+	// ------------------------------------------------------------------
+	// ManageContinuousInteractions 相关（Owner 组件与骨骼筛选）
+	// ------------------------------------------------------------------
+	/** 是否持续使用 Owner 上满足筛选条件的组件进行交互。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	bool MyContinuousInteractionWithOwnerActor = false;
+
+	/** 仅接受这些组件名称；为空时接受全部候选组件。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TArray<FName> MyContinuousInteractionComponentNamesExact;
+
+	/** 仅接受这些 SkeletalMesh 骨骼名称；为空时不分配骨骼临时数组。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TArray<FName> MyContinuousInteractionBoneNamesExact;
+
+	/** 可参与持续交互的对象类型。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TArray<TEnumAsByte<EObjectTypeQuery>> MyContinuousInteractionInclusiveObjType;
+
+	/** 已筛选出的 Owner Primitive 组件。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Interaction")
+	TArray<TObjectPtr<UPrimitiveComponent>> MyOverlappingComponents;
+
+	/** Owner 上的 SkeletalMesh 组件缓存。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Interaction")
+	TArray<TObjectPtr<USkeletalMeshComponent>> MyContinuousInteractionSkeletalComponent;
+
+	/** 当前 SkeletalMesh 已匹配且尚未分配的骨骼名称。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Interaction")
+	TArray<FName> MyContinuousInteractionBoneNamesExactTemp;
+
+	/** 骨骼筛选的工作副本。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Interaction")
+	TArray<FName> MyContinuousInteractionBoneNamesExactTemp2;
+
+	/** 临时数组槽位是否已被 SkeletalMesh 骨骼交互占用。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TArray<bool> MyListOfAvailableTempArrays;
+
+	/** SkeletalMesh 到其骨骼临时数组索引的映射。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Interaction")
+	TMap<int32, TObjectPtr<UPrimitiveComponent>> MySkeletalMeshTempArrayPairs;
+
 	/** 清空全部临时数组 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Temp")
 	void MyResetTempArrays();
@@ -201,6 +245,10 @@ public:
 	/** 把另一数组追加到指定临时数组末尾 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Temp")
 	void MyAppendToTempArray(int32 ArrayIndex, const TArray<FName>& Items);
+
+	/** 刷新 Owner 持续交互组件、骨骼筛选结果与临时数组映射。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	void MyManageContinuousInteractions();
 
 	/** 比较 Map 长度：输出 MapLength、Added=(LastIndex+1)-FirstIndex、Equal=(Added+MapLengthTmp)==MapLength */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Temp")

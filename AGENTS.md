@@ -39,7 +39,8 @@
   `ProximityActivation-MasterVars-Quantizer-OutMat（复合节点）→ MyProximityActivationMasterVarsQuantizerOutMat*`、
   `EMyQuantizerMode` 枚举 + `MyQuantizerValues`、
   `CreateOrAcquireRenderTargets（复合节点）→ MyCreateOrAcquireRenderTargets`、
-  `CreateDynamicMaterialInstances（复合节点）→ MyCreateDynamicMaterialInstances`
+  `CreateDynamicMaterialInstances（复合节点）→ MyCreateDynamicMaterialInstances`、
+  `ManageContinuousInteractions（复合节点）→ MyManageContinuousInteractions`
 
 ## 常用操作
 

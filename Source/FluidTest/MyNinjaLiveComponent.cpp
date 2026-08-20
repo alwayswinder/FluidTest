@@ -494,6 +494,94 @@ void UMyNinjaLiveComponent::MyFPSPrecisionResolution()
 	MyPV2_Connect_TrackpointsWithLines = MyPV2_Interpolation;
 }
 
+void UMyNinjaLiveComponent::MyManageContinuousInteractions()
+{
+	if (!MyContinuousInteractionWithOwnerActor)
+	{
+		return;
+	}
+
+	AActor* OwnerActor = GetOwner();
+	if (!IsValid(OwnerActor))
+	{
+		return;
+	}
+
+	MyOverlappingComponents.Reset();
+	MyContinuousInteractionSkeletalComponent.Reset();
+	MySkeletalMeshTempArrayPairs.Reset();
+	MyListOfAvailableTempArrays.Init(false, 40);
+
+	TArray<UPrimitiveComponent*> OwnerComponents;
+	OwnerActor->GetComponents<UPrimitiveComponent>(OwnerComponents);
+	for (UPrimitiveComponent* PrimitiveComponent : OwnerComponents)
+	{
+		if (!IsValid(PrimitiveComponent))
+		{
+			continue;
+		}
+
+		const EObjectTypeQuery ObjectType = UEngineTypes::ConvertToObjectType(PrimitiveComponent->GetCollisionObjectType());
+		const bool bAllowedObjectType = MyContinuousInteractionInclusiveObjType.IsEmpty() ||
+			MyContinuousInteractionInclusiveObjType.Contains(ObjectType);
+		const bool bAllowedName = MyContinuousInteractionComponentNamesExact.IsEmpty() ||
+			MyContinuousInteractionComponentNamesExact.Contains(PrimitiveComponent->GetFName());
+		if (bAllowedObjectType && bAllowedName)
+		{
+			MyOverlappingComponents.Add(PrimitiveComponent);
+		}
+	}
+
+	TArray<USkeletalMeshComponent*> SkeletalComponents;
+	OwnerActor->GetComponents<USkeletalMeshComponent>(SkeletalComponents);
+	MyContinuousInteractionSkeletalComponent.Append(SkeletalComponents);
+	for (USkeletalMeshComponent* SkeletalComponent : SkeletalComponents)
+	{
+		if (!IsValid(SkeletalComponent) ||
+			(!MyOverlappingComponents.Contains(SkeletalComponent)))
+		{
+			continue;
+		}
+
+		MyContinuousInteractionBoneNamesExactTemp = MyContinuousInteractionBoneNamesExact;
+		if (MyContinuousInteractionBoneNamesExactTemp.IsEmpty())
+		{
+			continue;
+		}
+
+		TArray<FName> MatchedBones;
+		for (int32 BoneIndex = 0; BoneIndex < SkeletalComponent->GetNumBones(); ++BoneIndex)
+		{
+			const FName BoneName = SkeletalComponent->GetBoneName(BoneIndex);
+			if (MyContinuousInteractionBoneNamesExactTemp.RemoveSingle(BoneName) > 0)
+			{
+				MatchedBones.Add(BoneName);
+			}
+		}
+
+		if (MatchedBones.IsEmpty())
+		{
+			continue;
+		}
+
+		const int32 TempArrayIndex = MyListOfAvailableTempArrays.IndexOfByPredicate([](bool bOccupied)
+		{
+			return !bOccupied;
+		});
+		if (TempArrayIndex == INDEX_NONE)
+		{
+			break;
+		}
+
+		MyClearTempArray(TempArrayIndex);
+		MyAppendToTempArray(TempArrayIndex, MatchedBones);
+		MyListOfAvailableTempArrays[TempArrayIndex] = true;
+		MySkeletalMeshTempArrayPairs.Add(TempArrayIndex, SkeletalComponent);
+	}
+
+	MyContinuousInteractionBoneNamesExactTemp2 = MyContinuousInteractionBoneNamesExactTemp;
+}
+
 void UMyNinjaLiveComponent::MyCreateOrAcquireRenderTargets()
 {
 	MyRenderTargetsMap.Empty();
