@@ -14,6 +14,10 @@
 
 class AMyNinjaLiveActor;
 class AMyNinjaLiveMemoryPoolManager;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
+class UMediaPlayer;
+class UMediaTexture;
 
 /**
  * NinjaLiveComponent 蓝图组件的 C++ 父类。
@@ -449,6 +453,141 @@ public:
 	/** 按当前模拟配置创建或重建所有需要的 RenderTarget。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|RenderTarget")
 	void MyCreateOrAcquireRenderTargets();
+
+	/** 核心模拟材质；0、1 为点/线画笔，2~17 为八组桌面端/移动端材质变体。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TArray<TObjectPtr<UMaterialInterface>> MyCoreSimMaterials;
+
+	/** 是否选用为移动端翻转过的核心模拟材质。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	bool MyFlipRenderTargetsForMobile = false;
+
+	/** 画笔及求解器参数，由动态材质实例初始化时写入对应材质参数。 */
+	/** 密度画笔噪声强度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyBrushDensityNoiseScale = 0.0;
+	/** 密度画笔噪声频率。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyBrushDensityNoiseFreq = 0.0;
+	/** 速度画笔噪声强度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyBrushVelocityNoiseScale = 0.0;
+	/** 速度画笔噪声频率。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyBrushVelocityNoiseFreq = 0.0;
+	/** 速度画笔的幂指数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyBrushVelocityPow = 1.0;
+	/** 是否在世界空间采样画笔噪声。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	bool MyBrushNoiseInWorldSpace = false;
+	/** 触发画笔阻尼的最低速度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyDampenBrushBelowThisVelocity = 0.0;
+	/** 低速画笔的阻尼系数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyDampenBrushFactor = 0.0;
+	/** 是否允许密度输出为绝对黑色。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	bool MyAllowAbsoluteBlackDensity = false;
+	/** Painter V2 边缘遮罩强度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyAdjustPainterV2EdgeMask = 0.0;
+	/** 模拟画笔速度参数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MySpeed = 0.0;
+
+	/** 速度场反馈系数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
+	double MyFlowFeedback = 0.0;
+	/** 散度求解强度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
+	double MyDivergence = 0.0;
+	/** 压力边缘遮罩强度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
+	double MyPressureEdgeMasking = 0.0;
+	/** 实验性压力反馈系数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
+	double MyExperimentalPressureFeedback = 0.0;
+	/** 实验性压力反馈分量。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
+	double MyExpPressureFeedbackComponent = 0.0;
+	/** 实验性散度反馈分量。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
+	double MyExpDivergenceFeedbackComponent = 0.0;
+	/** 第二压力求解器的核索引偏移。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
+	int32 MyExperimentalPSolver2KernelIndexOffset = 0;
+	/** 是否使用压力求解器 1；false 时使用默认求解器 2。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
+	bool MyUsePressureSolver1DefaultIs2 = false;
+
+	/** 外部密度输入纹理。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	TObjectPtr<UTexture> MyDensityInput = nullptr;
+	/** 外部速度输入纹理。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	TObjectPtr<UTexture> MyVelocityInput = nullptr;
+	/** 碰撞遮罩纹理。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	TObjectPtr<UTexture> MyCollisionMask = nullptr;
+	/** 作为模拟输入的 RenderTarget。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	TObjectPtr<UTexture> MyInputRenderTarget = nullptr;
+	/** 作为模拟输入的媒体纹理。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	TObjectPtr<UMediaTexture> MyMediaTexture = nullptr;
+	/** 媒体输入对应的播放器对象。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	TObjectPtr<UMediaPlayer> MyInputMediaPlayer = nullptr;
+	/** 是否优先使用 InputRenderTarget 作为密度输入。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	bool MyUseRenderTargetAsInput = false;
+	/** 是否随机化画笔噪声偏移。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	bool MyRandomizeNoiseOffsets = false;
+	/** 是否随机化密度纹理偏移。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	bool MyRandomizeDensityTextureOffset = false;
+	/** 当前碰撞遮罩是否为有效的非默认纹理，可由蓝图覆盖用于测试。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	bool MyCollisionMaskIsNonDefault = false;
+
+	/** 按蓝图的默认遮罩名称规则更新碰撞遮罩状态。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Input")
+	void MyUpdateCollisionMaskIsNonDefault();
+
+	/** 创建所有模拟所需的动态材质实例，并绑定当前 RenderTarget。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
+	void MyCreateDynamicMaterialInstances();
+
+	/** 合成与梯度阶段的动态材质实例。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInstanceDynamic> MyMICompositeAndGradient = nullptr;
+	/** 平流阶段的动态材质实例。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInstanceDynamic> MyMIAdvection = nullptr;
+	/** 散度阶段的动态材质实例。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInstanceDynamic> MyMIDivergence = nullptr;
+	/** 第一压力循环的动态材质实例。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInstanceDynamic> MyMIPressureCycle1 = nullptr;
+	/** 第二压力循环的动态材质实例。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInstanceDynamic> MyMIPressureCycle2 = nullptr;
+	/** 线状碰撞画笔的动态材质实例。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInstanceDynamic> MyMICollisionPainterLine = nullptr;
+	/** 点状碰撞画笔的动态材质实例。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInstanceDynamic> MyMICollisionPainterDot = nullptr;
+	/** 碰撞画笔偏移阶段的动态材质实例。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInstanceDynamic> MyMICollisionPainterOffset = nullptr;
+	/** 默认空输出使用的动态材质实例。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInstanceDynamic> MyMINull = nullptr;
 	
 	/** 是否使用简单画笔模式；该模式跳过内存池连接。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")

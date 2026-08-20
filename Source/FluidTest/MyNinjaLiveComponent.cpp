@@ -5,6 +5,11 @@
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
+#include "MediaPlayer.h"
+#include "MediaTexture.h"
 #include "Misc/EngineVersion.h"
 #include "MyNinjaLiveActor.h"
 #include "FluidTest/MyNinjaLiveFunctions.h"
@@ -559,6 +564,199 @@ void UMyNinjaLiveComponent::MyCreateOrAcquireRenderTargets()
 		AddRenderTarget(TEXT("RT_Output"), FullWidth * OutputMultiplier, FullHeight * OutputMultiplier,
 			OutputFormat, MySimAreaClamp);
 	}
+}
+
+void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
+{
+	// CoreSimMaterials 的索引由原蓝图固定定义；压力材质还取决于求解器与移动端翻转选项。
+	auto CreateMaterialAt = [this](int32 MaterialIndex) -> UMaterialInstanceDynamic*
+	{
+		if (!MyCoreSimMaterials.IsValidIndex(MaterialIndex) || !IsValid(MyCoreSimMaterials[MaterialIndex]))
+		{
+			return nullptr;
+		}
+		return UMaterialInstanceDynamic::Create(MyCoreSimMaterials[MaterialIndex], this);
+	};
+	auto CreatePlatformMaterial = [&CreateMaterialAt, this](int32 DesktopIndex) -> UMaterialInstanceDynamic*
+	{
+		return CreateMaterialAt(DesktopIndex + (MyFlipRenderTargetsForMobile ? 1 : 0));
+	};
+
+	// 蓝图的 Simple Painter 分支只创建两个 Painter、Null 和 Painter Offset MID。
+	// 模拟的五个 MID 位于 If 的 false 分支，不能在此模式下提前创建。
+	if (!MySimplePainterMode)
+	{
+		MyMICompositeAndGradient = CreatePlatformMaterial(2);
+		MyMIAdvection = CreatePlatformMaterial(4);
+		MyMIDivergence = CreatePlatformMaterial(6);
+		const int32 SolverIndex = MyUsePressureSolver1DefaultIs2 ? 1 : 0;
+		MyMIPressureCycle1 = CreateMaterialAt(
+			(MyFlipRenderTargetsForMobile ? 10 : 8) + SolverIndex);
+		MyMIPressureCycle2 = CreateMaterialAt(
+			(MyFlipRenderTargetsForMobile ? 14 : 12) + SolverIndex);
+	}
+	else
+	{
+		MyMICompositeAndGradient = nullptr;
+		MyMIAdvection = nullptr;
+		MyMIDivergence = nullptr;
+		MyMIPressureCycle1 = nullptr;
+		MyMIPressureCycle2 = nullptr;
+	}
+	MyMICollisionPainterLine = CreateMaterialAt(1);
+	MyMICollisionPainterDot = CreateMaterialAt(0);
+	MyMICollisionPainterOffset = CreatePlatformMaterial(16);
+
+	if (UMaterialInterface* NullMaterial = LoadObject<UMaterialInterface>(
+		nullptr, TEXT("/Game/FluidNinjaLive/Core/Materials/M_SolidColor.M_SolidColor")))
+	{
+		MyMINull = UMaterialInstanceDynamic::Create(NullMaterial, this);
+	}
+	else
+	{
+		MyMINull = nullptr;
+	}
+
+	auto FindRenderTarget = [this](const TCHAR* Name) -> UTextureRenderTarget2D*
+	{
+		const TObjectPtr<UTextureRenderTarget2D>* Found = MyRenderTargetsMap.Find(Name);
+		return Found ? Found->Get() : nullptr;
+	};
+
+	UTextureRenderTarget2D* Painter = FindRenderTarget(TEXT("RT_Painter"));
+	UTextureRenderTarget2D* Composite = FindRenderTarget(TEXT("RT_Composite"));
+	UTextureRenderTarget2D* Advection = FindRenderTarget(TEXT("RT_Advection"));
+	UTextureRenderTarget2D* Pressure = FindRenderTarget(TEXT("RT_PressureDivergence"));
+	UTextureRenderTarget2D* PressureTemp = FindRenderTarget(TEXT("RT_PressureDivergenceTemp"));
+	UTextureRenderTarget2D* DensityInput = FindRenderTarget(TEXT("RT_DensityInputMaterial"));
+
+	auto SetTexture = [](UMaterialInstanceDynamic* Material, FName Parameter, UTexture* Texture)
+	{
+		// 蓝图即使输入为空也会写入参数；跳过空纹理会意外保留旧 MID 的参数值。
+		if (IsValid(Material))
+		{
+			Material->SetTextureParameterValue(Parameter, Texture);
+		}
+	};
+
+	if (!MySimplePainterMode)
+	{
+		// 按蓝图每个 MID 的参数名和 RT 连线绑定，不能按材质阶段泛化。
+		SetTexture(MyMICompositeAndGradient, TEXT("Texture"), Advection);
+		SetTexture(MyMICompositeAndGradient, TEXT("PressureTexture"), Pressure);
+		SetTexture(MyMICompositeAndGradient, TEXT("VeloPainter"), Painter);
+		SetTexture(MyMIAdvection, TEXT("Texture"), Composite);
+		SetTexture(MyMIDivergence, TEXT("Texture"), Advection);
+		SetTexture(MyMIDivergence, TEXT("Texture3"), Painter);
+		SetTexture(MyMIPressureCycle1, TEXT("Texture"), Pressure);
+		SetTexture(MyMIPressureCycle2, TEXT("Texture"), PressureTemp);
+		SetTexture(MyMICompositeAndGradient, TEXT("VeloInputTexture"), MyVelocityInput);
+		if (MyUseRenderTargetAsInput)
+		{
+			// 蓝图此处先 Cast To TextureRenderTarget2D；转换失败时不会执行 TextureAdd2 节点。
+			if (UTextureRenderTarget2D* InputRenderTarget = Cast<UTextureRenderTarget2D>(MyInputRenderTarget))
+			{
+				SetTexture(MyMICompositeAndGradient, TEXT("TextureAdd2"), InputRenderTarget);
+			}
+		}
+		else
+		{
+			SetTexture(MyMICompositeAndGradient, TEXT("TextureAdd2"), MyDensityInput);
+		}
+		SetTexture(MyMICompositeAndGradient, TEXT("MaterialInput"),
+			IsValid(MyInputMediaPlayer) ? static_cast<UTexture*>(MyMediaTexture.Get()) : static_cast<UTexture*>(DensityInput));
+		SetTexture(MyMICompositeAndGradient, TEXT("CollisionMask"), MyCollisionMask);
+		// 蓝图只有在遮罩有效且不是默认遮罩时才写 true；不在此处回写 false。
+		if (IsValid(MyCollisionMask) &&
+			UKismetSystemLibrary::GetDisplayName(MyCollisionMask) != TEXT("T_maskframe_256"))
+		{
+			MyCollisionMaskIsNonDefault = true;
+		}
+	}
+	SetTexture(MyMICollisionPainterOffset, TEXT("Texture"), Painter);
+
+	const TArray<UMaterialInstanceDynamic*> SimulationMIDs = {
+		MyMICompositeAndGradient, MyMIAdvection, MyMIDivergence,
+		MyMIPressureCycle1, MyMIPressureCycle2 };
+	const float TexelSizeMultiplier = MyHalfResPressureAndDivergenceBuffers ? 1.0f : static_cast<float>(MySpeed);
+	const float NoiseRandomOffset = MyRandomizeNoiseOffsets ? FMath::FRand() : 0.0f;
+	const float DensityRandomOffset = MyRandomizeDensityTextureOffset ? FMath::FRand() : 0.0f;
+	const float LargestResolution = static_cast<float>(FMath::Max(MyResolutionX, MyResolutionY));
+	const FLinearColor PaintAspect = LargestResolution > 0.0f
+		? FLinearColor(MyResolutionX / LargestResolution, MyResolutionY / LargestResolution, 1.0f, 1.0f)
+		: FLinearColor::White;
+	for (UMaterialInstanceDynamic* Material : SimulationMIDs)
+	{
+		if (IsValid(Material))
+		{
+			Material->SetScalarParameterValue(TEXT("TexelSizeMult"), TexelSizeMultiplier);
+		}
+	}
+
+	if (IsValid(MyMICompositeAndGradient))
+	{
+		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("FlowFeedback"), MyFlowFeedback);
+		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("Randomize"), NoiseRandomOffset);
+		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("DensityTxtRandomOffset"), DensityRandomOffset);
+		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("RGBInputMaterial"), MyRGBInputMaterial ? 1.0f : 0.0f);
+		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("RGBInputTexture"), MyUseRenderTargetAsInput ? 1.0f : 0.0f);
+		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("EnablePainterOffset"), MyEnablePainterDoubleBuffering ? 0.0f : 1.0f);
+		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("NullValue"),
+			MyAllowAbsoluteBlackDensity ? 0.0f : 0.000001f);
+	}
+
+	if (IsValid(MyMIDivergence))
+	{
+		MyMIDivergence->SetScalarParameterValue(TEXT("Divergence"), MyDivergence);
+	}
+
+	for (UMaterialInstanceDynamic* PainterMaterial : { MyMICollisionPainterLine.Get(), MyMICollisionPainterDot.Get() })
+	{
+		if (IsValid(PainterMaterial))
+		{
+			PainterMaterial->SetScalarParameterValue(TEXT("DensityNoiseScale"), MyBrushDensityNoiseScale);
+			PainterMaterial->SetScalarParameterValue(TEXT("DensityNoiseFreq"), MyBrushDensityNoiseFreq);
+			PainterMaterial->SetScalarParameterValue(TEXT("VeloNoiseScale"), MyBrushVelocityNoiseScale);
+			PainterMaterial->SetScalarParameterValue(TEXT("VeloNoiseFreq"), MyBrushVelocityNoiseFreq);
+			PainterMaterial->SetScalarParameterValue(TEXT("BrushVelocityPow"), MyBrushVelocityPow);
+			PainterMaterial->SetScalarParameterValue(TEXT("NoiseInWorldSpace"), MyBrushNoiseInWorldSpace ? 1.0f : 0.0f);
+			PainterMaterial->SetScalarParameterValue(TEXT("BrushSensitivityToVelocity"), MyDampenBrushFactor);
+			PainterMaterial->SetScalarParameterValue(TEXT("KillBrushBelowThisVelocity"),
+				(MyUE5EAFLAG ? 1.0f : 0.0f) * static_cast<float>(MyDampenBrushBelowThisVelocity));
+			PainterMaterial->SetScalarParameterValue(TEXT("EdgeMaskValue"), MyQuantizerStepSize < 1 ? 1.0f : 0.0f);
+			PainterMaterial->SetVectorParameterValue(TEXT("PaintAspect"), PaintAspect);
+		}
+	}
+
+	if (IsValid(MyMICollisionPainterOffset))
+	{
+		MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("EdgeMask"), MyAdjustPainterV2EdgeMask);
+	}
+
+	auto ConfigurePressureMaterial = [this](UMaterialInstanceDynamic* Material, float Direction)
+	{
+		if (IsValid(Material))
+		{
+			Material->SetScalarParameterValue(TEXT("Direction"), Direction);
+			Material->SetScalarParameterValue(TEXT("KernelIndexOffset"), MyExperimentalPSolver2KernelIndexOffset);
+			Material->SetScalarParameterValue(TEXT("FeedbackDampening"), MyExperimentalPressureFeedback);
+			Material->SetScalarParameterValue(TEXT("PressureEdgeMasking"),
+				FMath::Max(static_cast<float>(MyPressureEdgeMasking), 0.01f));
+			Material->SetScalarParameterValue(TEXT("DisablePressureEdgeMasking"), MyPressureEdgeMasking == 0.0 ? 1.0f : 0.0f);
+			Material->SetScalarParameterValue(TEXT("PressureFeedback"), MyExpPressureFeedbackComponent);
+			Material->SetScalarParameterValue(TEXT("DivergenceFeedback"), MyExpDivergenceFeedbackComponent);
+		}
+	};
+	ConfigurePressureMaterial(MyMIPressureCycle1, 0.0f);
+	ConfigurePressureMaterial(MyMIPressureCycle2, 1.0f);
+
+}
+
+void UMyNinjaLiveComponent::MyUpdateCollisionMaskIsNonDefault()
+{
+	// 蓝图逻辑：遮罩有效且显示名不是默认 T_maskframe_256 时，视为自定义遮罩。
+	MyCollisionMaskIsNonDefault = IsValid(MyCollisionMask) &&
+		UKismetSystemLibrary::GetDisplayName(MyCollisionMask) != TEXT("T_maskframe_256");
 }
 
 

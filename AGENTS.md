@@ -38,7 +38,8 @@
   `CheckComponentOwner（复合节点）→ MyCheckComponentOwner`、`Enable OWNER Input → MyEnableOwnerInput`、
   `ProximityActivation-MasterVars-Quantizer-OutMat（复合节点）→ MyProximityActivationMasterVarsQuantizerOutMat*`、
   `EMyQuantizerMode` 枚举 + `MyQuantizerValues`、
-  `CreateOrAcquireRenderTargets（复合节点）→ MyCreateOrAcquireRenderTargets`
+  `CreateOrAcquireRenderTargets（复合节点）→ MyCreateOrAcquireRenderTargets`、
+  `CreateDynamicMaterialInstances（复合节点）→ MyCreateDynamicMaterialInstances`
 
 ## 常用操作
 
