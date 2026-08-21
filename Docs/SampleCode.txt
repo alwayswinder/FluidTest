@@ -1,83 +1,72 @@
-void UMyNinjaLiveFunctions::MyTemplateLoader(
-	UObject* WorldContextObject,
-	FName TemplateDefinition,
-	UDataTable* LoadedDataTable,
-	const FString& LoadedDatatablePath,
-	bool& LoadFailed,
-	UObject*& LoadedTemplateObject,
-	FString& LoadedTmpFullPath,
-	FString& LoadedTemplateNameOnly,
-	bool& UsesAbsolutePath)
-{
-	LoadFailed = true;
-	LoadedTemplateObject = nullptr;
-	LoadedTmpFullPath.Reset();
-	LoadedTemplateNameOnly.Reset();
-	UsesAbsolutePath = false;
+// ===== 复合节点：ParsePresetMapAndSetVariables =====
+// 输入：PresetMap (TMap<FString, double>)
+// 执行流从 Tunnel_0 (In) 进入，完成后从 Tunnel_1 (Out) 退出
 
-	if (!IsValid(LoadedDataTable) || TemplateDefinition.IsNone())
-	{
-		return;
-	}
+// ---- 1. 读取并设置基础参数（直接赋值，未找到则默认 0.0） ----
+MySpeed = Map_Find(PresetMap, "Speed")
+VeloOffsetX = Map_Find(PresetMap, "VeloOffsetX")
+VeloOffsetY = Map_Find(PresetMap, "VeloOffsetY")
+VeloFromBrushMotion = Map_Find(PresetMap, "VeloFromBrushMotion")
 
-	const uint8* RowData = LoadedDataTable->GetRowMap().FindRef(TemplateDefinition);
-	if (RowData == nullptr || LoadedDataTable->RowStruct == nullptr)
-	{
-		return;
-	}
+// ---- OffsetFromSimAreaMotion 具有默认值 1.0（当键不存在时） ----
+bool bFoundOffset = Map_Find(PresetMap, "OffsetFromSimAreaMotion", double OutValue)
+OffsetFromSimAreaMotion = bFoundOffset ? OutValue : 1.0
 
-	const FStrProperty* SourceStringProperty = nullptr;
-	for (TFieldIterator<FProperty> It(LoadedDataTable->RowStruct); It; ++It)
-	{
-		if (It->GetFName().ToString().StartsWith(TEXT("SourceString")))
-		{
-			SourceStringProperty = CastField<FStrProperty>(*It);
-			break;
-		}
-	}
+MyVeloFromSimAreaMotion = Map_Find(PresetMap, "VeloFromSimAreaMotion")   // 未找到默认 0.0
 
-	if (SourceStringProperty == nullptr)
-	{
-		return;
-	}
+VeloStrength = Map_Find(PresetMap, "VeloStrength")
+VeloRotate = Map_Find(PresetMap, "VeloRotate")
+VeloAmpNoise = Map_Find(PresetMap, "VeloAmpNoise")
+VeloDirNoise = Map_Find(PresetMap, "VeloDirNoise")
+InputFeedback = Map_Find(PresetMap, "InputFeedback")
+MyFlowFeedback = Map_Find(PresetMap, "FlowFeedback")       // 注意变量名 MyFlowFeedback
+MyDivergence = Map_Find(PresetMap, "Divergence")           // 变量名 MyDivergence
+BrushSize = Map_Find(PresetMap, "BrushSize")
+BrushStrength = Map_Find(PresetMap, "BrushStrength")
+BrushHardness = Map_Find(PresetMap, "BrushHardness")
+BrushPuncture = Map_Find(PresetMap, "BrushPuncture")
 
-	const FString& SourceString = SourceStringProperty->GetPropertyValue_InContainer(RowData);
-	if (SourceString.IsEmpty())
-	{
-		return;
-	}
+// ---- EraserMode：键值 > 0 则为 true，否则 false（未找到默认为 0，所以 false） ----
+EraserMode = Map_Find(PresetMap, "EraserMode") > 0.0
 
-	const bool bSourceUsesAbsolutePath = SourceString.StartsWith(TEXT("/"), ESearchCase::IgnoreCase);
-	LoadedTmpFullPath = bSourceUsesAbsolutePath
-		? SourceString
-		: FString::Printf(TEXT("%s/%s"), *LoadedDatatablePath, *SourceString);
+// ---- DensityTxtMult：默认值为 1.0（若键不存在） ----
+bool bFoundDensMult = Map_Find(PresetMap, "DensityTxtMult", double OutDensMult)
+DensityTxtMult = bFoundDensMult ? OutDensMult : 1.0
 
-	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
-	TArray<FAssetData> AssetData;
-	AssetRegistryModule.Get().GetAssetsByPackageName(FName(*LoadedTmpFullPath), AssetData, false, true);
+FadeDensityAtSimEdge = Map_Find(PresetMap, "FadeDensityAtSimEdge")
 
-	for (const FAssetData& Candidate : AssetData)
-	{
-		LoadedTemplateObject = Candidate.GetAsset();
-		if (IsValid(LoadedTemplateObject))
-		{
-			break;
-		}
-	}
+// ---- SimEdgeBouncyness：默认值为 0.5（若键不存在） ----
+bool bFoundBounce = Map_Find(PresetMap, "SimEdgeBouncyness", double OutBounce)
+SimEdgeBouncyness = bFoundBounce ? OutBounce : 0.5
 
-	if (!IsValid(LoadedTemplateObject))
-	{
-		LoadedTemplateObject = nullptr;
-		return;
-	}
+// ---- VeloDirNoiseSize：默认值为 1.0 ----
+bool bFoundNoiseSize = Map_Find(PresetMap, "VeloDirNoiseSize", double OutNoiseSize)
+VeloDirNoiseSize = bFoundNoiseSize ? OutNoiseSize : 1.0
 
-	const int32 LastSeparator = LoadedTmpFullPath.Find(TEXT("/"), ESearchCase::IgnoreCase, ESearchDir::FromEnd);
-	const FString PackageDirectory = LastSeparator != INDEX_NONE
-		? LoadedTmpFullPath.Left(LastSeparator + 1)
-		: FString();
-	UsesAbsolutePath = bSourceUsesAbsolutePath && PackageDirectory != LoadedDatatablePath;
-	LoadedTemplateNameOnly = UsesAbsolutePath && LastSeparator != INDEX_NONE
-		? LoadedTmpFullPath.Mid(LastSeparator + 1)
-		: LoadedTmpFullPath;
-	LoadFailed = false;
+// ---- VeloDirNoiseSpeed：默认值为 1.0 ----
+bool bFoundNoiseSpeed = Map_Find(PresetMap, "VeloDirNoiseSpeed", double OutNoiseSpeed)
+VeloDirNoiseSpeed = bFoundNoiseSpeed ? OutNoiseSpeed : 1.0
+
+// ---- EdgeMaskWidth：默认值为 0.25 ----
+bool bFoundEdgeMask = Map_Find(PresetMap, "EdgeMaskWidth", double OutEdgeMask)
+EdgeMaskWidth = bFoundEdgeMask ? OutEdgeMask : 0.25
+
+// ---- 条件分支：根据 MyUseRenderTargetAsInput 决定是否设置以下三项 ----
+if (!MyUseRenderTargetAsInput) {
+    // 仅在 render target 不作为输入时设置这些密度纹理变换参数
+    DensityTxtScale = Map_Find(PresetMap, "DensityTxtScale")   // 默认 0.0
+    DensityTxtOffsetX = Map_Find(PresetMap, "DensityTxtOffsetX")
+    DensityTxtOffsetY = Map_Find(PresetMap, "DensityTxtOffsetY")
 }
+// 如果 MyUseRenderTargetAsInput 为 true，则跳过上述三项，保持它们的当前值（未被修改）
+
+// ---- 继续设置剩余的 Niagara 相关参数 ----
+BrushNoise = Map_Find(PresetMap, "BrushNoise")
+VeloInputTile = Map_Find(PresetMap, "VeloInputTile")
+VeloInputOffsetSpeed = Map_Find(PresetMap, "VeloInputOffsetSpeed")
+DensityInputNoiseAmp = Map_Find(PresetMap, "DensityInputNoiseAmp")
+DensityInputNoiseOffset = Map_Find(PresetMap, "DensityInputNoiseOffset")
+DensityInputNoiseTile = Map_Find(PresetMap, "DensityInputNoiseTile")
+BrushRnd = Map_Find(PresetMap, "BrushRnd")
+
+// ---- 出口 ----

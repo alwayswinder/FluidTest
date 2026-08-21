@@ -35,6 +35,7 @@
 - 已迁移：`ResetTempArrays → MyResetTempArrays`、`GetTempArray → MyGetTempArray`、
   `MyAddToTempArray` / `MyClearTempArray` / `MyAppendToTempArray`、40 个 `MyTempArray0~39`、
   `CompareMapLength → MyCompareMapLength`、`VelocityHandlerForSimArea → MyVelocityHandlerForSimArea`、
+  `ParsePresetMapAndSetVariables（复合节点）→ MyParsePresetMapAndSetVariables`、
   `CheckComponentOwner（复合节点）→ MyCheckComponentOwner`、`Enable OWNER Input → MyEnableOwnerInput`、
   `ProximityActivation-MasterVars-Quantizer-OutMat（复合节点）→ MyProximityActivationMasterVarsQuantizerOutMat*`、
   `EMyQuantizerMode` 枚举 + `MyQuantizerValues`、

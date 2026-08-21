@@ -164,6 +164,62 @@ void UMyNinjaLiveComponent::MyCompareMapLength(int32 FirstIndex, int32 LastIndex
 	Equal = (Tmp == MapLength);
 }
 
+void UMyNinjaLiveComponent::MyParsePresetMapAndSetVariables(const TMap<FString, double>& PresetMap)
+{
+	auto GetValue = [&PresetMap](const TCHAR* Key)
+	{
+		return PresetMap.FindRef(Key);
+	};
+	auto GetValueOr = [&PresetMap](const TCHAR* Key, double DefaultValue)
+	{
+		if (const double* Value = PresetMap.Find(Key))
+		{
+			return *Value;
+		}
+		return DefaultValue;
+	};
+
+	MySpeed = GetValue(TEXT("Speed"));
+	MyVeloOffsetX = GetValue(TEXT("VeloOffsetX"));
+	MyVeloOffsetY = GetValue(TEXT("VeloOffsetY"));
+	MyVeloFromBrushMotion = GetValue(TEXT("VeloFromBrushMotion"));
+	MyOffsetFromSimAreaMotion = GetValueOr(TEXT("OffsetFromSimAreaMotion"), 1.0);
+	MyVeloFromSimAreaMotion = GetValue(TEXT("VeloFromSimAreaMotion"));
+	MyVeloStrength = GetValue(TEXT("VeloStrength"));
+	MyVeloRotate = GetValue(TEXT("VeloRotate"));
+	MyVeloAmpNoise = GetValue(TEXT("VeloAmpNoise"));
+	MyVeloDirNoise = GetValue(TEXT("VeloDirNoise"));
+	MyInputFeedback = GetValue(TEXT("InputFeedback"));
+	MyFlowFeedback = GetValue(TEXT("FlowFeedback"));
+	MyDivergence = GetValue(TEXT("Divergence"));
+	MyBrushSize = GetValue(TEXT("BrushSize"));
+	MyBrushStrength = GetValue(TEXT("BrushStrength"));
+	MyBrushHardness = GetValue(TEXT("BrushHardness"));
+	MyBrushPuncture = GetValue(TEXT("BrushPuncture"));
+	MyEraserMode = GetValue(TEXT("EraserMode")) > 0.0;
+	MyDensityTxtMult = GetValueOr(TEXT("DensityTxtMult"), 1.0);
+	MyFadeDensityAtSimEdge = GetValue(TEXT("FadeDensityAtSimEdge"));
+	MySimEdgeBouncyness = GetValueOr(TEXT("SimEdgeBouncyness"), 0.5);
+	MyVeloDirNoiseSize = GetValueOr(TEXT("VeloDirNoiseSize"), 1.0);
+	MyVeloDirNoiseSpeed = GetValueOr(TEXT("VeloDirNoiseSpeed"), 1.0);
+	MyEdgeMaskWidth = GetValueOr(TEXT("EdgeMaskWidth"), 0.25);
+
+	if (!MyUseRenderTargetAsInput)
+	{
+		MyDensityTxtScale = GetValue(TEXT("DensityTxtScale"));
+		MyDensityTxtOffsetX = GetValue(TEXT("DensityTxtOffsetX"));
+		MyDensityTxtOffsetY = GetValue(TEXT("DensityTxtOffsetY"));
+	}
+
+	MyBrushNoise = GetValue(TEXT("BrushNoise"));
+	MyVeloInputTile = GetValue(TEXT("VeloInputTile"));
+	MyVeloInputOffsetSpeed = GetValue(TEXT("VeloInputOffsetSpeed"));
+	MyDensityInputNoiseAmp = GetValue(TEXT("DensityInputNoiseAmp"));
+	MyDensityInputNoiseOffset = GetValue(TEXT("DensityInputNoiseOffset"));
+	MyDensityInputNoiseTile = GetValue(TEXT("DensityInputNoiseTile"));
+	MyBrushRnd = GetValue(TEXT("BrushRnd"));
+}
+
 void UMyNinjaLiveComponent::MyVelocityHandlerForSimArea(double CoEff, double& X, double& Y, double& Z) const
 {
 	// VeloFromSimAreaMotion 非零时：TraceMesh 前后帧位移 ×20 → 局部方向 × (速度×系数)

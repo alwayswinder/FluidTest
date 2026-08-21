@@ -257,6 +257,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MyManageContinuousInteractions();
 
+	/** 解析预设参数映射并写入模拟与画笔参数。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Preset")
+	void MyParsePresetMapAndSetVariables(const TMap<FString, double>& PresetMap);
+
 	/** 比较 Map 长度：输出 MapLength、Added=(LastIndex+1)-FirstIndex、Equal=(Added+MapLengthTmp)==MapLength */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Temp")
 	void MyCompareMapLength(int32 FirstIndex, int32 LastIndex, int32& MapLength, bool& Equal, int32& Added) const;
@@ -605,6 +609,68 @@ public:
 	/** 模拟画笔速度参数。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MySpeed = 0.0;
+
+	/** 由预设映射驱动的速度、密度和画笔参数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyVeloOffsetX = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyVeloOffsetY = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyVeloFromBrushMotion = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyOffsetFromSimAreaMotion = 1.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyVeloStrength = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyVeloRotate = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyVeloAmpNoise = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyVeloDirNoise = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyInputFeedback = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyBrushSize = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyBrushStrength = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyBrushHardness = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyBrushPuncture = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	bool MyEraserMode = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyDensityTxtMult = 1.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyFadeDensityAtSimEdge = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MySimEdgeBouncyness = 0.5;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyVeloDirNoiseSize = 1.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyVeloDirNoiseSpeed = 1.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyEdgeMaskWidth = 0.25;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyDensityTxtScale = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyDensityTxtOffsetX = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyDensityTxtOffsetY = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyBrushNoise = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyVeloInputTile = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyVeloInputOffsetSpeed = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyDensityInputNoiseAmp = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyDensityInputNoiseOffset = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyDensityInputNoiseTile = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyBrushRnd = 0.0;
 
 	/** 速度场反馈系数。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
