@@ -6,10 +6,12 @@
 #include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
 #include "Components/VolumetricCloudComponent.h"
+#include "Engine/Texture2D.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMaterialLibrary.h"
+#include "Kismet/KismetRenderingLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
@@ -1308,6 +1310,159 @@ void UMyNinjaLiveComponent::MyAlternativeInputsFedToCompositeDensityInput()
 	{
 		World->GetTimerManager().SetTimer(MyInputMediaLoopTimer, this,
 			&UMyNinjaLiveComponent::MyRestartInputMedia, MyInputMediaLoopLength, true);
+	}
+}
+
+void UMyNinjaLiveComponent::MyLoadVelocityInputTexture()
+{
+	if (IsValid(MyOverwritePresetVelocityInput))
+	{
+		MyVelocityInput = MyOverwritePresetVelocityInput;
+		if (IsValid(MyMICompositeAndGradient))
+		{
+			MyMICompositeAndGradient->SetScalarParameterValue(TEXT("VeloInputSelect"), 1.0f);
+			MyMICompositeAndGradient->SetTextureParameterValue(TEXT("VeloInputTexture"), MyVelocityInput);
+		}
+		return;
+	}
+
+	bool LoadFailed = false;
+	UObject* LoadedTemplateObject = nullptr;
+	FString LoadedTmpFullPath;
+	FString LoadedTemplateNameOnly;
+	bool UsesAbsolutePath = false;
+	UMyNinjaLiveFunctions::MyTemplateLoader(
+		this,
+		TEXT("VelocityTemplate"),
+		MyLoadedDataTable,
+		MyLoadedDataTablePath,
+		LoadFailed,
+		LoadedTemplateObject,
+		LoadedTmpFullPath,
+		LoadedTemplateNameOnly,
+		UsesAbsolutePath);
+
+	if (LoadFailed)
+	{
+		MyVelocityInput = nullptr;
+		if (IsValid(MyMICompositeAndGradient))
+		{
+			MyMICompositeAndGradient->SetScalarParameterValue(TEXT("VeloInputSelect"), 0.0f);
+			MyMICompositeAndGradient->SetTextureParameterValue(TEXT("VeloInputTexture"), nullptr);
+		}
+		return;
+	}
+
+	UTexture2D* LoadedTexture = Cast<UTexture2D>(LoadedTemplateObject);
+	if (!IsValid(LoadedTexture))
+	{
+		return;
+	}
+
+	MyVelocityInput = LoadedTexture;
+	if (IsValid(MyMICompositeAndGradient))
+	{
+		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("VeloInputSelect"), 1.0f);
+		MyMICompositeAndGradient->SetTextureParameterValue(TEXT("VeloInputTexture"), MyVelocityInput);
+	}
+}
+
+void UMyNinjaLiveComponent::MyLoadDensityInputTexture()
+{
+	// 蓝图在 RenderTarget 输入模式下直接继续后续流程，不覆盖当前密度纹理。
+	if (MyUseRenderTargetAsInput)
+	{
+		return;
+	}
+
+	UMaterialInstanceDynamic* DensityInputMaterial = MySimplePainterMode
+		? MyMICollisionPainterOffset.Get()
+		: MyMICompositeAndGradient.Get();
+
+	if (IsValid(MyOverwritePresetDensityInput))
+	{
+		MyDensityInput = MyOverwritePresetDensityInput;
+		if (IsValid(DensityInputMaterial))
+		{
+			DensityInputMaterial->SetTextureParameterValue(TEXT("TextureAdd2"), MyDensityInput);
+		}
+		return;
+	}
+
+	bool LoadFailed = false;
+	UObject* LoadedTemplateObject = nullptr;
+	FString LoadedTmpFullPath;
+	FString LoadedTemplateNameOnly;
+	bool UsesAbsolutePath = false;
+	UMyNinjaLiveFunctions::MyTemplateLoader(
+		this,
+		TEXT("DensityTemplate"),
+		MyLoadedDataTable,
+		MyLoadedDataTablePath,
+		LoadFailed,
+		LoadedTemplateObject,
+		LoadedTmpFullPath,
+		LoadedTemplateNameOnly,
+		UsesAbsolutePath);
+
+	if (LoadFailed)
+	{
+		MyDensityInput = nullptr;
+		if (IsValid(DensityInputMaterial))
+		{
+			DensityInputMaterial->SetTextureParameterValue(TEXT("TextureAdd2"), nullptr);
+		}
+
+		if (const TObjectPtr<UTextureRenderTarget2D>* PainterTarget = MyRenderTargetsMap.Find(TEXT("RT_Painter")))
+		{
+			if (IsValid(PainterTarget->Get()))
+			{
+				UKismetRenderingLibrary::ClearRenderTarget2D(this, PainterTarget->Get(), FLinearColor::Black);
+			}
+		}
+		return;
+	}
+
+	UTexture2D* LoadedTexture = Cast<UTexture2D>(LoadedTemplateObject);
+	if (!IsValid(LoadedTexture))
+	{
+		return;
+	}
+
+	MyDensityInput = LoadedTexture;
+	if (IsValid(DensityInputMaterial))
+	{
+		DensityInputMaterial->SetTextureParameterValue(TEXT("TextureAdd2"), MyDensityInput);
+	}
+}
+
+void UMyNinjaLiveComponent::MyLoadTextures()
+{
+	if (MyMaterialInstacesDone)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(MyLoadTexturesTimer);
+		}
+
+		if (MySimplePainterMode)
+		{
+			MyLoadDensityInputTexture();
+		}
+		else
+		{
+			MyLoadVelocityInputTexture();
+		}
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		if (!World->GetTimerManager().IsTimerActive(MyLoadTexturesTimer))
+		{
+			World->GetTimerManager().SetTimer(MyLoadTexturesTimer, this,
+				&UMyNinjaLiveComponent::MyLoadTextures, 0.005f, false);
+		}
 	}
 }
 

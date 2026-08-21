@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/DataTable.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "MyNinjaLiveFunctions.generated.h"
@@ -26,5 +27,18 @@ public:
 		bool Clamping = false,
 		TEnumAsByte<TextureGroup> LODgroup = TEXTUREGROUP_World,
 		TEnumAsByte<TextureFilter> Filter = TF_Bilinear);
+
+	/** 按预设行的 SourceString 定位并加载模板资源。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Template", meta = (WorldContext = "WorldContextObject"))
+	static void MyTemplateLoader(
+		UObject* WorldContextObject,
+		FName TemplateDefinition,
+		UDataTable* LoadedDataTable,
+		const FString& LoadedDatatablePath,
+		bool& LoadFailed,
+		UObject*& LoadedTemplateObject,
+		FString& LoadedTmpFullPath,
+		FString& LoadedTemplateNameOnly,
+		bool& UsesAbsolutePath);
 	
 };

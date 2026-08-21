@@ -39,6 +39,9 @@
   `ProximityActivation-MasterVars-Quantizer-OutMat（复合节点）→ MyProximityActivationMasterVarsQuantizerOutMat*`、
   `EMyQuantizerMode` 枚举 + `MyQuantizerValues`、
   `CreateOrAcquireRenderTargets（复合节点）→ MyCreateOrAcquireRenderTargets`、
+  `LoadVelocityInputTexture（复合节点）→ MyLoadVelocityInputTexture`、
+  `LoadDensityInputTexture（复合节点）→ MyLoadDensityInputTexture`、
+  `LoadTextures（复合节点）→ MyLoadTextures`、
   `CreateDynamicMaterialInstances（复合节点）→ MyCreateDynamicMaterialInstances`、
   `ManageContinuousInteractions（复合节点）→ MyManageContinuousInteractions`、
   `INIT PAINTER V2（复合节点）→ MyInitPainterV2`、

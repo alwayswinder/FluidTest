@@ -19,11 +19,13 @@ class AMyNinjaLiveMemoryPoolManager;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UMaterialParameterCollection;
+class UDataTable;
 class UFileMediaSource;
 class UMediaPlayer;
 class UMediaTexture;
 class UNiagaraComponent;
 class UNiagaraSystem;
+class UTexture2D;
 
 /**
  * NinjaLiveComponent 蓝图组件的 C++ 父类。
@@ -635,6 +637,18 @@ public:
 	/** 外部速度输入纹理。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	TObjectPtr<UTexture> MyVelocityInput = nullptr;
+	/** 速度预设所在的数据表。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	TObjectPtr<UDataTable> MyLoadedDataTable = nullptr;
+	/** 速度预设的相对资源路径根。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	FString MyLoadedDataTablePath;
+	/** 有效时优先替代预设速度纹理。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	TObjectPtr<UTexture2D> MyOverwritePresetVelocityInput = nullptr;
+	/** 有效时优先替代预设密度纹理。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	TObjectPtr<UTexture2D> MyOverwritePresetDensityInput = nullptr;
 	/** 碰撞遮罩纹理。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	TObjectPtr<UTexture> MyCollisionMask = nullptr;
@@ -673,6 +687,18 @@ public:
 	/** 配置场景捕捉或媒体源作为 Composite 的密度输入。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Input")
 	void MyAlternativeInputsFedToCompositeDensityInput();
+
+	/** 加载预设速度纹理，或优先使用覆盖纹理并同步 Composite 参数。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Input")
+	void MyLoadVelocityInputTexture();
+
+	/** 加载预设密度纹理，或优先使用覆盖纹理并同步画笔材质参数。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Input")
+	void MyLoadDensityInputTexture();
+
+	/** 材质实例准备完成后加载对应的输入纹理。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Input")
+	void MyLoadTextures();
 
 	/** 创建所有模拟所需的动态材质实例，并绑定当前 RenderTarget。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
@@ -802,6 +828,7 @@ public:
 private:
 	/** 媒体输入循环重播的定时器。 */
 	FTimerHandle MyInputMediaLoopTimer;
+	FTimerHandle MyLoadTexturesTimer;
 	FTimerHandle MyNiagaraPainterV2SafetyTimer;
 	FTimerHandle MyNiagaraPainterV2CooldownTimer;
 

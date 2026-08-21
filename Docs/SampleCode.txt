@@ -1,117 +1,83 @@
-// ===== 复合节点：INIT PAINTER V2 =====
-// 入口：Tunnel_0 (execute)
+void UMyNinjaLiveFunctions::MyTemplateLoader(
+	UObject* WorldContextObject,
+	FName TemplateDefinition,
+	UDataTable* LoadedDataTable,
+	const FString& LoadedDatatablePath,
+	bool& LoadFailed,
+	UObject*& LoadedTemplateObject,
+	FString& LoadedTmpFullPath,
+	FString& LoadedTemplateNameOnly,
+	bool& UsesAbsolutePath)
+{
+	LoadFailed = true;
+	LoadedTemplateObject = nullptr;
+	LoadedTmpFullPath.Reset();
+	LoadedTemplateNameOnly.Reset();
+	UsesAbsolutePath = false;
 
-// ---- 主条件：仅在启用 PAINTER V2 且非单目标模式时执行 ----
-if (MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY) {
+	if (!IsValid(LoadedDataTable) || TemplateDefinition.IsNone())
+	{
+		return;
+	}
 
-    // ---- 1. 获取 Niagara 系统资源 ----
-    NiagaraSystem CoreSystem = CoreNiagaraSystems[ (int)MyPV2_Connect_TrackpointsWithLines ]
+	const uint8* RowData = LoadedDataTable->GetRowMap().FindRef(TemplateDefinition);
+	if (RowData == nullptr || LoadedDataTable->RowStruct == nullptr)
+	{
+		return;
+	}
 
-    // ---- 2. 获取当前 Actor（组件的拥有者） ----
-    Actor OwnerActor = GetOwner()
+	const FStrProperty* SourceStringProperty = nullptr;
+	for (TFieldIterator<FProperty> It(LoadedDataTable->RowStruct); It; ++It)
+	{
+		if (It->GetFName().ToString().StartsWith(TEXT("SourceString")))
+		{
+			SourceStringProperty = CastField<FStrProperty>(*It);
+			break;
+		}
+	}
 
-    // ---- 3. 创建 Niagara 组件并添加到 Actor ----
-    NiagaraComponent NewNiagaraComp = AddComponentByClass(
-        Class = NiagaraComponent,
-        Owner = OwnerActor,
-        bManualAttachment = false,
-        RelativeTransform = Identity
-    )
+	if (SourceStringProperty == nullptr)
+	{
+		return;
+	}
 
-    // ---- 4. 验证组件是否有效 ----
-    if (IsValid(NewNiagaraComp)) {
-        // ---- 4a. 设置 Niagara 系统资产 ----
-        SetAsset(NewNiagaraComp, CoreSystem, bResetExistingOverrideParameters = false)
+	const FString& SourceString = SourceStringProperty->GetPropertyValue_InContainer(RowData);
+	if (SourceString.IsEmpty())
+	{
+		return;
+	}
 
-        // ---- 4b. 保存组件引用 ----
-        NiagaraBasedPainter = NewNiagaraComp
+	const bool bSourceUsesAbsolutePath = SourceString.StartsWith(TEXT("/"), ESearchCase::IgnoreCase);
+	LoadedTmpFullPath = bSourceUsesAbsolutePath
+		? SourceString
+		: FString::Printf(TEXT("%s/%s"), *LoadedDatatablePath, *SourceString);
 
-        // ---- 4c. 验证保存的引用是否有效 ----
-        if (IsValid(NiagaraBasedPainter)) {
-            // ---- 5. 设置 Paintbuffer 输出渲染目标 ----
-            TextureRenderTarget2D PaintTarget = Map_Find(MyRenderTargetsMap, "RT_Painter")
-            SetVariableTextureRenderTarget(NiagaraBasedPainter, "User.PaintbufferOutput", PaintTarget)
+	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	TArray<FAssetData> AssetData;
+	AssetRegistryModule.Get().GetAssetsByPackageName(FName(*LoadedTmpFullPath), AssetData, false, true);
 
-            // ---- 6. 顺序执行后续设置（ExecutionSequence_0） ----
+	for (const FAssetData& Candidate : AssetData)
+	{
+		LoadedTemplateObject = Candidate.GetAsset();
+		if (IsValid(LoadedTemplateObject))
+		{
+			break;
+		}
+	}
 
-            // ---- 6a. then_0：设置插值相关参数 ----
-            // 6a1. 设置 PosInterpol（如果 MyPV2_Interpolation 为真且采样 FPS 不等于当前 FPS 时）
-            bool bEnableInterpolation = MyPV2_Interpolation && (MyMaxSamplingFPS != MySamplingFPS)
-            SetVariableBool(NiagaraBasedPainter, "User.PosInterpol", bEnableInterpolation)
+	if (!IsValid(LoadedTemplateObject))
+	{
+		LoadedTemplateObject = nullptr;
+		return;
+	}
 
-            // 6a2. 设置 GenerateVelocity
-            SetVariableBool(NiagaraBasedPainter, "User.GenerateVelocity", MyPV2_GenerateVelocity)
-
-            // 6a3. 设置 Quantizer（如果 MyQuantizerStepSize > 0）
-            SetVariableBool(NiagaraBasedPainter, "User.Quantizer", MyQuantizerStepSize > 0)
-
-            // 6a4. 设置 SimResolution
-            Vector2D SimRes = MakeVector2D((double)MyResolutionX, (double)MyResolutionY)
-            SetVariableVec2(NiagaraBasedPainter, "User.SimResolution", SimRes)
-
-            // 6a5. 设置 StopLineDrawAboveThisVelocity
-            SetVariableFloat(NiagaraBasedPainter, "User.StopLineDrawAboveThisVelocity", PV2_StopLineDrawingAboveThisVelocity)
-
-            // 6a6. 设置 AmplifyV2BrushStrength
-            SetVariableFloat(NiagaraBasedPainter, "User.AmplifyV2BrushStrength", AdjustPainter_V2_BrushStrength)
-
-            // 6a7. 设置 BrushNoiseVelo
-            SetVariableFloat(NiagaraBasedPainter, "User.BrushNoiseVelo", AdjustPainter_V2_BrushVeloNoise)
-
-            // 6a8. 验证 BrushNoiseVeloTexture 并设置
-            if (IsValid(Painter_V2_BrushVeloNoiseTexture)) {
-                SetVariableTexture(NiagaraBasedPainter, "User.BrushNoiseVeloTexture", Painter_V2_BrushVeloNoiseTexture)
-            }
-
-            // 6a9. 验证 MyTraceMeshComponent 并设置 TraceMeshMaxExtent
-            if (IsValid(MyTraceMeshComponent)) {
-                float MaxExtent = GetMaxElement(MyTraceMeshComponent.RelativeScale3D)
-                SetVariableFloat(NiagaraBasedPainter, "User.TraceMeshMaxExtent", MaxExtent)
-            }
-
-            // ---- 6a10. 清空并重置所有追踪数组 ----
-            Clear(PositionArray)
-            Clear(LastPositionArray)
-            Clear(VelocityArray)
-            Clear(BrushSizeArray)
-
-            // ---- 6b. then_1：延迟后设置 Paintbuffer 输入纹理 ----
-            Delay(Duration = NiagaraVariableSetSafetyDelay)  // 通常为 0.2
-            SetVariableTexture(NiagaraBasedPainter, "User.PaintbufferInput", PaintTarget)
-        }
-    }
-
-    // ---- 7. 如果组件创建失败或无效，设置标志为 false ----
-    if (NewNiagaraComp == null || !IsValid(NewNiagaraComp)) {
-        MyUsePAINTER_V2_ToTrackObjects = false
-    }
-
-    // ---- 8. 遍历所有 NiagaraComponent 进行额外配置 ----
-    Array<NiagaraComponent> AllNiagaraComps = K2_GetComponentsByClass(OwnerActor, NiagaraComponent)
-    if (Length(AllNiagaraComps) > 0) {
-        for each (NiagaraComponent Comp in AllNiagaraComps) {
-            if (Comp == NiagaraBasedPainter) {
-                // then_0 路径：通过 Gate 的 Close 引脚触发，无额外操作
-            } else {
-                // else 路径：无操作
-            }
-        }
-    }
-
-    // ---- 9. 强制 FPS 限制设置 ----
-    if (MyForceMaxSamplingFPSToNiagara) {
-        float TickInterval = 1.0 / (double)MyMaxSamplingFPS
-        SetForceSolo(NiagaraBasedPainter, true)
-        SetComponentTickInterval(NiagaraBasedPainter, TickInterval)
-        ReinitializeSystem(NiagaraBasedPainter)
-    }
-
-} else {
-    // ---- 条件为假：跳过所有初始化，仅清理数组 ----
-    Clear(PositionArray)
-    Clear(LastPositionArray)
-    Clear(VelocityArray)
-    Clear(BrushSizeArray)
+	const int32 LastSeparator = LoadedTmpFullPath.Find(TEXT("/"), ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+	const FString PackageDirectory = LastSeparator != INDEX_NONE
+		? LoadedTmpFullPath.Left(LastSeparator + 1)
+		: FString();
+	UsesAbsolutePath = bSourceUsesAbsolutePath && PackageDirectory != LoadedDatatablePath;
+	LoadedTemplateNameOnly = UsesAbsolutePath && LastSeparator != INDEX_NONE
+		? LoadedTmpFullPath.Mid(LastSeparator + 1)
+		: LoadedTmpFullPath;
+	LoadFailed = false;
 }
-
-// ---- 出口：Tunnel_1 (Out) ----
