@@ -41,7 +41,8 @@
   `CreateOrAcquireRenderTargets（复合节点）→ MyCreateOrAcquireRenderTargets`、
   `CreateDynamicMaterialInstances（复合节点）→ MyCreateDynamicMaterialInstances`、
   `ManageContinuousInteractions（复合节点）→ MyManageContinuousInteractions`、
-  `CreateOuputMaterialAndSetItOnTargets_Step01 → MyCreateOutputMaterialAndSetItOnTargetsStep01`
+  `CreateOuputMaterialAndSetItOnTargets_Step01 → MyCreateOutputMaterialAndSetItOnTargetsStep01`、
+  `CreateOuputMaterialAndSetItOnTargets_Step02 → MyCreateOutputMaterialAndSetItOnTargetsStep02`
 
 ## 常用操作
 

@@ -644,6 +644,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
 	void MyCreateOutputMaterialAndSetItOnTargetsStep01();
 
+	/** 将输出动态材质应用到 TraceMesh 与按标签筛选的外部组件。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
+	void MyCreateOutputMaterialAndSetItOnTargetsStep02();
+
 	/** 合成与梯度阶段的动态材质实例。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMICompositeAndGradient = nullptr;
@@ -684,6 +688,38 @@ public:
 	bool MyTertiaryMaterialsPresent = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	bool MyMaterialCollectionPresent = false;
+
+	/** 禁用组件时用于 TraceMesh 的灰色材质。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInterface> MyInactiveGrayMaterial = nullptr;
+
+	/** TraceMesh 隐藏时使用的空材质。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInterface> MyNullMaterial = nullptr;
+
+	/** 是否让 TraceMesh 使用空材质而非主输出材质。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	bool MyTraceMeshInvisible = false;
+
+	/** 主、次、三级输出材质要应用到的 Actor 标签。None 表示不应用。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Output")
+	FName MyApply1stOutMatToActorsWithTag = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Output")
+	FName MyApply2ndOutMatToActorsWithTag = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Output")
+	FName MyApply3rdOutMatToActorsWithTag = NAME_None;
+
+	/** 主、次、三级输出材质要应用到的组件标签。None 表示应用 Actor 的所有 PrimitiveComponent。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Output")
+	FName MyApply1stOutMatToComponentsWithTag = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Output")
+	FName MyApply2ndOutMatToComponentsWithTag = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Output")
+	FName MyApply3rdOutMatToComponentsWithTag = NAME_None;
 	
 	/** 是否使用简单画笔模式；该模式跳过内存池连接。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")

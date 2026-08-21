@@ -3,7 +3,9 @@
 #include "MyNinjaLiveComponent.h"
 
 #include "Components/SceneCaptureComponent2D.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
+#include "Components/VolumetricCloudComponent.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -935,6 +937,99 @@ void UMyNinjaLiveComponent::MyCreateOutputMaterialAndSetItOnTargetsStep01()
 			OutputMaterial->SetTextureParameterValue(TEXT("VelocityDensityMap"), FoundTexture);
 			OutputMaterial->SetTextureParameterValue(TEXT("CloudVelocity"), FoundTexture);
 			OutputMaterial->SetTextureParameterValue(TEXT("CloudDensity"), FoundTexture);
+		}
+	}
+}
+
+void UMyNinjaLiveComponent::MyCreateOutputMaterialAndSetItOnTargetsStep02()
+{
+	// 蓝图先按 DisableComponent 和 TraceMeshInvisible 选择 TraceMesh 的显示材质。
+	if (IsValid(MyTraceMeshComponent))
+	{
+		UMaterialInterface* TraceMaterial = MyTraceMeshInvisible
+			? MyNullMaterial.Get()
+			: MyMIOutput.Get();
+		TraceMaterial = MyDisableComponent ? MyInactiveGrayMaterial.Get() : TraceMaterial;
+		if (IsValid(TraceMaterial))
+		{
+			MyTraceMeshComponent->SetMaterial(0, TraceMaterial);
+		}
+	}
+
+	const int32 LastIndex = static_cast<int32>(MySecondaryMaterialsPresent) +
+		static_cast<int32>(MyTertiaryMaterialsPresent);
+	const TArray<FName> ActorTags = {
+		MyApply1stOutMatToActorsWithTag,
+		MyApply2ndOutMatToActorsWithTag,
+		MyApply3rdOutMatToActorsWithTag };
+	const TArray<FName> OutputComponentTags = {
+		MyApply1stOutMatToComponentsWithTag,
+		MyApply2ndOutMatToComponentsWithTag,
+		MyApply3rdOutMatToComponentsWithTag };
+	const TArray<UMaterialInstanceDynamic*> OutputMaterials = {
+		MyMIOutput,
+		MyMISecondaryOutput,
+		MyMITertiaryOutput };
+	AActor* LastActor = nullptr;
+	int32 LastMaterialIndex = 0;
+
+	for (int32 Index = 0; Index <= LastIndex; ++Index)
+	{
+		const FName ActorTag = ActorTags[Index];
+		UMaterialInstanceDynamic* OutputMaterial = OutputMaterials[Index];
+		if (ActorTag.IsNone())
+		{
+			continue;
+		}
+
+		TArray<AActor*> TargetActors;
+		UGameplayStatics::GetAllActorsWithTag(this, ActorTag, TargetActors);
+		if (!TargetActors.IsEmpty())
+		{
+			// 蓝图循环结束后使用此轮数组的最后一个 Actor 与当前索引设置体积云材质。
+			LastActor = TargetActors.Last();
+			LastMaterialIndex = Index;
+		}
+
+		for (AActor* TargetActor : TargetActors)
+		{
+			if (!IsValid(TargetActor))
+			{
+				continue;
+			}
+
+			const FName ComponentTag = OutputComponentTags[Index];
+			TArray<UActorComponent*> CandidateComponents;
+			if (ComponentTag.IsNone())
+			{
+				TArray<UPrimitiveComponent*> PrimitiveComponents;
+				TargetActor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
+				for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+				{
+					CandidateComponents.Add(PrimitiveComponent);
+				}
+			}
+			else
+			{
+				CandidateComponents = TargetActor->GetComponentsByTag(UActorComponent::StaticClass(), ComponentTag);
+			}
+
+			for (UActorComponent* Component : CandidateComponents)
+			{
+				if (UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(Component))
+				{
+					PrimitiveComponent->SetMaterial(0, OutputMaterial);
+				}
+			}
+		}
+	}
+
+	if (IsValid(LastActor))
+	{
+		if (UVolumetricCloudComponent* CloudComponent =
+			LastActor->FindComponentByClass<UVolumetricCloudComponent>())
+		{
+			CloudComponent->SetMaterial(OutputMaterials[LastMaterialIndex]);
 		}
 	}
 }

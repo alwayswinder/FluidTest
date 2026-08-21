@@ -1,104 +1,99 @@
-// ===== 自定义事件入口 =====
-CreateOuputMaterialAndSetItOnTargets_Step01:
+MyCreateOutputMaterialAndSetItOnTargetsStep02:
 
-    // ---- 步骤1：计算次级和第三级材质数组是否存在 ----
-    bool SecondaryPresent = (Length(SecondaryOutputMaterials) != 0)
-    bool TertiaryPresent  = (Length(TertiaryOutputMaterials) != 0)
-
-    // ---- 步骤2：确定循环次数（主材质 + 次级 + 第三级） ----
-    int LastIndex = (int)SecondaryPresent + (int)TertiaryPresent  // 值域 0~2，循环次数 = LastIndex + 1
-
-    // ---- 步骤3：循环 i 从 0 到 LastIndex ----
-    for (int i = 0; i <= LastIndex; i++) {
-
-        // 3.1 根据 i 选择材质数组和选择索引
-        Array<MaterialInterface> MaterialArray
-        int SelectIndex
-        if (i == 0) {
-            MaterialArray = MyOutputMaterials
-            SelectIndex   = OutputMaterialSelected
-        } else if (i == 1) {
-            MaterialArray = SecondaryOutputMaterials
-            SelectIndex   = SecondaryOutputMaterialSelected
-        } else { // i == 2
-            MaterialArray = TertiaryOutputMaterials
-            SelectIndex   = TertiaryOutputMaterialSelected
-        }
-
-        // 3.2 钳制索引（防止越界，当数组长度为零时，该分支不会执行，因为对应的 Present 标志为 false）
-        int ArrayLen = Length(MaterialArray)
-        int ClampedIndex = Min(ArrayLen - 1, SelectIndex)
-
-        // 3.3 获取父材质并创建动态材质实例
-        MaterialInterface Parent = MaterialArray[ClampedIndex]
-        MaterialInstanceDynamic MID = CreateDynamicMaterialInstance(
-            Parent = Parent,
-            OptionalName = "None",
-            CreationFlags = None
-        )
-
-        // 3.4 根据 i 将 MID 存入对应的成员变量
-        if (i == 0) {
-            MI_Output = MID
-        } else if (i == 1) {
-            MI_SecondaryOutput = MID
-        } else {
-            MI_TertiaryOutput = MID
-        }
-
-        // 3.5 将当前创建的 MID 作为后续参数设置的目标
-        MaterialInstanceDynamic TargetMID = MID   // 刚创建的实例
-
-        // ===== 参数设置（每轮循环都会执行） =====
-
-        // 3.6 计算用于 Map_Find 的键值
-        bool PickA = MySimplePainterMode && !MyEnablePainterDoubleBuffering
-        string Key1 = PickA ? "RT_Painter" : "RT_Composite"
-        bool PickA2 = (i == 1) && MyMake1stOutputAvailableFor2ndOutput
-        string FinalKey = PickA2 ? "RT_Output" : Key1
-
-        // 3.7 从 MyRenderTargetsMap 中查找纹理
-        TextureRenderTarget2D FoundTexture = Map_Find(MyRenderTargetsMap, FinalKey)
-
-        // 3.8 then_0 分支：设置基本纹理参数
-        SetTextureParameterValue(TargetMID, "VelocityDensityBuffer", FoundTexture)
-        SetTextureParameterValue(TargetMID, "PressureBuffer",
-            Map_Find(MyRenderTargetsMap, "RT_PressureDivergence"))
-        SetTextureParameterValue(TargetMID, "DivergenceBuffer",
-            Map_Find(MyRenderTargetsMap, "RT_PressureDivergenceTemp"))
-        SetTextureParameterValue(TargetMID, "PaintBuffer",
-            Map_Find(MyRenderTargetsMap, "RT_Painter"))
-
-        // 3.9 设置标量参数（随机偏移）
-        float RandomOffset = RandomFloatInRange(0.0, (float)MyRandomizeNoiseOffsets)
-        SetScalarParameterValue(TargetMID, "FlowMapUVOffsetRandomize", RandomOffset)
-
-        // 3.10 获取静态网格组件的缩放和位置，转换为线性颜色并设置向量参数
-        Vector ComponentScale = K2_GetComponentScale(MyTraceMeshComponent)
-        Vector ComponentPos   = K2_GetComponentLocation(MyTraceMeshComponent)
-        LinearColor ScaleColor = Conv_VectorToLinearColor(ComponentScale)
-        LinearColor PosColor   = Conv_VectorToLinearColor(ComponentPos)
-        SetVectorParameterValue(TargetMID, "TraceMeshSize", ScaleColor)
-        SetVectorParameterValue(TargetMID, "TraceMeshPos",   PosColor)
-
-        // 3.11 如果材质参数集合有效，则同步更新集合中的同名参数
-        if (IsValid(SetInternalParamsToMaterialParamCollection)) {
-            SetVectorParameterValue(SetInternalParamsToMaterialParamCollection,
-                "TraceMeshSize", ScaleColor)
-            SetVectorParameterValue(SetInternalParamsToMaterialParamCollection,
-                "TraceMeshPos", PosColor)
-        }
-
-        // 3.12 then_1 分支：仅当 i != 0 时执行（即存在次级或第三级材质）
-        if (i != 0) {
-            SetTextureParameterValue(TargetMID, "DensityBuffer", FoundTexture)
-            SetTextureParameterValue(TargetMID, "VelocityBuffer", FoundTexture)
-            SetTextureParameterValue(TargetMID, "VelocityDensityMap", FoundTexture)
-            SetTextureParameterValue(TargetMID, "CloudVelocity", FoundTexture)
-            SetTextureParameterValue(TargetMID, "CloudDensity", FoundTexture)
-        }
-
-        // 循环继续
+    // ---- 设置 MyTraceMeshComponent 的材质 ----
+    Object MatForTrace = SelectObject(
+        A = InactiveGrayMaterial,
+        B = SelectObject(
+            A = NullMaterial,
+            B = MyMIOutput,
+            bSelectA = TraceMeshInvisible
+        ),
+        bSelectA = MyDisableComponent
+    )
+    MaterialInterface FinalTraceMat = Cast<MaterialInterface>(MatForTrace)
+    if (FinalTraceMat != null) {
+        SetMaterial(MyTraceMeshComponent, ElementIndex = 0, Material = FinalTraceMat)
     }
 
-    // 函数结束
+    // ---- 计算循环次数 ----
+    int SecondaryPresent = MySecondaryMaterialsPresent ? 1 : 0
+    int TertiaryPresent  = MyTertiaryMaterialsPresent ? 1 : 0
+    int LastIndex = SecondaryPresent + TertiaryPresent
+
+    // ---- 用于保存最后一次迭代的 Actor 和 i ----
+    Actor LastActor = null
+    int LastI = 0
+
+    for (int i = 0; i <= LastIndex; i++) {
+
+        // ---- 选择当前迭代的标签 ----
+        Name ActorTag, ComponentTag
+        if (i == 0) {
+            ActorTag = Apply1stOutMatToActorsWithTag
+            ComponentTag = Apply1stOutMatToComponentsWithTag
+        } else if (i == 1) {
+            ActorTag = Apply2ndOutMatToActorsWithTag
+            ComponentTag = Apply2ndOutMatToComponentsWithTag
+        } else { // i == 2
+            ActorTag = Apply3rdOutMatToActorsWithTag
+            ComponentTag = Apply3rdOutMatToComponentsWithTag
+        }
+
+        // ---- 如果 ActorTag 有效（不等于 NullName） ----
+        if (ActorTag != NullName) {
+            Array<Actor> FoundActors = GetAllActorsWithTag(WorldContextObject, ActorTag)
+            if (Length(FoundActors) > 0) {
+                // 保存当前循环的最后一个 Actor 和索引，供循环结束后使用
+                LastActor = FoundActors[Length(FoundActors) - 1]
+                LastI = i
+
+                // ---- 分支 A：ComponentTag 为空 ----
+                if (ComponentTag == NullName) {
+                    for each (Actor CurrentActor in FoundActors) {
+                        Array<PrimitiveComponent> PrimComps = K2_GetComponentsByClass(CurrentActor, PrimitiveComponent)
+                        if (Length(PrimComps) > 0) {
+                            for each (PrimitiveComponent Comp in PrimComps) {
+                                if (IsValid(Comp)) {
+                                    MaterialInterface MatToApply
+                                    if (i == 0) MatToApply = MyMIOutput
+                                    else if (i == 1) MatToApply = MyMISecondaryOutput
+                                    else MatToApply = MyMITertiaryOutput
+                                    SetMaterial(Comp, ElementIndex = 0, Material = MatToApply)
+                                }
+                            }
+                        }
+                    }
+                }
+                // ---- 分支 B：ComponentTag 非空 ----
+                else {
+                    for each (Actor CurrentActor in FoundActors) {
+                        Array<ActorComponent> TaggedComps = GetComponentsByTag(CurrentActor, ActorComponent, ComponentTag)
+                        if (Length(TaggedComps) > 0) {
+                            for each (ActorComponent Comp in TaggedComps) {
+                                PrimitiveComponent PrimComp = Cast<PrimitiveComponent>(Comp)
+                                if (PrimComp != null) {
+                                    MaterialInterface MatToApply
+                                    if (i == 0) MatToApply = MyMIOutput
+                                    else if (i == 1) MatToApply = MyMISecondaryOutput
+                                    else MatToApply = MyMITertiaryOutput
+                                    SetMaterial(PrimComp, ElementIndex = 0, Material = MatToApply)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ---- 循环结束后，使用最后一次迭代的 Actor 设置 VolumetricCloudComponent ----
+    if (LastActor != null) {
+        VolumetricCloudComponent CloudComp = GetComponentByClass(LastActor, VolumetricCloudComponent)
+        if (IsValid(CloudComp)) {
+            MaterialInterface MatForCloud
+            if (LastI == 0) MatForCloud = MyMIOutput
+            else if (LastI == 1) MatForCloud = MyMISecondaryOutput
+            else MatForCloud = MyMITertiaryOutput
+            SetMaterial(CloudComp, MatForCloud)
+        }
+    }
