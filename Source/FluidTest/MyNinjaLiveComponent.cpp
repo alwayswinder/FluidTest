@@ -19,6 +19,7 @@
 #include "MediaTexture.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "Misc/EngineVersion.h"
 #include "MyNinjaLiveActor.h"
 #include "FluidTest/MyNinjaLiveFunctions.h"
@@ -502,6 +503,157 @@ void UMyNinjaLiveComponent::MyFPSPrecisionResolution()
 	// Painter v2 的速度生成和轨迹连线共用插值开关。
 	MyPV2_Interpolation = MyPV2_Connect_TrackpointsWithLines || MyPV2_GenerateVelocity;
 	MyPV2_Connect_TrackpointsWithLines = MyPV2_Interpolation;
+}
+
+void UMyNinjaLiveComponent::MyInitPainterV2()
+{
+	// 不支持 Painter v2 的配置会回退到常规追踪流程。
+	if (!MyUsePAINTER_V2_ToTrackObjects || MySingleTargetMode_LEGACY)
+	{
+		MyUsePAINTER_V2_ToTrackObjects = false;
+		return;
+	}
+
+	const int32 SystemIndex = MyPV2_Connect_TrackpointsWithLines ? 1 : 0;
+	// 系统资源按“是否连接追踪点”选择，缺失资源时禁止继续创建空组件。
+	if (!MyCoreNiagaraSystems.IsValidIndex(SystemIndex) || !IsValid(MyCoreNiagaraSystems[SystemIndex]))
+	{
+		MyUsePAINTER_V2_ToTrackObjects = false;
+		return;
+	}
+
+	AActor* OwnerActor = GetOwner();
+	if (!IsValid(OwnerActor))
+	{
+		MyUsePAINTER_V2_ToTrackObjects = false;
+		return;
+	}
+
+	// 每次初始化创建独立 Niagara 实例，避免旧的运行时参数残留。
+	MyNiagaraBasedPainter = NewObject<UNiagaraComponent>(OwnerActor, UNiagaraComponent::StaticClass(), NAME_None);
+	if (!IsValid(MyNiagaraBasedPainter))
+	{
+		MyUsePAINTER_V2_ToTrackObjects = false;
+		return;
+	}
+	OwnerActor->AddInstanceComponent(MyNiagaraBasedPainter);
+	if (USceneComponent* RootComponent = OwnerActor->GetRootComponent())
+	{
+		MyNiagaraBasedPainter->SetupAttachment(RootComponent);
+	}
+	MyNiagaraBasedPainter->RegisterComponent();
+	MyNiagaraBasedPainter->SetAsset(MyCoreNiagaraSystems[SystemIndex], false);
+
+	// 输出参数声明为 RenderTarget 类型，必须使用对应 Niagara 数据接口写入。
+	const TObjectPtr<UTextureRenderTarget2D>* PainterTarget = MyRenderTargetsMap.Find(TEXT("RT_Painter"));
+	UTextureRenderTarget2D* PainterRenderTarget = PainterTarget ? PainterTarget->Get() : nullptr;
+	MyNiagaraBasedPainter->SetVariableTextureRenderTarget(TEXT("User.PaintbufferOutput"), PainterRenderTarget);
+	// 初始化阶段关闭位置插值，待线条绘制冷却后再恢复最终配置。
+	MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), false);
+	// 两条初始化路径都会执行这组共享参数；此处先完成首帧配置。
+	MyApplyPainterV2SharedParameters();
+
+	if (UWorld* World = GetWorld())
+	{
+		// 输入缓冲与冷却后的最终参数分别独立调度，互不等待。
+		World->GetTimerManager().ClearTimer(MyNiagaraPainterV2SafetyTimer);
+		if (MyNiagaraVariableSetSafetyDelay > 0.0)
+		{
+			World->GetTimerManager().SetTimer(MyNiagaraPainterV2SafetyTimer, this,
+				&UMyNinjaLiveComponent::MySetPainterV2PaintbufferInput, MyNiagaraVariableSetSafetyDelay, false);
+		}
+		else
+		{
+			MyNiagaraPainterV2SafetyTimer = World->GetTimerManager().SetTimerForNextTick(this,
+				&UMyNinjaLiveComponent::MySetPainterV2PaintbufferInput);
+		}
+		World->GetTimerManager().ClearTimer(MyNiagaraPainterV2CooldownTimer);
+		if (MyPV2LineDrawingFailCooldownTime > 0.0)
+		{
+			World->GetTimerManager().SetTimer(MyNiagaraPainterV2CooldownTimer, this,
+				&UMyNinjaLiveComponent::MyFinalizePainterV2Setup, MyPV2LineDrawingFailCooldownTime * 2.0, false);
+		}
+		else
+		{
+			MyNiagaraPainterV2CooldownTimer = World->GetTimerManager().SetTimerForNextTick(this,
+				&UMyNinjaLiveComponent::MyFinalizePainterV2Setup);
+		}
+	}
+	else
+	{
+		// 没有 World 时不能调度 latent 分支，保留立即参数链以便编辑器预览。
+		MySetPainterV2PaintbufferInput();
+		MyFinalizePainterV2Setup();
+	}
+}
+
+void UMyNinjaLiveComponent::MySetPainterV2PaintbufferInput()
+{
+	if (IsValid(MyNiagaraBasedPainter))
+	{
+		// 延后绑定输入缓冲，确保 Niagara 系统实例已经完成创建。
+		const TObjectPtr<UTextureRenderTarget2D>* PainterTarget = MyRenderTargetsMap.Find(TEXT("RT_Painter"));
+		MyNiagaraBasedPainter->SetVariableTexture(TEXT("User.PaintbufferInput"),
+			PainterTarget ? PainterTarget->Get() : nullptr);
+	}
+}
+
+void UMyNinjaLiveComponent::MyFinalizePainterV2Setup()
+{
+	if (!IsValid(MyNiagaraBasedPainter))
+	{
+		return;
+	}
+
+	const bool bEnableInterpolation = MyPV2_Interpolation && MyMaxSamplingFPS == MySamplingFPS;
+	// 冷却结束后写入稳定状态，并在生成速度时启用对应 Niagara 分支。
+	MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), bEnableInterpolation);
+	MyNiagaraBasedPainter->SetVariableBool(TEXT("User.GenerateVelocity"), MyPV2_GenerateVelocity);
+	MyApplyPainterV2SharedParameters();
+}
+
+void UMyNinjaLiveComponent::MyApplyPainterV2SharedParameters()
+{
+	if (!IsValid(MyNiagaraBasedPainter))
+	{
+		return;
+	}
+
+	// 以下参数定义 Painter v2 的采样空间、速度阈值和画笔强度。
+	MyNiagaraBasedPainter->SetVariableBool(TEXT("User.Quantizer"), MyQuantizerStepSize > 0);
+	MyNiagaraBasedPainter->SetVariableVec2(TEXT("User.SimResolution"),
+		FVector2D(static_cast<double>(MyResolutionX), static_cast<double>(MyResolutionY)));
+	MyNiagaraBasedPainter->SetVariableFloat(TEXT("User.StopLineDrawAboveThisVelocity"),
+		static_cast<float>(MyPV2StopLineDrawingAboveThisVelocity));
+	MyNiagaraBasedPainter->SetVariableFloat(TEXT("User.AmplifyV2BrushStrength"),
+		static_cast<float>(MyAdjustPainterV2BrushStrength));
+	MyNiagaraBasedPainter->SetVariableFloat(TEXT("User.BrushNoiseVelo"),
+		static_cast<float>(MyAdjustPainterV2BrushVeloNoise));
+	if (IsValid(MyPainterV2BrushVeloNoiseTexture))
+	{
+		// 没有有效噪声纹理时保留 Niagara 资源中的默认绑定。
+		MyNiagaraBasedPainter->SetVariableTexture(TEXT("User.BrushNoiseVeloTexture"), MyPainterV2BrushVeloNoiseTexture);
+	}
+	if (IsValid(MyTraceMeshComponent))
+	{
+		// TraceMesh 最大轴向缩放决定 Niagara 画笔的空间范围。
+		const FVector Scale = MyTraceMeshComponent->GetRelativeScale3D();
+		MyNiagaraBasedPainter->SetVariableFloat(TEXT("User.TraceMeshMaxExtent"), FMath::Max3(Scale.X, Scale.Y, Scale.Z));
+	}
+
+	// 新一轮 Painter 初始化不复用上一轮的追踪历史。
+	MyPositionArray.Reset();
+	MyLastPositionArray.Reset();
+	MyVelocityArray.Reset();
+	MyBrushSizeArray.Reset();
+
+	if (MyForceMaxSamplingFPSToNiagara && MyMaxSamplingFPS > 0)
+	{
+		// Solo 模式使 Niagara 以流体模拟指定的采样频率独立更新。
+		MyNiagaraBasedPainter->SetForceSolo(true);
+		MyNiagaraBasedPainter->SetComponentTickInterval(1.0 / static_cast<double>(MyMaxSamplingFPS));
+		MyNiagaraBasedPainter->ReinitializeSystem();
+	}
 }
 
 void UMyNinjaLiveComponent::MyManageContinuousInteractions()

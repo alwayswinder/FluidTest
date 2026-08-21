@@ -41,6 +41,7 @@
   `CreateOrAcquireRenderTargets（复合节点）→ MyCreateOrAcquireRenderTargets`、
   `CreateDynamicMaterialInstances（复合节点）→ MyCreateDynamicMaterialInstances`、
   `ManageContinuousInteractions（复合节点）→ MyManageContinuousInteractions`、
+  `INIT PAINTER V2（复合节点）→ MyInitPainterV2`、
   `CreateOuputMaterialAndSetItOnTargets_Step01 → MyCreateOutputMaterialAndSetItOnTargetsStep01`、
   `CreateOuputMaterialAndSetItOnTargets_Step02 → MyCreateOutputMaterialAndSetItOnTargetsStep02`、
   `CreateOuputMaterialAndSetItOnTargets_Step03 → MyCreateOutputMaterialAndSetItOnTargetsStep03`

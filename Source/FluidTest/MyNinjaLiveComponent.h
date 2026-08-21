@@ -23,6 +23,7 @@ class UFileMediaSource;
 class UMediaPlayer;
 class UMediaTexture;
 class UNiagaraComponent;
+class UNiagaraSystem;
 
 /**
  * NinjaLiveComponent 蓝图组件的 C++ 父类。
@@ -520,6 +521,42 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyFPSPrecisionResolution();
 
+	/** 创建 Painter v2 的 Niagara 组件，并启动其参数初始化流程。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
+	void MyInitPainterV2();
+
+	/** Painter v2 使用的 Niagara 系统；索引 0/1 分别对应不连接/连接追踪点。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	TArray<TObjectPtr<UNiagaraSystem>> MyCoreNiagaraSystems;
+
+	/** Painter v2 使用的 Niagara 组件；蓝图可读写，初始化会按原蓝图逻辑写入新创建的组件。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	TObjectPtr<UNiagaraComponent> MyNiagaraBasedPainter = nullptr;
+
+	/** 原蓝图 PositionArray、LastPositionArray、VelocityArray、BrushSizeArray 的 C++ 映射。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	TArray<FVector2D> MyPositionArray;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	TArray<FVector2D> MyLastPositionArray;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	TArray<FLinearColor> MyVelocityArray;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	TArray<double> MyBrushSizeArray;
+
+	/** Painter v2 的线条、速度和噪声参数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	float MyPV2StopLineDrawingAboveThisVelocity = 0.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	float MyAdjustPainterV2BrushStrength = 0.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	float MyAdjustPainterV2BrushVeloNoise = 0.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara", meta = (ClampMin = "0.0"))
+	double MyPV2LineDrawingFailCooldownTime = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	TObjectPtr<UTexture> MyPainterV2BrushVeloNoiseTexture = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara", meta = (ClampMin = "0.0"))
+	double MyNiagaraVariableSetSafetyDelay = 0.0;
+
 	/** 按当前模拟配置创建或重建所有需要的 RenderTarget。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|RenderTarget")
 	void MyCreateOrAcquireRenderTargets();
@@ -765,9 +802,20 @@ public:
 private:
 	/** 媒体输入循环重播的定时器。 */
 	FTimerHandle MyInputMediaLoopTimer;
+	FTimerHandle MyNiagaraPainterV2SafetyTimer;
+	FTimerHandle MyNiagaraPainterV2CooldownTimer;
 
 	/** 倒带并重播当前媒体输入。 */
 	void MyRestartInputMedia();
+
+	/** 在安全延迟后写入 Painter v2 的输入缓冲。 */
+	void MySetPainterV2PaintbufferInput();
+
+	/** 在线条绘制冷却期结束后写入 Painter v2 的其余参数。 */
+	void MyFinalizePainterV2Setup();
+
+	/** 对应蓝图两条执行支路共用的 Painter v2 参数设置链。 */
+	void MyApplyPainterV2SharedParameters();
 
 	/** 对应 SetTraceMeshProperties 内未连接 Reset 引脚的 DoOnce 状态。 */
 	UPROPERTY(Transient)
