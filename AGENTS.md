@@ -42,7 +42,8 @@
   `CreateDynamicMaterialInstances（复合节点）→ MyCreateDynamicMaterialInstances`、
   `ManageContinuousInteractions（复合节点）→ MyManageContinuousInteractions`、
   `CreateOuputMaterialAndSetItOnTargets_Step01 → MyCreateOutputMaterialAndSetItOnTargetsStep01`、
-  `CreateOuputMaterialAndSetItOnTargets_Step02 → MyCreateOutputMaterialAndSetItOnTargetsStep02`
+  `CreateOuputMaterialAndSetItOnTargets_Step02 → MyCreateOutputMaterialAndSetItOnTargetsStep02`、
+  `CreateOuputMaterialAndSetItOnTargets_Step03 → MyCreateOutputMaterialAndSetItOnTargetsStep03`
 
 ## 常用操作
 

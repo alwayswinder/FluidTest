@@ -22,6 +22,7 @@ class UMaterialParameterCollection;
 class UFileMediaSource;
 class UMediaPlayer;
 class UMediaTexture;
+class UNiagaraComponent;
 
 /**
  * NinjaLiveComponent 蓝图组件的 C++ 父类。
@@ -648,6 +649,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
 	void MyCreateOutputMaterialAndSetItOnTargetsStep02();
 
+	/** 将模拟 RenderTarget 与 TraceMesh 参数注入指定 ActorTag 下的 Niagara 组件。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
+	void MyCreateOutputMaterialAndSetItOnTargetsStep03();
+
 	/** 合成与梯度阶段的动态材质实例。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMICompositeAndGradient = nullptr;
@@ -720,6 +725,34 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Output")
 	FName MyApply3rdOutMatToComponentsWithTag = NAME_None;
+
+	/** 用于寻找待驱动 Niagara 组件的 Actor 标签。None 时跳过 Niagara 初始化。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	FName MyFeedTaggedActorNiagaraComponent = NAME_None;
+
+	/** 已绑定模拟参数的 Niagara 组件。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	TArray<TObjectPtr<UNiagaraComponent>> MyNiagaraSystemsToDrive;
+
+	/** 是否至少成功绑定一个 Niagara 组件。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	bool MyNiagaraSystemsPresent = false;
+
+	/** 是否将压力与散度 RenderTarget 暴露给 Niagara。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	bool MyMakePressureAvailableForNiagara = false;
+
+	/** 是否强制 Niagara 以 MyMaxSamplingFPS 单独更新并重新初始化。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	bool MyForceMaxSamplingFPSToNiagara = false;
+
+	/** 是否写入大世界坐标位置变量 TraceMeshPosDouble。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	bool MyLWCSupport = false;
+
+	/** 写入 Niagara 与输出材质的 TraceMesh 世界位置。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	FVector MyTraceMeshPos = FVector::ZeroVector;
 	
 	/** 是否使用简单画笔模式；该模式跳过内存池连接。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")

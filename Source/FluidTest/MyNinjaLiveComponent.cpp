@@ -17,6 +17,8 @@
 #include "FileMediaSource.h"
 #include "MediaPlayer.h"
 #include "MediaTexture.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "Misc/EngineVersion.h"
 #include "MyNinjaLiveActor.h"
 #include "FluidTest/MyNinjaLiveFunctions.h"
@@ -1030,6 +1032,85 @@ void UMyNinjaLiveComponent::MyCreateOutputMaterialAndSetItOnTargetsStep02()
 			LastActor->FindComponentByClass<UVolumetricCloudComponent>())
 		{
 			CloudComponent->SetMaterial(OutputMaterials[LastMaterialIndex]);
+		}
+	}
+}
+
+void UMyNinjaLiveComponent::MyCreateOutputMaterialAndSetItOnTargetsStep03()
+{
+	if (MyFeedTaggedActorNiagaraComponent.IsNone())
+	{
+		return;
+	}
+
+	TArray<AActor*> TargetActors;
+	UGameplayStatics::GetAllActorsWithTag(this, MyFeedTaggedActorNiagaraComponent, TargetActors);
+	if (TargetActors.IsEmpty())
+	{
+		return;
+	}
+
+	const FString VelocityDensityKey = MySimplePainterMode && !MyEnablePainterDoubleBuffering
+		? TEXT("RT_Painter")
+		: TEXT("RT_Composite");
+	const TObjectPtr<UTextureRenderTarget2D>* VelocityDensityTarget = MyRenderTargetsMap.Find(VelocityDensityKey);
+	const TObjectPtr<UTextureRenderTarget2D>* PressureTarget =
+		MyRenderTargetsMap.Find(TEXT("RT_PressureDivergenceTemp"));
+	const TObjectPtr<UTextureRenderTarget2D>* OutputTarget = MyRenderTargetsMap.Find(TEXT("RT_Output"));
+
+	for (AActor* TargetActor : TargetActors)
+	{
+		if (!IsValid(TargetActor))
+		{
+			continue;
+		}
+
+		TArray<UNiagaraComponent*> NiagaraComponents;
+		TargetActor->GetComponents<UNiagaraComponent>(NiagaraComponents);
+		for (UNiagaraComponent* NiagaraComponent : NiagaraComponents)
+		{
+			if (!IsValid(NiagaraComponent))
+			{
+				continue;
+			}
+
+			UTextureRenderTarget2D* VelocityDensityTexture =
+				VelocityDensityTarget ? VelocityDensityTarget->Get() : nullptr;
+			UNiagaraFunctionLibrary::SetTextureObject(NiagaraComponent,
+				TEXT("NinjaVelocityDensityBuffer"), VelocityDensityTexture);
+			NiagaraComponent->SetVariableTexture(TEXT("User.NinjaVelocityDensityBufferRaw"), VelocityDensityTexture);
+
+			if (MyMakePressureAvailableForNiagara)
+			{
+				UTextureRenderTarget2D* PressureTexture = PressureTarget ? PressureTarget->Get() : nullptr;
+				UNiagaraFunctionLibrary::SetTextureObject(NiagaraComponent,
+					TEXT("NinjaPressureDivergenceBuffer"), PressureTexture);
+				NiagaraComponent->SetVariableTexture(TEXT("User.NinjaPressureDivergenceBufferRaw"), PressureTexture);
+			}
+
+			if (MyMake1stOutputAvailableForNiagara)
+			{
+				UNiagaraFunctionLibrary::SetTextureObject(NiagaraComponent, TEXT("NinjaOutputBuffer"),
+					OutputTarget ? OutputTarget->Get() : nullptr);
+			}
+
+			if (MyLWCSupport)
+			{
+				NiagaraComponent->SetVariablePosition(TEXT("TraceMeshPosDouble"), MyTraceMeshPos);
+			}
+
+			NiagaraComponent->SetVectorParameter(TEXT("TraceMeshPos"), MyTraceMeshPos);
+			NiagaraComponent->SetVectorParameter(TEXT("TraceMeshSize"),
+				IsValid(MyTraceMeshComponent) ? MyTraceMeshComponent->GetComponentScale() : FVector::ZeroVector);
+			MyNiagaraSystemsToDrive.Add(NiagaraComponent);
+			MyNiagaraSystemsPresent = true;
+
+			if (MyForceMaxSamplingFPSToNiagara)
+			{
+				NiagaraComponent->SetForceSolo(true);
+				NiagaraComponent->SetComponentTickInterval(1.0 / static_cast<double>(MyMaxSamplingFPS));
+				NiagaraComponent->ReinitializeSystem();
+			}
 		}
 	}
 }

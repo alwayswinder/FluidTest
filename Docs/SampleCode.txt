@@ -1,99 +1,73 @@
-MyCreateOutputMaterialAndSetItOnTargetsStep02:
+// ===== 自定义事件：MyCreateOutputMaterialAndSetItOnTargetsStep03 =====
+MyCreateOutputMaterialAndSetItOnTargetsStep03:
 
-    // ---- 设置 MyTraceMeshComponent 的材质 ----
-    Object MatForTrace = SelectObject(
-        A = InactiveGrayMaterial,
-        B = SelectObject(
-            A = NullMaterial,
-            B = MyMIOutput,
-            bSelectA = TraceMeshInvisible
-        ),
-        bSelectA = MyDisableComponent
-    )
-    MaterialInterface FinalTraceMat = Cast<MaterialInterface>(MatForTrace)
-    if (FinalTraceMat != null) {
-        SetMaterial(MyTraceMeshComponent, ElementIndex = 0, Material = FinalTraceMat)
-    }
+    // ---- 仅在 FeedTaggedActorNiagaraComponent 非空时执行 ----
+    if (FeedTaggedActorNiagaraComponent != NullName) {
+        // 获取所有带有该 Tag 的 Actor
+        Array<Actor> TaggedActors = GetAllActorsWithTag(WorldContextObject, FeedTaggedActorNiagaraComponent)
 
-    // ---- 计算循环次数 ----
-    int SecondaryPresent = MySecondaryMaterialsPresent ? 1 : 0
-    int TertiaryPresent  = MyTertiaryMaterialsPresent ? 1 : 0
-    int LastIndex = SecondaryPresent + TertiaryPresent
+        // 如果存在至少一个 Actor
+        if (Length(TaggedActors) > 0) {
+            // 遍历每个 Actor
+            for each (Actor CurrentActor in TaggedActors) {
+                // 检查 Actor 是否有效
+                if (IsValid(CurrentActor)) {
+                    // 获取该 Actor 上的所有 NiagaraComponent
+                    Array<NiagaraComponent> NiagaraComponents = K2_GetComponentsByClass(CurrentActor, NiagaraComponent)
 
-    // ---- 用于保存最后一次迭代的 Actor 和 i ----
-    Actor LastActor = null
-    int LastI = 0
+                    // 如果存在至少一个 NiagaraComponent
+                    if (Length(NiagaraComponents) > 0) {
+                        // 遍历每个 NiagaraComponent
+                        for each (NiagaraComponent NiagaraComp in NiagaraComponents) {
+                            // 检查组件是否有效
+                            if (IsValid(NiagaraComp)) {
+                                // ---- 1. 设置速度/密度纹理（采样纹理和原始纹理） ----
+                                // 计算纹理查找键：若 SimplePainterMode 且未启用双缓冲，使用 RT_Painter，否则 RT_Composite
+                                bool bPickA = MySimplePainterMode && !MyEnablePainterDoubleBuffering
+                                string VelocityDensityKey = bPickA ? "RT_Painter" : "RT_Composite"
+                                TextureRenderTarget2D VelocityTex = Map_Find(MyRenderTargetsMap, VelocityDensityKey)
 
-    for (int i = 0; i <= LastIndex; i++) {
+                                SetTextureObject(NiagaraComp, "NinjaVelocityDensityBuffer", VelocityTex)
+                                SetVariableTexture(NiagaraComp, "User.NinjaVelocityDensityBufferRaw", VelocityTex)
 
-        // ---- 选择当前迭代的标签 ----
-        Name ActorTag, ComponentTag
-        if (i == 0) {
-            ActorTag = Apply1stOutMatToActorsWithTag
-            ComponentTag = Apply1stOutMatToComponentsWithTag
-        } else if (i == 1) {
-            ActorTag = Apply2ndOutMatToActorsWithTag
-            ComponentTag = Apply2ndOutMatToComponentsWithTag
-        } else { // i == 2
-            ActorTag = Apply3rdOutMatToActorsWithTag
-            ComponentTag = Apply3rdOutMatToComponentsWithTag
-        }
-
-        // ---- 如果 ActorTag 有效（不等于 NullName） ----
-        if (ActorTag != NullName) {
-            Array<Actor> FoundActors = GetAllActorsWithTag(WorldContextObject, ActorTag)
-            if (Length(FoundActors) > 0) {
-                // 保存当前循环的最后一个 Actor 和索引，供循环结束后使用
-                LastActor = FoundActors[Length(FoundActors) - 1]
-                LastI = i
-
-                // ---- 分支 A：ComponentTag 为空 ----
-                if (ComponentTag == NullName) {
-                    for each (Actor CurrentActor in FoundActors) {
-                        Array<PrimitiveComponent> PrimComps = K2_GetComponentsByClass(CurrentActor, PrimitiveComponent)
-                        if (Length(PrimComps) > 0) {
-                            for each (PrimitiveComponent Comp in PrimComps) {
-                                if (IsValid(Comp)) {
-                                    MaterialInterface MatToApply
-                                    if (i == 0) MatToApply = MyMIOutput
-                                    else if (i == 1) MatToApply = MyMISecondaryOutput
-                                    else MatToApply = MyMITertiaryOutput
-                                    SetMaterial(Comp, ElementIndex = 0, Material = MatToApply)
+                                // ---- 2. 可选：设置压力纹理（若 MakePressureAvailableForNiagara 为真） ----
+                                if (MakePressureAvailableForNiagara) {
+                                    TextureRenderTarget2D PressureTex = Map_Find(MyRenderTargetsMap, "RT_PressureDivergenceTemp")
+                                    SetTextureObject(NiagaraComp, "NinjaPressureDivergenceBuffer", PressureTex)
+                                    SetVariableTexture(NiagaraComp, "User.NinjaPressureDivergenceBufferRaw", PressureTex)
                                 }
-                            }
-                        }
-                    }
-                }
-                // ---- 分支 B：ComponentTag 非空 ----
-                else {
-                    for each (Actor CurrentActor in FoundActors) {
-                        Array<ActorComponent> TaggedComps = GetComponentsByTag(CurrentActor, ActorComponent, ComponentTag)
-                        if (Length(TaggedComps) > 0) {
-                            for each (ActorComponent Comp in TaggedComps) {
-                                PrimitiveComponent PrimComp = Cast<PrimitiveComponent>(Comp)
-                                if (PrimComp != null) {
-                                    MaterialInterface MatToApply
-                                    if (i == 0) MatToApply = MyMIOutput
-                                    else if (i == 1) MatToApply = MyMISecondaryOutput
-                                    else MatToApply = MyMITertiaryOutput
-                                    SetMaterial(PrimComp, ElementIndex = 0, Material = MatToApply)
+
+                                // ---- 3. 可选：设置输出纹理（若 MyMake1stOutputAvailableForNiagara 为真） ----
+                                if (MyMake1stOutputAvailableForNiagara) {
+                                    TextureRenderTarget2D OutputTex = Map_Find(MyRenderTargetsMap, "RT_Output")
+                                    SetTextureObject(NiagaraComp, "NinjaOutputBuffer", OutputTex)
+                                }
+
+                                // ---- 4. 设置位置和缩放参数 ----
+                                // 位置参数：根据 LWCSupport 选择使用双精度或单精度
+                                if (LWCSupport) {
+                                    SetVariablePosition(NiagaraComp, "TraceMeshPosDouble", TraceMeshPos)
+                                } else {
+                                    SetVectorParameter(NiagaraComp, "TraceMeshPos", TraceMeshPos)
+                                }
+                                // 缩放参数：始终使用单精度向量
+                                SetVectorParameter(NiagaraComp, "TraceMeshSize", K2_GetComponentScale(MyTraceMeshComponent))
+
+                                // ---- 5. 记录当前组件并标记存在 ----
+                                Array_Add(NiagaraSystemsToDrive, NiagaraComp)
+                                NiagaraSystemsPresent = true
+
+                                // ---- 6. 若强制限制采样 FPS，对当前组件进行性能优化 ----
+                                if (ForceMaxSamplingFPS_ToNiagara) {
+                                    float TickInterval = 1.0 / (double)MyMaxSamplingFPS
+                                    SetForceSolo(NiagaraComp, true)
+                                    SetComponentTickInterval(NiagaraComp, TickInterval)
+                                    ReinitializeSystem(NiagaraComp)
                                 }
                             }
                         }
                     }
                 }
             }
-        }
-    }
-
-    // ---- 循环结束后，使用最后一次迭代的 Actor 设置 VolumetricCloudComponent ----
-    if (LastActor != null) {
-        VolumetricCloudComponent CloudComp = GetComponentByClass(LastActor, VolumetricCloudComponent)
-        if (IsValid(CloudComp)) {
-            MaterialInterface MatForCloud
-            if (LastI == 0) MatForCloud = MyMIOutput
-            else if (LastI == 1) MatForCloud = MyMISecondaryOutput
-            else MatForCloud = MyMITertiaryOutput
-            SetMaterial(CloudComp, MatForCloud)
         }
     }
