@@ -18,6 +18,7 @@ class AMyNinjaLiveActor;
 class AMyNinjaLiveMemoryPoolManager;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
+class UMaterialParameterCollection;
 class UFileMediaSource;
 class UMediaPlayer;
 class UMediaTexture;
@@ -318,6 +319,24 @@ public:
 	/** 输出材质数组 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TArray<TObjectPtr<UMaterialInterface>> MyOutputMaterials;
+
+	/** 次级和三级输出材质数组；为空时不创建对应输出 MID。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TArray<TObjectPtr<UMaterialInterface>> MySecondaryOutputMaterials;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TArray<TObjectPtr<UMaterialInterface>> MyTertiaryOutputMaterials;
+
+	/** 三组输出材质各自选用的数组索引。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	int32 MyOutputMaterialSelected = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	int32 MySecondaryOutputMaterialSelected = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	int32 MyTertiaryOutputMaterialSelected = 0;
+
+	/** 输出材质使用的参数集合；有效时同步 TraceMesh 的位置和缩放。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialParameterCollection> MySetInternalParamsToMaterialParamCollection = nullptr;
 
 	/** 是否使用 Painter v2 追踪物体（强制双缓冲） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
@@ -621,6 +640,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
 	void MyCreateDynamicMaterialInstances();
 
+	/** 创建主、次、三级输出 MID，并将模拟缓冲绑定到其标准参数。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
+	void MyCreateOutputMaterialAndSetItOnTargetsStep01();
+
 	/** 合成与梯度阶段的动态材质实例。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMICompositeAndGradient = nullptr;
@@ -648,6 +671,19 @@ public:
 	/** 默认空输出使用的动态材质实例。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMINull = nullptr;
+	/** 主、次、三级输出材质对应的动态材质实例。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInstanceDynamic> MyMIOutput = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInstanceDynamic> MyMISecondaryOutput = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	TObjectPtr<UMaterialInstanceDynamic> MyMITertiaryOutput = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	bool MySecondaryMaterialsPresent = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	bool MyTertiaryMaterialsPresent = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
+	bool MyMaterialCollectionPresent = false;
 	
 	/** 是否使用简单画笔模式；该模式跳过内存池连接。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")

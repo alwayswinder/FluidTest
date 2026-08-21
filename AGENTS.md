@@ -40,7 +40,8 @@
   `EMyQuantizerMode` 枚举 + `MyQuantizerValues`、
   `CreateOrAcquireRenderTargets（复合节点）→ MyCreateOrAcquireRenderTargets`、
   `CreateDynamicMaterialInstances（复合节点）→ MyCreateDynamicMaterialInstances`、
-  `ManageContinuousInteractions（复合节点）→ MyManageContinuousInteractions`
+  `ManageContinuousInteractions（复合节点）→ MyManageContinuousInteractions`、
+  `CreateOuputMaterialAndSetItOnTargets_Step01 → MyCreateOutputMaterialAndSetItOnTargetsStep01`
 
 ## 常用操作
 

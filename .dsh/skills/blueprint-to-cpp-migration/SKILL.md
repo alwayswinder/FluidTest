@@ -27,6 +27,7 @@ description: 蓝图→C++ 迁移指南（FluidTest / UE 5.7）。记录将 Fluid
 - **函数参数名：不加前缀，与蓝图参数名保持一致**（如 `MyGetTempArray(int32 Index)` 的参数就是 `Index`）
 - **类成员变量名：加 `My` 前缀**（避免与蓝图内同名变量冲突），如 `MyTempArray0`、`MyRenderTargetsMap`、`MyMapLengthTmp`
 - Category 统一用 `FluidSim|Temp`（或对应领域）
+- **蓝图可验证性默认值**：迁移新增的 `UPROPERTY` 如无明确限制理由，默认使用 `EditAnywhere, BlueprintReadWrite`，使其可在蓝图默认值、详情面板和蓝图图表中读写，以验证替换后的行为。仅当变量是内部状态、只读输出或不应由蓝图覆盖时，才收紧为 `VisibleAnywhere`、`BlueprintReadOnly` 或不暴露，并在注释中说明原因。
 - 迁移前必须确认蓝图原名（用 `manage_blueprint` 读取，见 `mcp-automation-bridge` 技能）
 
 ## 2. 蓝图 VM 引用限制（已实测验证，重要）

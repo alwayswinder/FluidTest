@@ -1,292 +1,104 @@
-根据提供的蓝图导出文件，提取出 CreateDynamicMaterialInstances 函数的完整执行逻辑。该函数位于 MyNinjaLiveComponent 的事件图中，主要用于根据 MySimplePainterMode 标志创建并配置多个动态材质实例（MID）。以下是提取的伪代码，保留了所有关键信息（变量、分支、执行顺序、参数设置及数据源）。
+// ===== 自定义事件入口 =====
+CreateOuputMaterialAndSetItOnTargets_Step01:
 
-pseudocode
-// ===== 入口 =====
-// 执行流从 Tunnel_0 进入
-// 条件分支：根据 MySimplePainterMode 决定创建哪些 MID
+    // ---- 步骤1：计算次级和第三级材质数组是否存在 ----
+    bool SecondaryPresent = (Length(SecondaryOutputMaterials) != 0)
+    bool TertiaryPresent  = (Length(TertiaryOutputMaterials) != 0)
 
-if (MySimplePainterMode == true) {
-    // ===== 简单模式：仅创建并配置前三个 MID =====
-    // 顺序由 ExecutionSequence_0 控制：then_0 → then_1 → then_2
+    // ---- 步骤2：确定循环次数（主材质 + 次级 + 第三级） ----
+    int LastIndex = (int)SecondaryPresent + (int)TertiaryPresent  // 值域 0~2，循环次数 = LastIndex + 1
 
-    // ---- 1. 创建 MyMICollisionPainterDot ----
-    // Parent = MyCoreSimMaterials[16]  (来自 GetArrayItem_4 索引 16)
-    // 赋值给 MyMICollisionPainterDot
-    MyMICollisionPainterDot = CreateDynamicMaterialInstance(
-        Parent = MyCoreSimMaterials[16],
-        OptionalName = "None",
-        CreationFlags = None
-    );
+    // ---- 步骤3：循环 i 从 0 到 LastIndex ----
+    for (int i = 0; i <= LastIndex; i++) {
 
-    // 设置 MyMICollisionPainterDot 参数（执行链通过 Knot_503 连接）
-    // 设置 PaintAspect (VectorParameter) = MakeColor( R = MyResolutionX / max(MyResolutionX, MyResolutionY), G = MyResolutionY / max(...), B = 1.0, A = 1.0 )
-    SetVectorParameterValue(
-        Target = MyMICollisionPainterDot,
-        ParameterName = "PaintAspect",
-        Value = LinearColor(
-            R = (float)MyResolutionX / max(MyResolutionX, MyResolutionY),
-            G = (float)MyResolutionY / max(MyResolutionX, MyResolutionY),
-            B = 1.0,
-            A = 1.0
-        )
-    );
-
-    // 设置 DensityNoiseScale = MyBrushDensityNoiseScale
-    SetScalarParameterValue(MyMICollisionPainterDot, "DensityNoiseScale", MyBrushDensityNoiseScale);
-    // 设置 DensityNoiseFreq = MyBrushDensityNoiseFreq
-    SetScalarParameterValue(MyMICollisionPainterDot, "DensityNoiseFreq", MyBrushDensityNoiseFreq);
-    // 设置 VeloNoiseScale = MyBrushVelocityNoiseScale
-    SetScalarParameterValue(MyMICollisionPainterDot, "VeloNoiseScale", MyBrushVelocityNoiseScale);
-    // 设置 VeloNoiseFreq = MyBrushVelocityNoiseFreq
-    SetScalarParameterValue(MyMICollisionPainterDot, "VeloNoiseFreq", MyBrushVelocityNoiseFreq);
-
-    // ---- 2. 创建 MyMICollisionPainterLine ----
-    // Parent = MyCoreSimMaterials[17]  (来自 GetArrayItem_5 索引 17)
-    MyMICollisionPainterLine = CreateDynamicMaterialInstance(
-        Parent = MyCoreSimMaterials[17],
-        OptionalName = "None",
-        CreationFlags = None
-    );
-
-    // 设置 MyMICollisionPainterLine 参数
-    // 同样设置 PaintAspect (同上计算)
-    SetVectorParameterValue(
-        Target = MyMICollisionPainterLine,
-        ParameterName = "PaintAspect",
-        Value = LinearColor(
-            R = (float)MyResolutionX / max(MyResolutionX, MyResolutionY),
-            G = (float)MyResolutionY / max(MyResolutionX, MyResolutionY),
-            B = 1.0,
-            A = 1.0
-        )
-    );
-    SetScalarParameterValue(MyMICollisionPainterLine, "DensityNoiseScale", MyBrushDensityNoiseScale);
-    SetScalarParameterValue(MyMICollisionPainterLine, "DensityNoiseFreq", MyBrushDensityNoiseFreq);
-    SetScalarParameterValue(MyMICollisionPainterLine, "VeloNoiseScale", MyBrushVelocityNoiseScale);
-    SetScalarParameterValue(MyMICollisionPainterLine, "VeloNoiseFreq", MyBrushVelocityNoiseFreq);
-
-    // ---- 3. 创建 MyMINull ----
-    // Parent = M_SolidColor (硬编码材质)
-    MyMINull = CreateDynamicMaterialInstance(
-        Parent = M_SolidColor,
-        OptionalName = "None",
-        CreationFlags = None
-    );
-    // 无后续参数设置（执行线结束）
-
-} else {
-    // ===== 复杂模式：创建并配置全部九个 MID =====
-    // 顺序由 ExecutionSequence_23 控制：then_0 → then_1 → ... → then_8
-
-    // ---- 1. 创建 MyMICollisionPainterDot (同简单模式) ----
-    MyMICollisionPainterDot = CreateDynamicMaterialInstance(
-        Parent = MyCoreSimMaterials[16],
-        OptionalName = "None",
-        CreationFlags = None
-    );
-    // 设置参数（同简单模式）
-    SetVectorParameterValue(MyMICollisionPainterDot, "PaintAspect", MakeColor(...));
-    SetScalarParameterValue(MyMICollisionPainterDot, "DensityNoiseScale", MyBrushDensityNoiseScale);
-    SetScalarParameterValue(MyMICollisionPainterDot, "DensityNoiseFreq", MyBrushDensityNoiseFreq);
-    SetScalarParameterValue(MyMICollisionPainterDot, "VeloNoiseScale", MyBrushVelocityNoiseScale);
-    SetScalarParameterValue(MyMICollisionPainterDot, "VeloNoiseFreq", MyBrushVelocityNoiseFreq);
-
-    // ---- 2. 创建 MyMICollisionPainterLine (同简单模式) ----
-    MyMICollisionPainterLine = CreateDynamicMaterialInstance(
-        Parent = MyCoreSimMaterials[17],
-        OptionalName = "None",
-        CreationFlags = None
-    );
-    SetVectorParameterValue(MyMICollisionPainterLine, "PaintAspect", MakeColor(...));
-    SetScalarParameterValue(MyMICollisionPainterLine, "DensityNoiseScale", MyBrushDensityNoiseScale);
-    SetScalarParameterValue(MyMICollisionPainterLine, "DensityNoiseFreq", MyBrushDensityNoiseFreq);
-    SetScalarParameterValue(MyMICollisionPainterLine, "VeloNoiseScale", MyBrushVelocityNoiseScale);
-    SetScalarParameterValue(MyMICollisionPainterLine, "VeloNoiseFreq", MyBrushVelocityNoiseFreq);
-
-    // ---- 3. 创建 MyMINull (同简单模式) ----
-    MyMINull = CreateDynamicMaterialInstance(Parent = M_SolidColor);
-
-    // ---- 4. 创建 MyMICompositeAndGradient ----
-    // Parent 由 Select_2 决定：若 MyFlipRenderTargetsForMobile == false 则用 MyCoreSimMaterials[2]，否则用 MyCoreSimMaterials[3]
-    MyMICompositeAndGradient = CreateDynamicMaterialInstance(
-        Parent = (MyFlipRenderTargetsForMobile ? MyCoreSimMaterials[3] : MyCoreSimMaterials[2]),
-        OptionalName = "None",
-        CreationFlags = None
-    );
-    // 后续参数设置（顺序执行）
-    // 设置 Texture = Map_Find(MyRenderTargetsMap, "RT_Composite")
-    SetTextureParameterValue(MyMICompositeAndGradient, "Texture", Map_Find(MyRenderTargetsMap, "RT_Composite"));
-    // 设置 PressureTexture = Map_Find(MyRenderTargetsMap, "RT_PressureDivergence")
-    SetTextureParameterValue(MyMICompositeAndGradient, "PressureTexture", Map_Find(MyRenderTargetsMap, "RT_PressureDivergence"));
-    // 设置 VeloInputTexture = MyVelocityInput
-    SetTextureParameterValue(MyMICompositeAndGradient, "VeloInputTexture", MyVelocityInput);
-    // 设置 VeloPainter = Map_Find(MyRenderTargetsMap, "RT_Painter")
-    SetTextureParameterValue(MyMICompositeAndGradient, "VeloPainter", Map_Find(MyRenderTargetsMap, "RT_Painter"));
-    // 设置 Randomize = RandomFloatInRange(0, (float)MyRandomizeNoiseOffsets)
-    SetScalarParameterValue(MyMICompositeAndGradient, "Randomize", RandomFloatInRange(0.0, (float)MyRandomizeNoiseOffsets));
-    // 若 MyUseRenderTargetAsInput == true，则执行：
-    if (MyUseRenderTargetAsInput) {
-        // 尝试将 MyInputRenderTarget 转为 TextureRenderTarget2D
-        if (Cast<TextureRenderTarget2D>(MyInputRenderTarget) != null) {
-            // 设置 TextureAdd2 = 转换后的目标（作为纹理）
-            SetTextureParameterValue(MyMICompositeAndGradient, "TextureAdd2", Cast<TextureRenderTarget2D>(MyInputRenderTarget));
-        } else {
-            // 否则使用 MyDensityInput（普通纹理）
-            SetTextureParameterValue(MyMICompositeAndGradient, "TextureAdd2", MyDensityInput);
+        // 3.1 根据 i 选择材质数组和选择索引
+        Array<MaterialInterface> MaterialArray
+        int SelectIndex
+        if (i == 0) {
+            MaterialArray = MyOutputMaterials
+            SelectIndex   = OutputMaterialSelected
+        } else if (i == 1) {
+            MaterialArray = SecondaryOutputMaterials
+            SelectIndex   = SecondaryOutputMaterialSelected
+        } else { // i == 2
+            MaterialArray = TertiaryOutputMaterials
+            SelectIndex   = TertiaryOutputMaterialSelected
         }
-    } else {
-        // 使用 MyDensityInput
-        SetTextureParameterValue(MyMICompositeAndGradient, "TextureAdd2", MyDensityInput);
+
+        // 3.2 钳制索引（防止越界，当数组长度为零时，该分支不会执行，因为对应的 Present 标志为 false）
+        int ArrayLen = Length(MaterialArray)
+        int ClampedIndex = Min(ArrayLen - 1, SelectIndex)
+
+        // 3.3 获取父材质并创建动态材质实例
+        MaterialInterface Parent = MaterialArray[ClampedIndex]
+        MaterialInstanceDynamic MID = CreateDynamicMaterialInstance(
+            Parent = Parent,
+            OptionalName = "None",
+            CreationFlags = None
+        )
+
+        // 3.4 根据 i 将 MID 存入对应的成员变量
+        if (i == 0) {
+            MI_Output = MID
+        } else if (i == 1) {
+            MI_SecondaryOutput = MID
+        } else {
+            MI_TertiaryOutput = MID
+        }
+
+        // 3.5 将当前创建的 MID 作为后续参数设置的目标
+        MaterialInstanceDynamic TargetMID = MID   // 刚创建的实例
+
+        // ===== 参数设置（每轮循环都会执行） =====
+
+        // 3.6 计算用于 Map_Find 的键值
+        bool PickA = MySimplePainterMode && !MyEnablePainterDoubleBuffering
+        string Key1 = PickA ? "RT_Painter" : "RT_Composite"
+        bool PickA2 = (i == 1) && MyMake1stOutputAvailableFor2ndOutput
+        string FinalKey = PickA2 ? "RT_Output" : Key1
+
+        // 3.7 从 MyRenderTargetsMap 中查找纹理
+        TextureRenderTarget2D FoundTexture = Map_Find(MyRenderTargetsMap, FinalKey)
+
+        // 3.8 then_0 分支：设置基本纹理参数
+        SetTextureParameterValue(TargetMID, "VelocityDensityBuffer", FoundTexture)
+        SetTextureParameterValue(TargetMID, "PressureBuffer",
+            Map_Find(MyRenderTargetsMap, "RT_PressureDivergence"))
+        SetTextureParameterValue(TargetMID, "DivergenceBuffer",
+            Map_Find(MyRenderTargetsMap, "RT_PressureDivergenceTemp"))
+        SetTextureParameterValue(TargetMID, "PaintBuffer",
+            Map_Find(MyRenderTargetsMap, "RT_Painter"))
+
+        // 3.9 设置标量参数（随机偏移）
+        float RandomOffset = RandomFloatInRange(0.0, (float)MyRandomizeNoiseOffsets)
+        SetScalarParameterValue(TargetMID, "FlowMapUVOffsetRandomize", RandomOffset)
+
+        // 3.10 获取静态网格组件的缩放和位置，转换为线性颜色并设置向量参数
+        Vector ComponentScale = K2_GetComponentScale(MyTraceMeshComponent)
+        Vector ComponentPos   = K2_GetComponentLocation(MyTraceMeshComponent)
+        LinearColor ScaleColor = Conv_VectorToLinearColor(ComponentScale)
+        LinearColor PosColor   = Conv_VectorToLinearColor(ComponentPos)
+        SetVectorParameterValue(TargetMID, "TraceMeshSize", ScaleColor)
+        SetVectorParameterValue(TargetMID, "TraceMeshPos",   PosColor)
+
+        // 3.11 如果材质参数集合有效，则同步更新集合中的同名参数
+        if (IsValid(SetInternalParamsToMaterialParamCollection)) {
+            SetVectorParameterValue(SetInternalParamsToMaterialParamCollection,
+                "TraceMeshSize", ScaleColor)
+            SetVectorParameterValue(SetInternalParamsToMaterialParamCollection,
+                "TraceMeshPos", PosColor)
+        }
+
+        // 3.12 then_1 分支：仅当 i != 0 时执行（即存在次级或第三级材质）
+        if (i != 0) {
+            SetTextureParameterValue(TargetMID, "DensityBuffer", FoundTexture)
+            SetTextureParameterValue(TargetMID, "VelocityBuffer", FoundTexture)
+            SetTextureParameterValue(TargetMID, "VelocityDensityMap", FoundTexture)
+            SetTextureParameterValue(TargetMID, "CloudVelocity", FoundTexture)
+            SetTextureParameterValue(TargetMID, "CloudDensity", FoundTexture)
+        }
+
+        // 循环继续
     }
-    // 设置 FlowFeedback = MyFlowFeedback
-    SetScalarParameterValue(MyMICompositeAndGradient, "FlowFeedback", MyFlowFeedback);
-    // 设置 RGBInputMaterial = (float)MyRGBInputMaterial (Bool转Double)
-    SetScalarParameterValue(MyMICompositeAndGradient, "RGBInputMaterial", (float)MyRGBInputMaterial);
-    // 设置 NullValue = 0.000001 * (1 - (float)MyAllowAbsoluteBlackDensity)  （注意：MyAllowAbsoluteBlackDensity取反）
-    SetScalarParameterValue(MyMICompositeAndGradient, "NullValue", 0.000001 * (1.0 - (float)(!MyAllowAbsoluteBlackDensity)));
-    // 设置 CollisionMask = MyCollisionMask
-    SetTextureParameterValue(MyMICompositeAndGradient, "CollisionMask", MyCollisionMask);
-    // 如果 MyCollisionMask 有效且名称不等于 "T_maskframe_256"，则设置 MyCollisionMaskIsNonDefault = true，否则为 false
-    bool isValidMask = IsValid(MyCollisionMask) && (GetDisplayName(MyCollisionMask) != "T_maskframe_256");
-    MyCollisionMaskIsNonDefault = isValidMask;
-    // 设置 RGBInputTexture = (float)MyUseRenderTargetAsInput (Bool转Double)
-    SetScalarParameterValue(MyMICompositeAndGradient, "RGBInputTexture", (float)MyUseRenderTargetAsInput);
-    // 设置 EnablePainterOffset = (float)(!MyEnablePainterDoubleBuffering) (取反转Double)
-    SetScalarParameterValue(MyMICompositeAndGradient, "EnablePainterOffset", (float)(!MyEnablePainterDoubleBuffering));
-    // 设置 DivergenceFeedback = MyDivergence (在后续其他节点设置？注意：此设置可能属于其他MID，需查证)
-    // 实际在后续有设置，但这里按执行顺序，接下来是 MyMIAdvection 等，但此处的设置链可能继续，但根据代码，Composite之后是Advection等。
 
-    // ---- 5. 创建 MyMIAdvection ----
-    // Parent 由 Select_18 决定：若 MyFlipRenderTargetsForMobile 则 MyCoreSimMaterials[5] 否则 MyCoreSimMaterials[4]
-    MyMIAdvection = CreateDynamicMaterialInstance(
-        Parent = (MyFlipRenderTargetsForMobile ? MyCoreSimMaterials[5] : MyCoreSimMaterials[4]),
-        OptionalName = "None",
-        CreationFlags = None
-    );
-    // 设置参数：
-    // Texture = Map_Find(MyRenderTargetsMap, "RT_Composite")  (与Composite相同)
-    SetTextureParameterValue(MyMIAdvection, "Texture", Map_Find(MyRenderTargetsMap, "RT_Composite"));
-    // Divergence = MyDivergence
-    SetScalarParameterValue(MyMIAdvection, "Divergence", MyDivergence);
-    // Texture3 = Map_Find(MyRenderTargetsMap, "RT_Painter")
-    SetTextureParameterValue(MyMIAdvection, "Texture3", Map_Find(MyRenderTargetsMap, "RT_Painter"));
-
-    // ---- 6. 创建 MyMIDivergence ----
-    // Parent 由 Select_23 决定：若 MyFlipRenderTargetsForMobile 则 MyCoreSimMaterials[7] 否则 MyCoreSimMaterials[6]
-    MyMIDivergence = CreateDynamicMaterialInstance(
-        Parent = (MyFlipRenderTargetsForMobile ? MyCoreSimMaterials[7] : MyCoreSimMaterials[6]),
-        OptionalName = "None",
-        CreationFlags = None
-    );
-    // 设置参数：
-    // Texture = Map_Find(MyRenderTargetsMap, "RT_Advection") (来自 Advection 纹理)
-    SetTextureParameterValue(MyMIDivergence, "Texture", Map_Find(MyRenderTargetsMap, "RT_Advection"));
-    // Divergence = MyDivergence
-    SetScalarParameterValue(MyMIDivergence, "Divergence", MyDivergence);
-    // Texture3 = Map_Find(MyRenderTargetsMap, "RT_Painter")
-    SetTextureParameterValue(MyMIDivergence, "Texture3", Map_Find(MyRenderTargetsMap, "RT_Painter"));
-
-    // ---- 7. 创建 MyMIPressureCycle1 ----
-    // Parent 由 Select_14 决定（嵌套选择）：先根据 MyUsePressureSolver1DefaultIs2 选择数组索引，
-    // 再根据 MyFlipRenderTargetsForMobile 选择最终索引。
-    // 具体：若 MyUsePressureSolver1DefaultIs2 == false，选择 MyCoreSimMaterials[8] 或 [9]？实际逻辑：
-    // Select_11: 若 MyUsePressureSolver1DefaultIs2 为 false 则取 [8]，否则 [9]
-    // Select_13: 若 MyUsePressureSolver1DefaultIs2 为 false 则取 [10]，否则 [11]
-    // Select_14: 若 MyFlipRenderTargetsForMobile 为 false 则取 Select_11 的结果，否则取 Select_13 的结果
-    // 因此 Parent = (MyFlipRenderTargetsForMobile ?
-    //              (MyUsePressureSolver1DefaultIs2 ? MyCoreSimMaterials[11] : MyCoreSimMaterials[10]) :
-    //              (MyUsePressureSolver1DefaultIs2 ? MyCoreSimMaterials[9] : MyCoreSimMaterials[8]))
-    MyMIPressureCycle1 = CreateDynamicMaterialInstance(
-        Parent = 根据上述条件选择,
-        OptionalName = "None",
-        CreationFlags = None
-    );
-    // 设置参数：
-    // Texture = Map_Find(MyRenderTargetsMap, "RT_PressureDivergenceTemp")  (注意: 可能是 RT_PressureDivergenceTemp)
-    SetTextureParameterValue(MyMIPressureCycle1, "Texture", Map_Find(MyRenderTargetsMap, "RT_PressureDivergenceTemp"));
-    // Direction = 0.0? 实际 SetScalarParameterValue 设置 "Direction" 值为 0.0? 从代码看，有 SetScalarParameterValue 设置 Direction 为 0.0（可能固定）
-    SetScalarParameterValue(MyMIPressureCycle1, "Direction", 0.0);
-    // KernelIndexOffset = (float)MyExperimentalPSolver2KernelIndexOffset
-    SetScalarParameterValue(MyMIPressureCycle1, "KernelIndexOffset", (float)MyExperimentalPSolver2KernelIndexOffset);
-    // FeedbackDampening = MyExperimentalPressureFeedback
-    SetScalarParameterValue(MyMIPressureCycle1, "FeedbackDampening", MyExperimentalPressureFeedback);
-    // DisablePressureEdgeMasking = (float)(MyPressureEdgeMasking == 0.0 ? 1.0 : 0.0)? 实际逻辑：若 MyPressureEdgeMasking == 0，则 DisablePressureEdgeMasking = 1，否则 0
-    // 同时 PressureEdgeMasking = max(MyPressureEdgeMasking, 0.01)
-    SetScalarParameterValue(MyMIPressureCycle1, "DisablePressureEdgeMasking", (MyPressureEdgeMasking == 0.0) ? 1.0 : 0.0);
-    SetScalarParameterValue(MyMIPressureCycle1, "PressureEdgeMasking", max(MyPressureEdgeMasking, 0.01));
-    // PressureFeedback = MyExpPressureFeedbackComponent
-    SetScalarParameterValue(MyMIPressureCycle1, "PressureFeedback", MyExpPressureFeedbackComponent);
-    // DivergenceFeedback = MyExpDivergenceFeedbackComponent
-    SetScalarParameterValue(MyMIPressureCycle1, "DivergenceFeedback", MyExpDivergenceFeedbackComponent);
-
-    // ---- 8. 创建 MyMIPressureCycle2 ----
-    // Parent 类似 Select_3 等，最终根据 MyUsePressureSolver1DefaultIs2 和 MyFlipRenderTargetsForMobile 选择
-    // 具体：Select_5 和 Select_4 选择 [12]/[13] 或 [14]/[15] 等，然后 Select_3 根据 MyFlipRenderTargetsForMobile 选择
-    // Parent = (MyFlipRenderTargetsForMobile ?
-    //           (MyUsePressureSolver1DefaultIs2 ? MyCoreSimMaterials[15] : MyCoreSimMaterials[14]) :
-    //           (MyUsePressureSolver1DefaultIs2 ? MyCoreSimMaterials[13] : MyCoreSimMaterials[12]))
-    MyMIPressureCycle2 = CreateDynamicMaterialInstance(
-        Parent = 根据上述条件选择,
-        OptionalName = "None",
-        CreationFlags = None
-    );
-    // 设置参数（与 PressureCycle1 类似）
-    SetTextureParameterValue(MyMIPressureCycle2, "Texture", Map_Find(MyRenderTargetsMap, "RT_PressureDivergenceTemp"));
-    SetScalarParameterValue(MyMIPressureCycle2, "Direction", 1.0); // 注意此处 Direction = 1.0（与 cycle1 不同）
-    SetScalarParameterValue(MyMIPressureCycle2, "KernelIndexOffset", (float)MyExperimentalPSolver2KernelIndexOffset);
-    SetScalarParameterValue(MyMIPressureCycle2, "FeedbackDampening", MyExperimentalPressureFeedback);
-    SetScalarParameterValue(MyMIPressureCycle2, "DisablePressureEdgeMasking", (MyPressureEdgeMasking == 0.0) ? 1.0 : 0.0);
-    SetScalarParameterValue(MyMIPressureCycle2, "PressureEdgeMasking", max(MyPressureEdgeMasking, 0.01));
-    SetScalarParameterValue(MyMIPressureCycle2, "PressureFeedback", MyExpPressureFeedbackComponent);
-    SetScalarParameterValue(MyMIPressureCycle2, "DivergenceFeedback", MyExpDivergenceFeedbackComponent);
-
-    // ---- 9. 创建 MyMICollisionPainterOffset ----
-    // Parent 由 Select_22 决定：若 MyFlipRenderTargetsForMobile 则 MyCoreSimMaterials[17]? 实际索引16和17？但注意之前 Line 用了17，Offset可能用其他？从代码看 Select_22 的 Option0 来自 GetArrayItem_4 (索引16)，Option1 来自 GetArrayItem_5 (索引17)，但索引可能重复？需确认：实际上 GetArrayItem_4 和 _5 分别索引16和17，而之前 Dot 用了16，Line用了17，所以 Offset 可能也用了相同材质？但逻辑上可能不一样，因为 Parent 不同。但根据代码，Select_22 的 Option0 来自 GetArrayItem_4 (索引16)，Option1 来自 GetArrayItem_5 (索引17)，然后根据 MyFlipRenderTargetsForMobile 选择。因此 Parent 与 Dot/Line 相同？这可能是错误，但按代码就是如此。
-    MyMICollisionPainterOffset = CreateDynamicMaterialInstance(
-        Parent = (MyFlipRenderTargetsForMobile ? MyCoreSimMaterials[17] : MyCoreSimMaterials[16]),
-        OptionalName = "None",
-        CreationFlags = None
-    );
-    // 设置参数：
-    // Texture = Map_Find(MyRenderTargetsMap, "RT_Painter")
-    SetTextureParameterValue(MyMICollisionPainterOffset, "Texture", Map_Find(MyRenderTargetsMap, "RT_Painter"));
-    // EdgeMask = MyAdjustPainterV2EdgeMask
-    SetScalarParameterValue(MyMICollisionPainterOffset, "EdgeMask", MyAdjustPainterV2EdgeMask);
-
-    // ---- 额外参数设置（可能属于某些MID，但执行顺序在之后） ----
-    // 在复杂模式中，还有对 MyMICompositeAndGradient 的额外设置？但按顺序已经包含了。
-    // 另外，还有对 MyMIAdvection 的额外设置？可能已包括。
-    // 注意：代码中还有对 MyMICompositeAndGradient 设置 "TexelSizeMult" 等，但那是通过 K2Node_CallFunction_611 设置的，其 self 引脚连接了多个 MID（MyMICompositeAndGradient, MyMIAdvection, MyMIDivergence, MyMIPressureCycle1, MyMIPressureCycle2），这意味着它们都共享一个参数 "TexelSizeMult"。该设置是在所有 MID 创建之后执行（因为执行线从 Knot_149 出来）。在复杂模式中，最后 then_8 执行完后，执行线继续到后续节点？实际上，复杂模式最后 then_8 创建 Offset 后，执行线并没有结束，因为还有额外的设置？从代码看，在 ExecutionSequence_23 之后，还有 K2Node_Knot_149 等，但 then_8 已连接到 Knot_149？实际上 then_8 连接到 Knot_149，然后 Knot_149 连接到 Knot_137，然后 Knot_137 连接到 CallFunction_611，该函数设置 "TexelSizeMult" 参数，其 self 引脚同时连接到多个 MID 变量（通过 Get 节点）。所以这个设置是全局的，无论简单模式还是复杂模式？但在简单模式中，是否也会执行？简单模式只有三个 MID，没有 then_8，但可能还有其他路径？实际上，简单模式不会触发 then_8，所以可能简单模式不会设置 TexelSizeMult？但代码中，简单模式也可能有后续节点？看入口：简单模式执行 ExecutionSequence_0 的三个输出，完成后没有更多节点。所以简单模式不设置 TexelSizeMult。复杂模式会设置。
-
-    因此，在复杂模式中，所有九个 MID 创建并设置各自参数后，最后执行：
-    // 设置 TexelSizeMult = (MyHalfResPressureAndDivergenceBuffers ? 1.0 : MySpeed)  // 通过 Select_1 选择
-    SetScalarParameterValue(所有相关 MID, "TexelSizeMult", (MyHalfResPressureAndDivergenceBuffers ? 1.0 : MySpeed));
-    // 这个 Set 被多个 MID 共享，通过多个 Get 节点连到 self 引脚。
-
-    // 另外，还有对 MyMICompositeAndGradient 设置 "NoiseInWorldSpace" 等？可能也有，但需检查。
-
-    // 最后，还有对 MyMICollisionPainterLine 和 Dot 的额外参数？也许没有。
-
-    // 注意：对于 MyMICollisionPainterLine 和 Dot，在复杂模式中也设置了 PaintAspect 等，但没有设置 TexelSizeMult，可能它们不需要。
-}
-重要补充说明：
-
-所有 Map_Find 操作均从 MyRenderTargetsMap 中按字符串键查找对应的 TextureRenderTarget2D 对象。
-
-所有布尔值转浮点数均使用 (float)bool（1.0 或 0.0）。
-
-材质数组 MyCoreSimMaterials 的具体索引和用途已在伪代码中注明，索引从 0 开始。
-
-MyFlipRenderTargetsForMobile 用于选择不同的材质索引，可能对应不同平台或渲染路径。
-
-参数 Direction 在 PressureCycle1 中为 0.0，在 PressureCycle2 中为 1.0，体现交替迭代。
-
-参数 KernelIndexOffset 使用 MyExperimentalPSolver2KernelIndexOffset，可能控制压力求解器内核偏移。
-
-参数 DisablePressureEdgeMasking 根据 MyPressureEdgeMasking 是否为 0 来决定是否禁用边缘掩码。
-
-MyPressureEdgeMasking 本身被钳制至少为 0.01（通过 FMax）。
-
-参数 TexelSizeMult 根据 MyHalfResPressureAndDivergenceBuffers 决定是 1.0 还是 MySpeed，影响纹理采样步长。
-
-所有 Set 调用按执行顺序排列，确保依赖关系正确。
+    // 函数结束

@@ -7,9 +7,11 @@
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetMaterialLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialParameterCollection.h"
 #include "FileMediaSource.h"
 #include "MediaPlayer.h"
 #include "MediaTexture.h"
@@ -842,6 +844,99 @@ void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
 	ConfigurePressureMaterial(MyMIPressureCycle1, 0.0f);
 	ConfigurePressureMaterial(MyMIPressureCycle2, 1.0f);
 
+}
+
+void UMyNinjaLiveComponent::MyCreateOutputMaterialAndSetItOnTargetsStep01()
+{
+	// 保持与蓝图相同的存在判定及循环次数计算。
+	MySecondaryMaterialsPresent = MySecondaryOutputMaterials.Num() != 0;
+	MyTertiaryMaterialsPresent = MyTertiaryOutputMaterials.Num() != 0;
+	MyMaterialCollectionPresent = IsValid(MySetInternalParamsToMaterialParamCollection);
+	const int32 LastIndex = static_cast<int32>(MySecondaryMaterialsPresent) + static_cast<int32>(MyTertiaryMaterialsPresent);
+
+	auto FindRenderTarget = [this](const TCHAR* Name) -> UTextureRenderTarget2D*
+	{
+		const TObjectPtr<UTextureRenderTarget2D>* Found = MyRenderTargetsMap.Find(Name);
+		return Found ? Found->Get() : nullptr;
+	};
+
+	UTextureRenderTarget2D* Painter = FindRenderTarget(TEXT("RT_Painter"));
+	UTextureRenderTarget2D* Pressure = FindRenderTarget(TEXT("RT_PressureDivergence"));
+	UTextureRenderTarget2D* PressureTemp = FindRenderTarget(TEXT("RT_PressureDivergenceTemp"));
+
+	for (int32 Index = 0; Index <= LastIndex; ++Index)
+	{
+		const TArray<TObjectPtr<UMaterialInterface>>* Materials = &MyOutputMaterials;
+		int32 SelectedMaterial = MyOutputMaterialSelected;
+		if (Index == 1)
+		{
+			Materials = &MySecondaryOutputMaterials;
+			SelectedMaterial = MySecondaryOutputMaterialSelected;
+		}
+		else if (Index == 2)
+		{
+			Materials = &MyTertiaryOutputMaterials;
+			SelectedMaterial = MyTertiaryOutputMaterialSelected;
+		}
+
+		const int32 ClampedIndex = FMath::Min(Materials->Num() - 1, SelectedMaterial);
+		UMaterialInstanceDynamic* OutputMaterial = Materials->IsValidIndex(ClampedIndex) && IsValid((*Materials)[ClampedIndex])
+			? UMaterialInstanceDynamic::Create((*Materials)[ClampedIndex], this)
+			: nullptr;
+		if (Index == 0)
+		{
+			MyMIOutput = OutputMaterial;
+		}
+		else if (Index == 1)
+		{
+			MyMISecondaryOutput = OutputMaterial;
+		}
+		else
+		{
+			MyMITertiaryOutput = OutputMaterial;
+		}
+
+		if (!IsValid(OutputMaterial))
+		{
+			continue;
+		}
+
+		const bool bPickPainter = MySimplePainterMode && !MyEnablePainterDoubleBuffering;
+		const bool bUseOutputBuffer = Index == 1 && MyMake1stOutputAvailableFor2ndOutput;
+		UTextureRenderTarget2D* FoundTexture = FindRenderTarget(
+			bUseOutputBuffer ? TEXT("RT_Output") : (bPickPainter ? TEXT("RT_Painter") : TEXT("RT_Composite")));
+
+		OutputMaterial->SetTextureParameterValue(TEXT("VelocityDensityBuffer"), FoundTexture);
+		OutputMaterial->SetTextureParameterValue(TEXT("PressureBuffer"), Pressure);
+		OutputMaterial->SetTextureParameterValue(TEXT("DivergenceBuffer"), PressureTemp);
+		OutputMaterial->SetTextureParameterValue(TEXT("PaintBuffer"), Painter);
+		OutputMaterial->SetScalarParameterValue(TEXT("FlowMapUVOffsetRandomize"),
+			FMath::FRandRange(0.0f, MyRandomizeNoiseOffsets ? 1.0f : 0.0f));
+
+		const FVector TraceMeshScale = IsValid(MyTraceMeshComponent) ? MyTraceMeshComponent->GetComponentScale() : FVector::ZeroVector;
+		const FVector TraceMeshPosition = IsValid(MyTraceMeshComponent) ? MyTraceMeshComponent->GetComponentLocation() : FVector::ZeroVector;
+		const FLinearColor ScaleColor(TraceMeshScale);
+		const FLinearColor PositionColor(TraceMeshPosition);
+		OutputMaterial->SetVectorParameterValue(TEXT("TraceMeshSize"), ScaleColor);
+		OutputMaterial->SetVectorParameterValue(TEXT("TraceMeshPos"), PositionColor);
+
+		if (MyMaterialCollectionPresent)
+		{
+			UKismetMaterialLibrary::SetVectorParameterValue(this, MySetInternalParamsToMaterialParamCollection,
+				TEXT("TraceMeshSize"), ScaleColor);
+			UKismetMaterialLibrary::SetVectorParameterValue(this, MySetInternalParamsToMaterialParamCollection,
+				TEXT("TraceMeshPos"), PositionColor);
+		}
+
+		if (Index != 0)
+		{
+			OutputMaterial->SetTextureParameterValue(TEXT("DensityBuffer"), FoundTexture);
+			OutputMaterial->SetTextureParameterValue(TEXT("VelocityBuffer"), FoundTexture);
+			OutputMaterial->SetTextureParameterValue(TEXT("VelocityDensityMap"), FoundTexture);
+			OutputMaterial->SetTextureParameterValue(TEXT("CloudVelocity"), FoundTexture);
+			OutputMaterial->SetTextureParameterValue(TEXT("CloudDensity"), FoundTexture);
+		}
+	}
 }
 
 void UMyNinjaLiveComponent::MyUpdateCollisionMaskIsNonDefault()
