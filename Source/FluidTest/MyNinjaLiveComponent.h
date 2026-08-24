@@ -16,6 +16,7 @@
 
 class AMyNinjaLiveActor;
 class AMyNinjaLiveMemoryPoolManager;
+class AActor;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UMaterialParameterCollection;
@@ -307,6 +308,32 @@ public:
 	/** 预设名过滤条件 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|System")
 	FName MyPresetNameFilterCriteria = NAME_None;
+
+	/** 首选预设数据表；有效时可强制加载它。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	TObjectPtr<UDataTable> MyDefaultPreset = nullptr;
+
+	/** 是否优先加载首选预设。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	bool MyForceAutoLoadPreset = false;
+
+	/** 当前预设名称与查找路径。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	FString MyActualPreset;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	TArray<FName> MyPresetSearchPaths;
+
+	/** 当前预设的数值映射。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Preset")
+	TMap<FString, double> MyPresetMap;
+
+	/** 追踪时排除的 NinjaLive 接口 Actor。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Trace")
+	TArray<TObjectPtr<AActor>> MyNinjaLiveTraceExclude;
+
+	/** 是否关闭 UE 5.1 TSR 的纹理闪烁抑制周期。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
+	bool MySupressUE51TextureSmearing = false;
 
 	/** UE5 早期访问版本标志（早于 UE 5.4 的版本为 false，用于修复物理速度 bug） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|System")
@@ -769,6 +796,10 @@ public:
 	/** 创建所有模拟所需的动态材质实例，并绑定当前 RenderTarget。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
 	void MyCreateDynamicMaterialInstances();
+
+	/** 完成 RenderTarget 创建后的材质、预设与 Painter 初始化流程。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
+	void MyAfterCreateRT();
 
 	/** 创建主、次、三级输出 MID，并将模拟缓冲绑定到其标准参数。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")

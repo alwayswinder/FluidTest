@@ -1325,6 +1325,71 @@ void UMyNinjaLiveComponent::MyCreateOutputMaterialAndSetItOnTargetsStep03()
 	}
 }
 
+void UMyNinjaLiveComponent::MyAfterCreateRT()
+{
+	MyCreateDynamicMaterialInstances();
+
+	UClass* NinjaLiveInterfaceClass = LoadClass<UInterface>(
+		nullptr,
+		TEXT("/Game/FluidNinjaLive/Core/NinjaLiveInterface.NinjaLiveInterface_C"));
+	MyNinjaLiveTraceExclude.Reset();
+	if (NinjaLiveInterfaceClass != nullptr)
+	{
+		TArray<AActor*> InterfaceActors;
+		UGameplayStatics::GetAllActorsWithInterface(this, NinjaLiveInterfaceClass, InterfaceActors);
+		for (AActor* InterfaceActor : InterfaceActors)
+		{
+			MyNinjaLiveTraceExclude.Add(InterfaceActor);
+		}
+	}
+	MyNinjaLiveTraceExclude.Remove(GetOwner());
+
+	MyManageContinuousInteractions();
+	MyAlternativeInputsFedToCompositeDensityInput();
+	MyCreateOutputMaterialAndSetItOnTargetsStep01();
+	MyCreateOutputMaterialAndSetItOnTargetsStep02();
+	MyCreateOutputMaterialAndSetItOnTargetsStep03();
+
+	if (MySupressUE51TextureSmearing)
+	{
+		UKismetSystemLibrary::ExecuteConsoleCommand(this, TEXT("r.TSR.ShadingRejection.Flickering 0"));
+		UKismetSystemLibrary::ExecuteConsoleCommand(this, TEXT("r.TSR.ShadingRejection.Flickering.Period 0"));
+	}
+
+	MyInitPainterV2();
+	MyInitDone = true;
+	MyMaterialInstacesDone = true;
+	if (IsValid(MyTraceMeshComponent))
+	{
+		MyTraceMeshComponent->SetVisibility(true, false);
+	}
+
+	if (IsValid(MyDefaultPreset))
+	{
+		MyActualPreset = UKismetSystemLibrary::GetDisplayName(MyDefaultPreset);
+		MyForceAutoLoadPreset = true;
+	}
+
+	UDataTable* LoadedDataTable = nullptr;
+	FString LoadedDataTablePath;
+	TMap<FString, double> PresetMap;
+	UMyNinjaLiveFunctions::MyPresetLoader(
+		this,
+		MyActualPreset,
+		MyPresetSearchPaths,
+		MyPresetNameFilterCriteria,
+		MyForceAutoLoadPreset && IsValid(MyDefaultPreset),
+		MyDefaultPreset,
+		LoadedDataTable,
+		LoadedDataTablePath,
+		PresetMap);
+	MyLoadedDataTable = LoadedDataTable;
+	MyLoadedDataTablePath = MoveTemp(LoadedDataTablePath);
+	MyPresetMap = MoveTemp(PresetMap);
+	MyParsePresetMapAndSetVariables(MyPresetMap);
+	MyLoadTextures();
+}
+
 void UMyNinjaLiveComponent::MyUpdateCollisionMaskIsNonDefault()
 {
 	// 蓝图逻辑：遮罩有效且显示名不是默认 T_maskframe_256 时，视为自定义遮罩。

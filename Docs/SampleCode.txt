@@ -1,92 +1,75 @@
-// ===== 函数 PresetLoader =====
-// 输入:
-//   PresetName: string
-//   AssetPath: array of FName   (package paths)
-//   AssetTrimmedName: FName
-//   ForcePreferredPreset: bool
-//   PreferredPreset: UDataTable*
-// 输出:
-//   LoadedDataTable: UDataTable*
-//   LoadedDataTablePath: string
-//   PresetMap: TMap<FString, double>
+// ===== 事件：AfterCreateRT =====
+// 在渲染目标创建完成后触发，执行组件初始化流程。
 
-PresetLoader(...):
-    // 局部变量 PresetMapTemp (TMap<FString, double>)
+AfterCreateRT():
 
-    // ---- 1. 确定要使用的 DataTable ----
-    UDataTable* SelectedTable = nullptr;
+    // ---- 分支 A：核心初始化（执行顺序：then_0） ----
+    // 1. 创建动态材质实例
+    MyCreateDynamicMaterialInstances()
 
-    if (ForcePreferredPreset) {
-        // 直接使用首选预设
-        SelectedTable = PreferredPreset;
-    } else {
-        // 通过 AssetRegistry 搜索匹配的 DataTable
-        // 构建搜索字符串: "DT_" + AssetTrimmedName + "_" + PresetName
-        string SearchString = "DT_" + String(AssetTrimmedName) + "_" + PresetName;
+    // 2. 收集所有实现了 NinjaLiveInterface 的 Actor，并从排除列表中移除自身
+    Array<AActor*> InterfaceActors = GetAllActorsWithInterface(NinjaLiveInterface)
+    NinjaLIVETraceExclude = InterfaceActors                     // 赋给排除列表
+    Array_RemoveItem(NinjaLIVETraceExclude, GetOwner())         // 移除自身
 
-        // 构造过滤器：包路径 = AssetPath，类名 = "DataTable"
-        ARFilter Filter = MakeARFilter(
-            PackagePaths = AssetPath,
-            ClassNames = { "DataTable" },
-            bRecursivePaths = true
-        );
+    // 3. 启动连续交互管理
+    MyManageContinuousInteractions()
 
-        // 获取所有匹配的资产数据
-        Array<AssetData> AllAssets = GetAssets(Filter);
+    // 4. 执行子步骤（顺序执行）
+    MyAlternativeInputsFedToCompositeDensityInput()      // 替换复合密度输入
 
-        // 如果有资产，则使用该数组，否则用空数组
-        Array<AssetData> SelectedAssets = (AllAssets.Num() > 0) ? AllAssets : EmptyAssetDataArray;
+    // 5. 创建并设置输出材质（三步）
+    MyCreateOutputMaterialAndSetItOnTargetsStep01()
+    MyCreateOutputMaterialAndSetItOnTargetsStep02()
+    MyCreateOutputMaterialAndSetItOnTargetsStep03()
 
-        // 遍历资产数据，查找第一个包含搜索字符串的 DataTable
-        bool bFound = false;
-        for (AssetData AD in SelectedAssets) {
-            UObject* Obj = GetAsset(AD);
-            if (IsValid(Obj)) {
-                UDataTable* DT = Cast<UDataTable>(Obj);
-                if (DT != nullptr) {
-                    string AssetName = String(AD.AssetName);  // 从 AssetData 取得 AssetName
-                    if (Contains(AssetName, SearchString)) {
-                        SelectedTable = DT;
-                        bFound = true;
-                        break;
-                    }
-                }
-            }
-        }
-        // 如果没找到，SelectedTable 保持 nullptr
+    // 6. 可选：抑制 UE5.1 纹理涂抹（TSR 闪烁修复）
+    if (SupressUE51TextureSmearing) {
+        ExecuteConsoleCommand("r.TSR.ShadingRejection.Flickering 0")
+        ExecuteConsoleCommand("r.TSR.ShadingRejection.Flickering.Period 0")
     }
 
-    // ---- 2. 清空临时 Map（在填充前总是清空） ----
-    PresetMapTemp.Empty();
+    // 7. 初始化 Painter V2
+    MyInitPainterV2()
 
-    // ---- 3. 如果存在有效的 DataTable，则填充 Map ----
-    if (SelectedTable != nullptr) {
-        Array<FName> RowNames = GetDataTableRowNames(SelectedTable);
-        for (FName RowName in RowNames) {
-            // 获取行结构 (NinjaPreset)
-            NinjaPreset Row = GetDataTableRow(SelectedTable, RowName);
-            // 取 SourceString 字段
-            string SourceString = Row.SourceString;
-            // 替换逗号为点，确保正确转为浮点数
-            string CleanString = Replace(SourceString, ",", ".");
-            double Value = Conv_StringToDouble(CleanString);
-            // 将行名转为字符串作为键
-            string Key = Conv_NameToString(RowName);
-            // 添加到 Map
-            PresetMapTemp.Add(Key, Value);
-        }
+    // 8. 设置初始化完成标志
+    MyInitDone = true
+    MyMaterialInstacesDone = true
+
+    // 9. 显示追踪网格组件
+    SetVisibility(MyTraceMeshComponent, true, false)   // bPropagateToChildren = false
+
+
+    // ---- 分支 B：加载预设（在分支 A 完成后执行，顺序 then_1） ----
+    // 如果默认预设有效，则加载它
+    if (IsValid(DefaultPreset)) {
+        // 获取预设的显示名称作为实际预设名
+        ActualPreset = GetDisplayName(DefaultPreset)
+        ForceAutoLoadPreset = true
+
+        // 清空当前预设映射
+        PresetMap.Empty()
+
+        // 调用预设加载器（返回 LoadedDataTable, LoadedDataTablePath, PresetMap）
+        UDataTable* LoadedDT
+        string LoadedPath
+        TMap<FString, double> LoadedMap
+        (LoadedDT, LoadedPath, LoadedMap) = MyPresetLoader(
+            PresetName = ActualPreset,
+            AssetPath = PresetSearchPaths,
+            AssetTrimmedName = MyPresetNameFilterCriteria,
+            ForcePreferredPreset = ForceAutoLoadPreset,
+            PreferredPreset = DefaultPreset
+        )
+
+        // 存储加载结果
+        MyLoadedDataTable = LoadedDT
+        MyLoadedDataTablePath = LoadedPath
+        PresetMap = LoadedMap
+
+        // 解析预设映射并设置成员变量
+        MyParsePresetMapAndSetVariables(PresetMap)
+
+        // 加载纹理资源
+        MyLoadTextures()
     }
-
-    // ---- 4. 准备输出 ----
-    LoadedDataTable = SelectedTable;
-
-    // 生成路径：若表有效，则用其 AssetData 的 PackageName
-    if (SelectedTable != nullptr) {
-        AssetData LoadedAD = CreateAssetData(SelectedTable);
-        LoadedDataTablePath = Conv_NameToString(LoadedAD.PackageName);
-    } else {
-        LoadedDataTablePath = "";
-    }
-
-    // 输出 PresetMapTemp 作为 PresetMap
-    PresetMap = PresetMapTemp;
