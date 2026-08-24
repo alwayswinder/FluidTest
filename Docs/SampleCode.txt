@@ -1,72 +1,92 @@
-// ===== 复合节点：ParsePresetMapAndSetVariables =====
-// 输入：PresetMap (TMap<FString, double>)
-// 执行流从 Tunnel_0 (In) 进入，完成后从 Tunnel_1 (Out) 退出
+// ===== 函数 PresetLoader =====
+// 输入:
+//   PresetName: string
+//   AssetPath: array of FName   (package paths)
+//   AssetTrimmedName: FName
+//   ForcePreferredPreset: bool
+//   PreferredPreset: UDataTable*
+// 输出:
+//   LoadedDataTable: UDataTable*
+//   LoadedDataTablePath: string
+//   PresetMap: TMap<FString, double>
 
-// ---- 1. 读取并设置基础参数（直接赋值，未找到则默认 0.0） ----
-MySpeed = Map_Find(PresetMap, "Speed")
-VeloOffsetX = Map_Find(PresetMap, "VeloOffsetX")
-VeloOffsetY = Map_Find(PresetMap, "VeloOffsetY")
-VeloFromBrushMotion = Map_Find(PresetMap, "VeloFromBrushMotion")
+PresetLoader(...):
+    // 局部变量 PresetMapTemp (TMap<FString, double>)
 
-// ---- OffsetFromSimAreaMotion 具有默认值 1.0（当键不存在时） ----
-bool bFoundOffset = Map_Find(PresetMap, "OffsetFromSimAreaMotion", double OutValue)
-OffsetFromSimAreaMotion = bFoundOffset ? OutValue : 1.0
+    // ---- 1. 确定要使用的 DataTable ----
+    UDataTable* SelectedTable = nullptr;
 
-MyVeloFromSimAreaMotion = Map_Find(PresetMap, "VeloFromSimAreaMotion")   // 未找到默认 0.0
+    if (ForcePreferredPreset) {
+        // 直接使用首选预设
+        SelectedTable = PreferredPreset;
+    } else {
+        // 通过 AssetRegistry 搜索匹配的 DataTable
+        // 构建搜索字符串: "DT_" + AssetTrimmedName + "_" + PresetName
+        string SearchString = "DT_" + String(AssetTrimmedName) + "_" + PresetName;
 
-VeloStrength = Map_Find(PresetMap, "VeloStrength")
-VeloRotate = Map_Find(PresetMap, "VeloRotate")
-VeloAmpNoise = Map_Find(PresetMap, "VeloAmpNoise")
-VeloDirNoise = Map_Find(PresetMap, "VeloDirNoise")
-InputFeedback = Map_Find(PresetMap, "InputFeedback")
-MyFlowFeedback = Map_Find(PresetMap, "FlowFeedback")       // 注意变量名 MyFlowFeedback
-MyDivergence = Map_Find(PresetMap, "Divergence")           // 变量名 MyDivergence
-BrushSize = Map_Find(PresetMap, "BrushSize")
-BrushStrength = Map_Find(PresetMap, "BrushStrength")
-BrushHardness = Map_Find(PresetMap, "BrushHardness")
-BrushPuncture = Map_Find(PresetMap, "BrushPuncture")
+        // 构造过滤器：包路径 = AssetPath，类名 = "DataTable"
+        ARFilter Filter = MakeARFilter(
+            PackagePaths = AssetPath,
+            ClassNames = { "DataTable" },
+            bRecursivePaths = true
+        );
 
-// ---- EraserMode：键值 > 0 则为 true，否则 false（未找到默认为 0，所以 false） ----
-EraserMode = Map_Find(PresetMap, "EraserMode") > 0.0
+        // 获取所有匹配的资产数据
+        Array<AssetData> AllAssets = GetAssets(Filter);
 
-// ---- DensityTxtMult：默认值为 1.0（若键不存在） ----
-bool bFoundDensMult = Map_Find(PresetMap, "DensityTxtMult", double OutDensMult)
-DensityTxtMult = bFoundDensMult ? OutDensMult : 1.0
+        // 如果有资产，则使用该数组，否则用空数组
+        Array<AssetData> SelectedAssets = (AllAssets.Num() > 0) ? AllAssets : EmptyAssetDataArray;
 
-FadeDensityAtSimEdge = Map_Find(PresetMap, "FadeDensityAtSimEdge")
+        // 遍历资产数据，查找第一个包含搜索字符串的 DataTable
+        bool bFound = false;
+        for (AssetData AD in SelectedAssets) {
+            UObject* Obj = GetAsset(AD);
+            if (IsValid(Obj)) {
+                UDataTable* DT = Cast<UDataTable>(Obj);
+                if (DT != nullptr) {
+                    string AssetName = String(AD.AssetName);  // 从 AssetData 取得 AssetName
+                    if (Contains(AssetName, SearchString)) {
+                        SelectedTable = DT;
+                        bFound = true;
+                        break;
+                    }
+                }
+            }
+        }
+        // 如果没找到，SelectedTable 保持 nullptr
+    }
 
-// ---- SimEdgeBouncyness：默认值为 0.5（若键不存在） ----
-bool bFoundBounce = Map_Find(PresetMap, "SimEdgeBouncyness", double OutBounce)
-SimEdgeBouncyness = bFoundBounce ? OutBounce : 0.5
+    // ---- 2. 清空临时 Map（在填充前总是清空） ----
+    PresetMapTemp.Empty();
 
-// ---- VeloDirNoiseSize：默认值为 1.0 ----
-bool bFoundNoiseSize = Map_Find(PresetMap, "VeloDirNoiseSize", double OutNoiseSize)
-VeloDirNoiseSize = bFoundNoiseSize ? OutNoiseSize : 1.0
+    // ---- 3. 如果存在有效的 DataTable，则填充 Map ----
+    if (SelectedTable != nullptr) {
+        Array<FName> RowNames = GetDataTableRowNames(SelectedTable);
+        for (FName RowName in RowNames) {
+            // 获取行结构 (NinjaPreset)
+            NinjaPreset Row = GetDataTableRow(SelectedTable, RowName);
+            // 取 SourceString 字段
+            string SourceString = Row.SourceString;
+            // 替换逗号为点，确保正确转为浮点数
+            string CleanString = Replace(SourceString, ",", ".");
+            double Value = Conv_StringToDouble(CleanString);
+            // 将行名转为字符串作为键
+            string Key = Conv_NameToString(RowName);
+            // 添加到 Map
+            PresetMapTemp.Add(Key, Value);
+        }
+    }
 
-// ---- VeloDirNoiseSpeed：默认值为 1.0 ----
-bool bFoundNoiseSpeed = Map_Find(PresetMap, "VeloDirNoiseSpeed", double OutNoiseSpeed)
-VeloDirNoiseSpeed = bFoundNoiseSpeed ? OutNoiseSpeed : 1.0
+    // ---- 4. 准备输出 ----
+    LoadedDataTable = SelectedTable;
 
-// ---- EdgeMaskWidth：默认值为 0.25 ----
-bool bFoundEdgeMask = Map_Find(PresetMap, "EdgeMaskWidth", double OutEdgeMask)
-EdgeMaskWidth = bFoundEdgeMask ? OutEdgeMask : 0.25
+    // 生成路径：若表有效，则用其 AssetData 的 PackageName
+    if (SelectedTable != nullptr) {
+        AssetData LoadedAD = CreateAssetData(SelectedTable);
+        LoadedDataTablePath = Conv_NameToString(LoadedAD.PackageName);
+    } else {
+        LoadedDataTablePath = "";
+    }
 
-// ---- 条件分支：根据 MyUseRenderTargetAsInput 决定是否设置以下三项 ----
-if (!MyUseRenderTargetAsInput) {
-    // 仅在 render target 不作为输入时设置这些密度纹理变换参数
-    DensityTxtScale = Map_Find(PresetMap, "DensityTxtScale")   // 默认 0.0
-    DensityTxtOffsetX = Map_Find(PresetMap, "DensityTxtOffsetX")
-    DensityTxtOffsetY = Map_Find(PresetMap, "DensityTxtOffsetY")
-}
-// 如果 MyUseRenderTargetAsInput 为 true，则跳过上述三项，保持它们的当前值（未被修改）
-
-// ---- 继续设置剩余的 Niagara 相关参数 ----
-BrushNoise = Map_Find(PresetMap, "BrushNoise")
-VeloInputTile = Map_Find(PresetMap, "VeloInputTile")
-VeloInputOffsetSpeed = Map_Find(PresetMap, "VeloInputOffsetSpeed")
-DensityInputNoiseAmp = Map_Find(PresetMap, "DensityInputNoiseAmp")
-DensityInputNoiseOffset = Map_Find(PresetMap, "DensityInputNoiseOffset")
-DensityInputNoiseTile = Map_Find(PresetMap, "DensityInputNoiseTile")
-BrushRnd = Map_Find(PresetMap, "BrushRnd")
-
-// ---- 出口 ----
+    // 输出 PresetMapTemp 作为 PresetMap
+    PresetMap = PresetMapTemp;

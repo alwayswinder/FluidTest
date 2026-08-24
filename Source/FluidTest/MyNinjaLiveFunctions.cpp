@@ -116,3 +116,93 @@ void UMyNinjaLiveFunctions::MyTemplateLoader(
 		: LoadedTmpFullPath;
 	LoadFailed = false;
 }
+
+void UMyNinjaLiveFunctions::MyPresetLoader(
+	UObject* WorldContextObject,
+	const FString& PresetName,
+	const TArray<FName>& AssetPath,
+	FName AssetTrimmedName,
+	bool ForcePreferredPreset,
+	UDataTable* PreferredPreset,
+	UDataTable*& LoadedDataTable,
+	FString& LoadedDataTablePath,
+	TMap<FString, double>& PresetMap)
+{
+	LoadedDataTable = nullptr;
+	LoadedDataTablePath.Reset();
+	PresetMap.Reset();
+
+	if (ForcePreferredPreset)
+	{
+		LoadedDataTable = PreferredPreset;
+	}
+	else
+	{
+		const FString ExpectedAssetName = FString::Printf(TEXT("DT_%s_%s"), *AssetTrimmedName.ToString(), *PresetName);
+		FARFilter Filter;
+		Filter.PackagePaths = AssetPath;
+		Filter.ClassPaths.Add(UDataTable::StaticClass()->GetClassPathName());
+		Filter.bRecursivePaths = true;
+
+		FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+		TArray<FAssetData> Assets;
+		AssetRegistryModule.Get().GetAssets(Filter, Assets);
+
+		for (const FAssetData& Asset : Assets)
+		{
+			if (Asset.AssetName.ToString().Contains(ExpectedAssetName))
+			{
+				LoadedDataTable = Cast<UDataTable>(Asset.GetAsset());
+				if (IsValid(LoadedDataTable))
+				{
+					break;
+				}
+			}
+		}
+	}
+
+	if (!IsValid(LoadedDataTable))
+	{
+		LoadedDataTable = nullptr;
+		return;
+	}
+
+	const FAssetData LoadedAssetData(LoadedDataTable);
+	LoadedDataTablePath = LoadedAssetData.PackagePath.ToString();
+
+	if (LoadedDataTable->RowStruct == nullptr)
+	{
+		return;
+	}
+
+	const FStrProperty* SourceStringProperty = nullptr;
+	for (TFieldIterator<FProperty> It(LoadedDataTable->RowStruct); It; ++It)
+	{
+		if (It->GetFName().ToString().StartsWith(TEXT("SourceString")))
+		{
+			SourceStringProperty = CastField<FStrProperty>(*It);
+			break;
+		}
+	}
+
+	if (SourceStringProperty == nullptr)
+	{
+		return;
+	}
+
+	FNumberFormattingOptions NumberFormat;
+	NumberFormat.SetRoundingMode(ERoundingMode::HalfToEven);
+	NumberFormat.SetUseGrouping(false);
+	NumberFormat.SetMinimumIntegralDigits(1);
+	NumberFormat.SetMaximumIntegralDigits(16);
+	NumberFormat.SetMinimumFractionalDigits(0);
+	NumberFormat.SetMaximumFractionalDigits(2);
+
+	for (const TPair<FName, uint8*>& RowPair : LoadedDataTable->GetRowMap())
+	{
+		const FString& SourceString = SourceStringProperty->GetPropertyValue_InContainer(RowPair.Value);
+		const double ParsedValue = FCString::Atod(*SourceString);
+		const FString RoundedValue = FText::AsNumber(ParsedValue, &NumberFormat).ToString().Replace(TEXT(","), TEXT("."));
+		PresetMap.Add(RowPair.Key.ToString(), FCString::Atod(*RoundedValue));
+	}
+}

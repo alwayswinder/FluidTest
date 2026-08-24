@@ -40,5 +40,18 @@ public:
 		FString& LoadedTmpFullPath,
 		FString& LoadedTemplateNameOnly,
 		bool& UsesAbsolutePath);
+
+	/** 加载指定预设的数据表，并将每行 SourceString 转换为预设数值。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Preset", meta = (WorldContext = "WorldContextObject"))
+	static void MyPresetLoader(
+		UObject* WorldContextObject,
+		const FString& PresetName,
+		const TArray<FName>& AssetPath,
+		FName AssetTrimmedName,
+		bool ForcePreferredPreset,
+		UDataTable* PreferredPreset,
+		UDataTable*& LoadedDataTable,
+		FString& LoadedDataTablePath,
+		TMap<FString, double>& PresetMap);
 	
 };
