@@ -324,11 +324,11 @@ public:
 	TArray<FName> MyPresetSearchPaths;
 
 	/** 当前预设的数值映射。 */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Preset")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	TMap<FString, double> MyPresetMap;
 
 	/** 追踪时排除的 NinjaLive 接口 Actor。 */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Trace")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	TArray<TObjectPtr<AActor>> MyNinjaLiveTraceExclude;
 
 	/** 是否关闭 UE 5.1 TSR 的纹理闪烁抑制周期。 */
