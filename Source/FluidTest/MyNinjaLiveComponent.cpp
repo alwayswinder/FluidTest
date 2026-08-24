@@ -1596,4 +1596,39 @@ void UMyNinjaLiveComponent::MyRestartInputMedia()
 	}
 }
 
+void UMyNinjaLiveComponent::MyLODDistaceStepsPrecalc()
+{
+	// 蓝图始终先用 LOD-Steps 初始化当前等级；禁用两个降级选项时不触碰既有阈值数据。
+	MyLODLevel = MyLODSteps;
+	if (!MyLOD1ReduceSimQuality && !MyLOD2ReduceSamplingFPS)
+	{
+		return;
+	}
+
+	const int32 LastIndex = MyLODSteps - 1;
+	if (LastIndex < 0)
+	{
+		MyLODStepsArray.Reset();
+		return;
+	}
+
+	// 原蓝图以 (Max(FarBound, NearBound) - 1) / (LOD-Steps - 1) 计算步长。
+	// 单步没有可定义的分段范围，因此保留数组为空，避免原图的零除未定义结果。
+	if (LastIndex == 0)
+	{
+		MyLODStepsArray.Reset();
+		return;
+	}
+
+	MyLODStepRange = (FMath::Max(MyLODFarBound, MyLODNearBound) - 1.0) /
+		static_cast<double>(LastIndex);
+	MyLODStepsArray.Reset();
+	MyLODStepsArray.Reserve(MyLODSteps);
+	for (int32 Index = 0; Index <= LastIndex; ++Index)
+	{
+		const double Distance = MyLODNearBound + static_cast<double>(Index) * MyLODStepRange;
+		MyLODStepsArray.Add(static_cast<double>(FMath::TruncToInt(Distance)));
+	}
+}
+
 

@@ -50,7 +50,8 @@
   `CreateOuputMaterialAndSetItOnTargets_Step02 → MyCreateOutputMaterialAndSetItOnTargetsStep02`、
   `CreateOuputMaterialAndSetItOnTargets_Step03 → MyCreateOutputMaterialAndSetItOnTargetsStep03`、
   `PresetLoader → MyPresetLoader`、
-  `AfterCreateRT → MyAfterCreateRT`
+  `AfterCreateRT → MyAfterCreateRT`、
+  `LOD-DistaceStepsPrecalc（复合节点）→ MyLODDistaceStepsPrecalc`
 
 ## 常用操作
 

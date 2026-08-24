@@ -522,6 +522,37 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	int32 MySamplingFPS = 60;
 
+	// ------------------------------------------------------------------
+	// LOD-DistaceStepsPrecalc 复合节点
+	// ------------------------------------------------------------------
+	/** LOD 阈值数量，同时作为当前 LOD 等级的初始值。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
+	int32 MyLODSteps = 1;
+
+	/** LOD 距离阈值的近端和远端边界。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
+	double MyLODNearBound = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
+	double MyLODFarBound = 0.0;
+
+	/** 是否分别允许 LOD 降低模拟质量或采样帧率。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
+	bool MyLOD1ReduceSimQuality = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
+	bool MyLOD2ReduceSamplingFPS = false;
+
+	/** 当前 LOD 等级、相邻阈值间距及预计算出的整数距离阈值。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|LOD")
+	int32 MyLODLevel = 0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|LOD")
+	double MyLODStepRange = 0.0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|LOD")
+	TArray<double> MyLODStepsArray;
+
+	/** 预计算 LOD 距离阈值；仅在任一 LOD 降级选项启用时刷新阈值数组。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|LOD")
+	void MyLODDistaceStepsPrecalc();
+
 	/** 自定义 Tick 间隔，等于最高采样帧率的倒数。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	double MyTickRateCustom = 1.0 / 60.0;
