@@ -1,71 +1,54 @@
-// ===== 自定义事件：AfterTickDelay =====
-// 在每一帧或定时触发，用于管理组件激活状态、计时器更新和 PAINTER V2 的停用逻辑。
+# 函数：CameraFacing
+# 输入参数：
+#   InMesh: SceneComponent 引用
+#   UseLegacyFacing: bool
+#   LockY: bool
+#   TraceMeshInitRot: Rotator
+# 输出：无（修改 InMesh 的世界旋转）
 
-AfterTickDelay():
+def CameraFacing(InMesh, UseLegacyFacing, LockY, TraceMeshInitRot):
+    # 1. 获取玩家相机管理器（WorldContextObject 隐含自函数上下文）
+    CameraManager = GetPlayerCameraManager(WorldContextObject, PlayerIndex=0)
 
-    // ---- 1. 检查是否被禁用或阻塞 ----
-    if (MyDisableComponent || TickBlocker) {
-        // 若为真，直接返回，不执行任何操作
-        return
-    }
+    # 2. 获取相机位置（CameraManager 是 Actor）
+    CameraLocation = K2_GetActorLocation(CameraManager)
 
-    // ---- 2. 判断激活条件 ----
-    // 条件：组件未被要求“仅由Pawn激活” 或 Pawn 当前在激活边界内
-    bool bShouldActivate = (!MyComponentActivatedByPawnProximity) || PawnInsideActivationBounds
+    # 3. 获取相机旋转
+    CameraRotation = GetCameraRotation(CameraManager)   # PlayerCameraManager 的成员函数
 
-    if (!bShouldActivate) {
-        // 不满足激活条件，跳过后续
-        return
-    }
+    # 4. 获取 Mesh 组件的位置
+    MeshLocation = K2_GetComponentLocation(InMesh)
 
-    // ---- 3. 执行激活后的逻辑（ExecutionSequence_0） ----
-    // 3.1 分支 then_0：根据可见性决定是否更新计时器
-    if (PauseSimWhenNotVisible) {
-        // 获取所属 Actor
-        AActor* OwnerActor = GetOwner()
-        // 检查最近是否被渲染（延迟容差 WaitBeforePause，默认 0.2 秒）
-        bool bWasRecentlyRendered = OwnerActor->WasRecentlyRendered(WaitBeforePause)
-        if (bWasRecentlyRendered) {
-            // 如果初始化已完成，更新时间计数器
-            if (MyInitDone) {
-                // 更新 TimeCounter（累加 DeltaSeconds）
-                TimeCounter += DeltaSeconds
-                // 更新 TimeSinceLastClick（累加 DeltaSeconds）
-                TimeSinceLastClick += DeltaSeconds
-                // 更新 TimeSinceLastCollision（累加 DeltaSeconds）
-                TimeSinceLastCollision += DeltaSeconds
-            }
-        }
-        // 若不可见，则不更新任何计时器
-    } else {
-        // 不暂停时，直接更新计时器（前提是初始化已完成）
-        if (MyInitDone) {
-            TimeCounter += DeltaSeconds
-            TimeSinceLastClick += DeltaSeconds
-            TimeSinceLastCollision += DeltaSeconds
-        }
-    }
+    # 5. 计算从相机位置指向 Mesh 位置的朝向旋转（即相机看向 Mesh 的方向）
+    LookAtRot = FindLookAtRotation(Start=CameraLocation, Target=MeshLocation)
 
-    // 3.2 分支 then_1：重置 DoOnce 宏（允许再次执行初始化/停用逻辑）
-    // 重置 MacroInstance_3 的 DoOnce，使得下一次可再次触发
-    ResetDoOnce_3()
-    // MacroInstance_3 的 Completed 会重置 MacroInstance_2，因此也间接重置了 MacroInstance_2
-    // 在蓝图中，MacroInstance_3 的 Completed 连到 MacroInstance_2 的 Reset
-    // 因此实际上执行了：
-    ResetDoOnce_2()
+    # 6. 分解 LookAtRot 为 Roll, Pitch, Yaw（对应 X, Y, Z）
+    (Roll, Pitch, Yaw) = BreakRotator(LookAtRot)
 
-    // ---- 4. 处理 PAINTER V2 的停用逻辑 ----
-    // 这部分通过 DoOnce 保证只执行一次（直到被重置）
-    if (MyUsePAINTER_V2_ToTrackObjects) {
-        // 检查 MyNiagaraBasedPainter 是否有效
-        if (IsValid(MyNiagaraBasedPainter)) {
-            // 停用该 Niagara 组件
-            MyNiagaraBasedPainter->Deactivate()
-            // Deactivate 执行后会触发重置 MacroInstance_3（通过 Knot 链）
-            // 注意：ResetDoOnce_3 已经在上面执行过一次，但 Deactivate 后的重置是额外的，
-            // 但根据蓝图，Deactivate 的 then 分支会连到 MacroInstance_3 的 Reset，
-            // 因此实际上 Deactivate 后还会再次重置 MacroInstance_3，但逻辑上无冲突。
-        }
-    }
+    # 7. 对 Pitch 和 Yaw 各加 90 度（用于调整轴向）
+    Pitch2 = Pitch + 90.0
+    Yaw2   = Yaw + 90.0
+    # 重新组合为旋转（Roll 置 0）
+    ModifiedLookAtRot = MakeRotator(Roll=0.0, Pitch=Pitch2, Yaw=Yaw2)
 
-    // 注：若 MyUsePAINTER_V2_ToTrackObjects 为假，则跳过此段。
+    # 8. 另一分支：组合固定旋转与相机旋转
+    FixedRot = (0.0, 90.0, 90.0)   # 常量，来自 ComposeRotators 的 A 默认值
+    ComposedCameraRot = ComposeRotators(A=FixedRot, B=CameraRotation)
+
+    # 9. 根据 UseLegacyFacing 选择旋转
+    if UseLegacyFacing:
+        SelectedRot = ModifiedLookAtRot   # Select_0 的 Option 1（True 分支）
+    else:
+        SelectedRot = ComposedCameraRot   # Select_0 的 Option 0（False 分支）
+
+    # 10. 根据 LockY 决定最终旋转
+    if LockY:
+        # 用原始 LookAtRot 的 Yaw 构造一个仅含 Pitch（=Yaw）的旋转
+        TempRot = MakeRotator(Roll=0.0, Pitch=Yaw, Yaw=0.0)
+        # 将此旋转与 TraceMeshInitRot 组合（A 组合 B）
+        FinalRot = ComposeRotators(A=TempRot, B=TraceMeshInitRot)
+    else:
+        FinalRot = SelectedRot
+
+    # 11. 设置 InMesh 的世界旋转（bSweep=false, bTeleport=false）
+    K2_SetWorldRotation(Target=InMesh, NewRotation=FinalRot, bSweep=False, bTeleport=False)

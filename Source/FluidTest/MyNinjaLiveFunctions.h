@@ -9,6 +9,7 @@
 #include "MyNinjaLiveFunctions.generated.h"
 
 class AMyNinjaLiveMemoryPoolManager;
+class USceneComponent;
 
 /** NinjaLiveFunctions 蓝图函数库的 C++ 迁移入口。 */
 UCLASS()
@@ -53,5 +54,14 @@ public:
 		UDataTable*& LoadedDataTable,
 		FString& LoadedDataTablePath,
 		TMap<FString, double>& PresetMap);
+
+	/** 按原蓝图的相机旋转、LookAt 与 LockY 分支设置组件世界旋转。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Camera", meta = (WorldContext = "WorldContextObject"))
+	static void MyCameraFacing(
+		UObject* WorldContextObject,
+		USceneComponent* InMesh,
+		bool UseLegacyFacing,
+		bool LockY,
+		FRotator TraceMeshInitRot);
 	
 };

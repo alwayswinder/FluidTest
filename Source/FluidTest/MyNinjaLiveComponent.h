@@ -63,6 +63,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	bool MyAfterTickDelay(double DeltaSeconds);
 
+	/** 根据鼠标与重叠状态更新当前画笔强度。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
+	void MyMuteBrush();
+
 	// ------------------------------------------------------------------
 	// 临时 Name 数组 TempArray0~39（蓝图类型 TArray<FName>）
 	// ------------------------------------------------------------------
@@ -433,6 +437,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MyCameraFacingTraceMesh = false;
 
+	/** CameraFacing 选择原蓝图中的 LookAt 朝向路径。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
+	bool MyUseLegacyCameraFacing = false;
+
+	/** CameraFacing 的 LockY 路径，会组合初始旋转偏移。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
+	bool MyCameraFacingLockYAxis = false;
+
+	/** 按 CameraFacing 复合节点更新 TraceMesh 的相机朝向。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Compatibility")
+	void MyCameraFacing();
+
 	/** 旧版单目标模式 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MySingleTargetMode_LEGACY = false;
@@ -747,6 +763,15 @@ public:
 	double MyBrushSize = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushStrength = 0.0;
+	/** 当前画笔是否与交互区域重叠。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	bool MyOverlap1 = false;
+	/** 当前鼠标按钮是否按下。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	bool MyMousePressed = false;
+	/** MuteBrush 计算出的实际画笔强度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyBrushStrengthTemp1 = 0.001;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushHardness = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")

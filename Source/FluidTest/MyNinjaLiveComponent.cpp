@@ -124,6 +124,27 @@ bool UMyNinjaLiveComponent::MyAfterTickDelay(double DeltaSeconds)
 	return false;
 }
 
+void UMyNinjaLiveComponent::MyMuteBrush()
+{
+	const double BrushActiveValue = (MyOverlap1 || MyMousePressed) ? 1.0 : 0.0;
+	MyBrushStrengthTemp1 = (BrushActiveValue * MyBrushStrength) + 0.001;
+}
+
+void UMyNinjaLiveComponent::MyCameraFacing()
+{
+	if (!MyCameraFacingTraceMesh)
+	{
+		return;
+	}
+
+	UMyNinjaLiveFunctions::MyCameraFacing(
+		this,
+		MyTraceMeshComponent.Get(),
+		MyUseLegacyCameraFacing,
+		MyCameraFacingLockYAxis,
+		MyTraceMeshInitialRotation);
+}
+
 void UMyNinjaLiveComponent::MyResetTempArrays()
 {
 	// 清空 TempArray0~39

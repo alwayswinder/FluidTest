@@ -3,6 +3,10 @@
 #include "MyNinjaLiveFunctions.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Components/SceneComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "UObject/UnrealType.h"
 
@@ -205,4 +209,37 @@ void UMyNinjaLiveFunctions::MyPresetLoader(
 		const FString RoundedValue = FText::AsNumber(ParsedValue, &NumberFormat).ToString().Replace(TEXT(","), TEXT("."));
 		PresetMap.Add(RowPair.Key.ToString(), FCString::Atod(*RoundedValue));
 	}
+}
+
+void UMyNinjaLiveFunctions::MyCameraFacing(
+	UObject* WorldContextObject,
+	USceneComponent* InMesh,
+	bool UseLegacyFacing,
+	bool LockY,
+	FRotator TraceMeshInitRot)
+{
+	if (!IsValid(WorldContextObject) || !IsValid(InMesh))
+	{
+		return;
+	}
+
+	APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(WorldContextObject, 0);
+	if (!IsValid(CameraManager))
+	{
+		return;
+	}
+
+	const FRotator LookAtRotation = UKismetMathLibrary::FindLookAtRotation(
+		CameraManager->K2_GetActorLocation(), InMesh->GetComponentLocation());
+	const FRotator LegacyFacingRotation = UKismetMathLibrary::ComposeRotators(
+		FRotator(0.0, 90.0, 90.0), CameraManager->GetCameraRotation());
+	const FRotator LookAtFacingRotation(0.0, LookAtRotation.Yaw + 90.0, LookAtRotation.Pitch + 90.0);
+	FRotator FacingRotation = UseLegacyFacing ? LookAtFacingRotation : LegacyFacingRotation;
+	if (LockY)
+	{
+		FacingRotation = UKismetMathLibrary::ComposeRotators(
+			FRotator(LookAtRotation.Yaw, 0.0, 0.0), TraceMeshInitRot);
+	}
+
+	InMesh->SetWorldRotation(FacingRotation);
 }
