@@ -1,75 +1,71 @@
-// ===== 事件：AfterCreateRT =====
-// 在渲染目标创建完成后触发，执行组件初始化流程。
+// ===== 自定义事件：AfterTickDelay =====
+// 在每一帧或定时触发，用于管理组件激活状态、计时器更新和 PAINTER V2 的停用逻辑。
 
-AfterCreateRT():
+AfterTickDelay():
 
-    // ---- 分支 A：核心初始化（执行顺序：then_0） ----
-    // 1. 创建动态材质实例
-    MyCreateDynamicMaterialInstances()
-
-    // 2. 收集所有实现了 NinjaLiveInterface 的 Actor，并从排除列表中移除自身
-    Array<AActor*> InterfaceActors = GetAllActorsWithInterface(NinjaLiveInterface)
-    NinjaLIVETraceExclude = InterfaceActors                     // 赋给排除列表
-    Array_RemoveItem(NinjaLIVETraceExclude, GetOwner())         // 移除自身
-
-    // 3. 启动连续交互管理
-    MyManageContinuousInteractions()
-
-    // 4. 执行子步骤（顺序执行）
-    MyAlternativeInputsFedToCompositeDensityInput()      // 替换复合密度输入
-
-    // 5. 创建并设置输出材质（三步）
-    MyCreateOutputMaterialAndSetItOnTargetsStep01()
-    MyCreateOutputMaterialAndSetItOnTargetsStep02()
-    MyCreateOutputMaterialAndSetItOnTargetsStep03()
-
-    // 6. 可选：抑制 UE5.1 纹理涂抹（TSR 闪烁修复）
-    if (SupressUE51TextureSmearing) {
-        ExecuteConsoleCommand("r.TSR.ShadingRejection.Flickering 0")
-        ExecuteConsoleCommand("r.TSR.ShadingRejection.Flickering.Period 0")
+    // ---- 1. 检查是否被禁用或阻塞 ----
+    if (MyDisableComponent || TickBlocker) {
+        // 若为真，直接返回，不执行任何操作
+        return
     }
 
-    // 7. 初始化 Painter V2
-    MyInitPainterV2()
+    // ---- 2. 判断激活条件 ----
+    // 条件：组件未被要求“仅由Pawn激活” 或 Pawn 当前在激活边界内
+    bool bShouldActivate = (!MyComponentActivatedByPawnProximity) || PawnInsideActivationBounds
 
-    // 8. 设置初始化完成标志
-    MyInitDone = true
-    MyMaterialInstacesDone = true
-
-    // 9. 显示追踪网格组件
-    SetVisibility(MyTraceMeshComponent, true, false)   // bPropagateToChildren = false
-
-
-    // ---- 分支 B：加载预设（在分支 A 完成后执行，顺序 then_1） ----
-    // 如果默认预设有效，则加载它
-    if (IsValid(DefaultPreset)) {
-        // 获取预设的显示名称作为实际预设名
-        ActualPreset = GetDisplayName(DefaultPreset)
-        ForceAutoLoadPreset = true
-
-        // 清空当前预设映射
-        PresetMap.Empty()
-
-        // 调用预设加载器（返回 LoadedDataTable, LoadedDataTablePath, PresetMap）
-        UDataTable* LoadedDT
-        string LoadedPath
-        TMap<FString, double> LoadedMap
-        (LoadedDT, LoadedPath, LoadedMap) = MyPresetLoader(
-            PresetName = ActualPreset,
-            AssetPath = PresetSearchPaths,
-            AssetTrimmedName = MyPresetNameFilterCriteria,
-            ForcePreferredPreset = ForceAutoLoadPreset,
-            PreferredPreset = DefaultPreset
-        )
-
-        // 存储加载结果
-        MyLoadedDataTable = LoadedDT
-        MyLoadedDataTablePath = LoadedPath
-        PresetMap = LoadedMap
-
-        // 解析预设映射并设置成员变量
-        MyParsePresetMapAndSetVariables(PresetMap)
-
-        // 加载纹理资源
-        MyLoadTextures()
+    if (!bShouldActivate) {
+        // 不满足激活条件，跳过后续
+        return
     }
+
+    // ---- 3. 执行激活后的逻辑（ExecutionSequence_0） ----
+    // 3.1 分支 then_0：根据可见性决定是否更新计时器
+    if (PauseSimWhenNotVisible) {
+        // 获取所属 Actor
+        AActor* OwnerActor = GetOwner()
+        // 检查最近是否被渲染（延迟容差 WaitBeforePause，默认 0.2 秒）
+        bool bWasRecentlyRendered = OwnerActor->WasRecentlyRendered(WaitBeforePause)
+        if (bWasRecentlyRendered) {
+            // 如果初始化已完成，更新时间计数器
+            if (MyInitDone) {
+                // 更新 TimeCounter（累加 DeltaSeconds）
+                TimeCounter += DeltaSeconds
+                // 更新 TimeSinceLastClick（累加 DeltaSeconds）
+                TimeSinceLastClick += DeltaSeconds
+                // 更新 TimeSinceLastCollision（累加 DeltaSeconds）
+                TimeSinceLastCollision += DeltaSeconds
+            }
+        }
+        // 若不可见，则不更新任何计时器
+    } else {
+        // 不暂停时，直接更新计时器（前提是初始化已完成）
+        if (MyInitDone) {
+            TimeCounter += DeltaSeconds
+            TimeSinceLastClick += DeltaSeconds
+            TimeSinceLastCollision += DeltaSeconds
+        }
+    }
+
+    // 3.2 分支 then_1：重置 DoOnce 宏（允许再次执行初始化/停用逻辑）
+    // 重置 MacroInstance_3 的 DoOnce，使得下一次可再次触发
+    ResetDoOnce_3()
+    // MacroInstance_3 的 Completed 会重置 MacroInstance_2，因此也间接重置了 MacroInstance_2
+    // 在蓝图中，MacroInstance_3 的 Completed 连到 MacroInstance_2 的 Reset
+    // 因此实际上执行了：
+    ResetDoOnce_2()
+
+    // ---- 4. 处理 PAINTER V2 的停用逻辑 ----
+    // 这部分通过 DoOnce 保证只执行一次（直到被重置）
+    if (MyUsePAINTER_V2_ToTrackObjects) {
+        // 检查 MyNiagaraBasedPainter 是否有效
+        if (IsValid(MyNiagaraBasedPainter)) {
+            // 停用该 Niagara 组件
+            MyNiagaraBasedPainter->Deactivate()
+            // Deactivate 执行后会触发重置 MacroInstance_3（通过 Knot 链）
+            // 注意：ResetDoOnce_3 已经在上面执行过一次，但 Deactivate 后的重置是额外的，
+            // 但根据蓝图，Deactivate 的 then 分支会连到 MacroInstance_3 的 Reset，
+            // 因此实际上 Deactivate 后还会再次重置 MacroInstance_3，但逻辑上无冲突。
+        }
+    }
+
+    // 注：若 MyUsePAINTER_V2_ToTrackObjects 为假，则跳过此段。

@@ -79,6 +79,51 @@ void UMyNinjaLiveComponent::MyRePlay()
 	MyAfterBind();
 }
 
+bool UMyNinjaLiveComponent::MyAfterTickDelay(double DeltaSeconds)
+{
+	if (MyDisableComponent || MyTickBlocker)
+	{
+		return false;
+	}
+
+	const bool bShouldActivate = !MyComponentActivatedByPawnProximity || MyPawnInsideActivationBounds;
+	if (bShouldActivate)
+	{
+		bool bCollisionTimerUpdated = false;
+		AActor* OwnerActor = GetOwner();
+		const bool bCanUpdateTimers = !MyPauseSimWhenNotVisible ||
+			(IsValid(OwnerActor) && OwnerActor->WasRecentlyRendered(MyWaitBeforePause));
+		if (MyInitDone && bCanUpdateTimers)
+		{
+			MyTimeSinceLastClick += DeltaSeconds;
+			MyTimeSinceLastCollision += DeltaSeconds;
+			bCollisionTimerUpdated = true;
+		}
+
+		// ExecutionSequence 的 then_1：DoOnce_3 仅在重新激活后重置 DoOnce_2 一次。
+		if (!MyAfterTickDelayRearmDoOnceClosed)
+		{
+			MyAfterTickDelayRearmDoOnceClosed = true;
+			MyAfterTickDelayDeactivateDoOnceClosed = false;
+		}
+		return bCollisionTimerUpdated;
+	}
+
+	// 未激活分支进入 DoOnce_2，故每次离开激活状态最多停用 Painter v2 一次。
+	if (!MyAfterTickDelayDeactivateDoOnceClosed)
+	{
+		MyAfterTickDelayDeactivateDoOnceClosed = true;
+		if (MyUsePAINTER_V2_ToTrackObjects && IsValid(MyNiagaraBasedPainter))
+		{
+			MyNiagaraBasedPainter->Deactivate();
+			// Deactivate 的 then 引脚重置 DoOnce_3，允许下一次激活重新武装 DoOnce_2。
+			MyAfterTickDelayRearmDoOnceClosed = false;
+		}
+	}
+
+	return false;
+}
+
 void UMyNinjaLiveComponent::MyResetTempArrays()
 {
 	// 清空 TempArray0~39

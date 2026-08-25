@@ -59,6 +59,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
 	void MyRePlay();
 
+	/** 执行延迟 Tick；仅在碰撞计时器实际更新时返回 true。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
+	bool MyAfterTickDelay(double DeltaSeconds);
+
 	// ------------------------------------------------------------------
 	// 临时 Name 数组 TempArray0~39（蓝图类型 TArray<FName>）
 	// ------------------------------------------------------------------
@@ -322,6 +326,36 @@ public:
 	/** 材质实例是否已创建完成 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|System")
 	bool MyMaterialInstacesDone = false;
+
+	/** 阻止本帧延迟 Tick 的执行。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	bool MyTickBlocker = false;
+
+	/** Pawn 当前是否处在模拟激活范围内。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	bool MyPawnInsideActivationBounds = false;
+
+	/** Owner 不可见时暂停模拟与 Painter v2。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	bool MyPauseSimWhenNotVisible = false;
+
+	/** 判定 Owner 最近可见时使用的时间容差。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation", meta = (ClampMin = "0.0"))
+	float MyWaitBeforePause = 0.2f;
+
+	/** 距离上一次点击与碰撞的累计时间。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	double MyTimeSinceLastClick = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	double MyTimeSinceLastCollision = 0.0;
+
+	/** AfterTickDelay 中与蓝图 DoOnce_2 对应的停用门状态。 */
+	UPROPERTY(Transient)
+	bool MyAfterTickDelayDeactivateDoOnceClosed = false;
+
+	/** AfterTickDelay 中与蓝图 DoOnce_3 对应的重新武装门状态。 */
+	UPROPERTY(Transient)
+	bool MyAfterTickDelayRearmDoOnceClosed = false;
 
 	/** 预设名过滤条件 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|System")
