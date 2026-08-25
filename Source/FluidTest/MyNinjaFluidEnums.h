@@ -61,6 +61,20 @@ enum class EMyQuantizerMode : uint8
 	Step500mTextureOffsetAutomatic = 14 UMETA(DisplayName = "Step: 500 meters - Texture Offset Automatic")
 };
 
+/**
+ * TraceMesh 的量化移动锁定轴（对齐蓝图 QuantizerAxisIgnore）。
+ */
+UENUM(BlueprintType)
+enum class EMyQuantizerAxisIgnore : uint8
+{
+	X = 0 UMETA(DisplayName = "X"),
+	Y = 1 UMETA(DisplayName = "Y"),
+	Z = 2 UMETA(DisplayName = "Z"),
+	Camera = 3 UMETA(DisplayName = "CAMERA"),
+	None = 4 UMETA(DisplayName = "NONE"),
+	All = 5 UMETA(DisplayName = "ALL")
+};
+
 /** 模拟精度（对齐蓝图 SimPrecision_Enum）。 */
 UENUM(BlueprintType)
 enum class EMySimPrecision : uint8

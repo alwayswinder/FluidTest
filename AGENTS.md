@@ -57,7 +57,8 @@
   `AfterTickDelay（事件图）→ MyAfterTickDelay`、
   `MuteBrush（复合节点）→ MyMuteBrush`、
   `CameraFacing（复合节点）→ MyCameraFacing`、
-  `SingleTargetVelocity（复合节点）→ MySingleTargetVelocity`
+  `SingleTargetVelocity（复合节点）→ MySingleTargetVelocity`、
+  `CoreFluidsimOPs（复合节点）→ MyCoreFluidsimOPs`
 
 ## 常用操作
 

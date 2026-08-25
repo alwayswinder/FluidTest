@@ -27,8 +27,10 @@ class UMediaTexture;
 class UNiagaraComponent;
 class UNiagaraSystem;
 class UTexture2D;
+class UBoxComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FMyComponentRePlayEvent);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMyWorldSpaceOffsetEvent, FVector, TraceMeshPos);
 
 /**
  * NinjaLiveComponent 蓝图组件的 C++ 父类。
@@ -50,6 +52,10 @@ public:
 	/** TraceMesh 准备完成后可由 Owner 触发的重播事件。 */
 	UPROPERTY(BlueprintAssignable, Category = "FluidSim|Init")
 	FMyComponentRePlayEvent MyComponentRePlayEvent;
+
+	/** TraceMesh 世界位置变化时广播，对应 CoreFluidsimOPs 的 WorldSpaceOffset 委托。 */
+	UPROPERTY(BlueprintAssignable, Category = "FluidSim|Trace")
+	FMyWorldSpaceOffsetEvent MyWorldSpaceOffset;
 
 	/** TraceMesh 就绪后完成首次初始化与重播事件绑定。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
@@ -672,6 +678,44 @@ public:
 	/** 是否使用半分辨率压力和散度缓冲区。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	bool MyHalfResPressureAndDivergenceBuffers = false;
+
+	/** Pressure Solver 1 在当前 LOD 下的迭代次数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	int32 MyFluidSolver1Iterations = 0;
+
+	/** Pressure Solver 1 的最大迭代次数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	int32 MyPressureSolver1MaxIterations = 0;
+
+	/** Pressure Solver 2 的最大迭代次数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	int32 MyPressureSolver2MaxIterations = 0;
+
+	/** 压力解算器随 LOD 变化的核缩放系数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	double MyPressureSolver2KernelReduction = 0.0;
+
+	/** InputMaterials 的当前材质索引。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
+	int32 MyInputMaterialSelected = 0;
+
+	/** TraceMesh 在量化模式下锁定移动的轴枚举值。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	EMyQuantizerAxisIgnore MyMovementIsLockedOnThisAxis = EMyQuantizerAxisIgnore::X;
+
+	/** 跟随 TraceMesh 的可选交互体积。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	TObjectPtr<UBoxComponent> MyInteractionVolume = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	bool MyInteractionVolumeIsPresent = false;
+
+	/** LWC 关闭时是否跳过 Niagara 的位置参数写入。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	bool MyLWCAvoidNiagaraWarnings = false;
+
+	/** 执行核心流体求解步骤；ThenExec 与 PainterV2Exec 分别对应原复合节点的两个执行出口。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
+	void MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exec);
 
 	/** 是否连接 Painter v2 追踪点生成轨迹线。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")

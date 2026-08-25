@@ -1,54 +1,356 @@
-# 函数：CameraFacing
-# 输入参数：
-#   InMesh: SceneComponent 引用
-#   UseLegacyFacing: bool
-#   LockY: bool
-#   TraceMeshInitRot: Rotator
-# 输出：无（修改 InMesh 的世界旋转）
+def CoreFluidsimOPs():
+    # ============================================================
+    # 1. 输入材质绘制（条件）
+    # ============================================================
+    # 节点: IfThenElse_82
+    if UseInputMaterials:  # 布尔变量
+        # 获取输入材质数组中的元素
+        input_material = MyInputMaterials[InputMaterialSelected]  # 数组索引
+        # 从渲染目标映射中查找 "RT_DensityInputMaterial"
+        rt_density_input = MyRenderTargetsMap.Find("RT_DensityInputMaterial")
+        # 绘制
+        DrawMaterialToRenderTarget(rt_density_input, input_material)
+    # else 直接跳过
 
-def CameraFacing(InMesh, UseLegacyFacing, LockY, TraceMeshInitRot):
-    # 1. 获取玩家相机管理器（WorldContextObject 隐含自函数上下文）
-    CameraManager = GetPlayerCameraManager(WorldContextObject, PlayerIndex=0)
+    # ============================================================
+    # 2. 执行序列 then_0 (位置更新与参数设置)
+    # ============================================================
+    # 节点: ExecutionSequence_0 的 then_0 输出
+    # 2.1 广播委托
+    WorldSpaceOffset.Broadcast(MyTraceMeshPos)  # 向量
 
-    # 2. 获取相机位置（CameraManager 是 Actor）
-    CameraLocation = K2_GetActorLocation(CameraManager)
+    # 2.2 条件：是否执行位置量化/锁定
+    cond_move = (MyQuantizerStepSize > 0) or (MovementIsLockedOnThisAxis != 4)  # 枚举值 4 表示忽略
+    if cond_move:
+        # 2.2.1 设置跟踪网格组件位置
+        K2_SetWorldLocation(
+            Target=MyTraceMeshComponent,
+            NewLocation=MyTraceMeshPos,
+            bSweep=False,
+            bTeleport=True
+        )
+        # 2.2.2 如果交互体积存在，也设置其位置
+        if InteractionVolumeIsPresent:
+            K2_SetWorldLocation(
+                Target=InteractionVolume,
+                NewLocation=MyTraceMeshPos,
+                bSweep=False,
+                bTeleport=True
+            )
+        # else 跳过
 
-    # 3. 获取相机旋转
-    CameraRotation = GetCameraRotation(CameraManager)   # PlayerCameraManager 的成员函数
+        # 2.2.3 根据 LWC 支持选择参数设置方式
+        # 选择目标材质实例（根据 Secondary/Tertiary 是否存在）
+        # 这里用伪变量 mat_instance 表示最终选中的材质
+        # 由 Select_2 和 Select_1 决定（它们分别用于不同函数调用）
+        # 但为了清晰，我们按实际执行顺序：
+        # 先执行 IfThenElse_3 分支（条件 MyLWCSupport）
+        if MyLWCSupport:
+            # 将位置转为 Vector4（X,Y,Z,W=0）
+            vec4 = MakeVector4(X=MyTraceMeshPos.X, Y=MyTraceMeshPos.Y, Z=MyTraceMeshPos.Z, W=0.0)
+            # 选择材质实例：Select_2 的输出（优先使用 Secondary 或 Tertiary）
+            mat_for_double = Select_2_output  # 实际由 MySecondaryMaterialsPresent 和 MyTertiaryMaterialsPresent 决定
+            # 设置双精度向量参数
+            SetDoubleVectorParameterValue(
+                Target=mat_for_double,
+                ParameterName="TraceMeshPosDouble",
+                Value=vec4
+            )
+            # 然后执行 IfThenElse_9（条件 MyMaterialCollectionPresent）
+            if MyMaterialCollectionPresent:
+                # 设置材质参数集合中的向量参数（同样使用 LinearColor）
+                linear_col = Conv_VectorToLinearColor(MyTraceMeshPos)
+                SetVectorParameterValue(
+                    Collection=MySetInternalParamsToMaterialParamCollection,
+                    ParameterName="TraceMeshPos",
+                    ParameterValue=linear_col
+                )
+            # else 跳过
+        else:
+            # 非 LWC：使用单精度向量
+            linear_col = Conv_VectorToLinearColor(MyTraceMeshPos)
+            # 选择材质实例：Select_1 的输出（优先级 Tertiary 高于 Secondary）
+            mat_for_single = Select_1_output
+            SetVectorParameterValue(
+                Target=mat_for_single,
+                ParameterName="TraceMeshPos",
+                Value=linear_col
+            )
+            # 同样检查材质参数集合
+            if MyMaterialCollectionPresent:
+                SetVectorParameterValue(
+                    Collection=MySetInternalParamsToMaterialParamCollection,
+                    ParameterName="TraceMeshPos",
+                    ParameterValue=linear_col
+                )
+            # else 跳过
 
-    # 4. 获取 Mesh 组件的位置
-    MeshLocation = K2_GetComponentLocation(InMesh)
+        # 2.2.4 处理 Niagara 系统
+        if MyNiagaraSystemsPresent:
+            # ForEachLoop 遍历 MyNiagaraSystemsToDrive 数组
+            for niagara_comp in MyNiagaraSystemsToDrive:
+                if MyLWCSupport:
+                    niagara_comp.SetVariablePosition(
+                        InVariableName="TraceMeshPosDouble",
+                        InValue=MyTraceMeshPos
+                    )
+                else:
+                    # 调用 FXSystemComponent 的 SetVectorParameter
+                    niagara_comp.SetVectorParameter(
+                        ParameterName="TraceMeshPos",
+                        Param=MyTraceMeshPos
+                    )
+        # else 跳过
+    # else (cond_move 为假) 跳过上述所有位置设置，直接进入下一步
 
-    # 5. 计算从相机位置指向 Mesh 位置的朝向旋转（即相机看向 Mesh 的方向）
-    LookAtRot = FindLookAtRotation(Start=CameraLocation, Target=MeshLocation)
+    # ============================================================
+    # 3. 执行序列 then_1 (绘图与模拟迭代)
+    # ============================================================
+    # 节点: ExecutionSequence_0 的 then_1 输出
 
-    # 6. 分解 LookAtRot 为 Roll, Pitch, Yaw（对应 X, Y, Z）
-    (Roll, Pitch, Yaw) = BreakRotator(LookAtRot)
+    # 3.1 判断是否启用双缓冲画刷
+    if not MyEnablePainterDoubleBuffering:   # 取反
+        # 3.1.1 判断简单画刷模式
+        if MySimplePainterMode:
+            # 简单模式
+            # 绘制 RT_Composite
+            rt_composite = MyRenderTargetsMap.Find("RT_Composite")
+            material_composite = MyMICompositeAndGradient
+            DrawMaterialToRenderTarget(rt_composite, material_composite)
 
-    # 7. 对 Pitch 和 Yaw 各加 90 度（用于调整轴向）
-    Pitch2 = Pitch + 90.0
-    Yaw2   = Yaw + 90.0
-    # 重新组合为旋转（Roll 置 0）
-    ModifiedLookAtRot = MakeRotator(Roll=0.0, Pitch=Pitch2, Yaw=Yaw2)
+            # 判断是否绘制输出 RT (条件为 OR)
+            if MyMake1stOutputAvailableFor2ndOutput or MyMake1stOutputAvailableForNiagara:
+                # 绘制 RT_Output
+                rt_output = MyRenderTargetsMap.Find("RT_Output")
+                material_output = MyMIOutput
+                DrawMaterialToRenderTarget(rt_output, material_output)
 
-    # 8. 另一分支：组合固定旋转与相机旋转
-    FixedRot = (0.0, 90.0, 90.0)   # 常量，来自 ComposeRotators 的 A 默认值
-    ComposedCameraRot = ComposeRotators(A=FixedRot, B=CameraRotation)
+                # 再判断简单画刷模式 (再次判断，但此时已为 True)
+                if MySimplePainterMode:   # 始终为 True
+                    # 直接跳转到出口 PainterV2Exec (不再执行后续)
+                    goto PainterV2Exec
+                else:
+                    # 此分支不会执行，因为 MySimplePainterMode 为 True
+                    pass
+            else:
+                # 不绘制 RT_Output，但同样进入后续判断
+                # 此时执行流经过 Knot_439 -> Knot_438 -> IfThenElse_11
+                # 进入 IfThenElse_11 (条件仍为 MySimplePainterMode)
+                if MySimplePainterMode:   # True
+                    goto PainterV2Exec
+                else:
+                    # 不会执行
+                    pass
+        else:
+            # 非简单画刷模式 (复杂模式)
+            # 这一部分包含大量材质参数设置和绘制，顺序如下：
 
-    # 9. 根据 UseLegacyFacing 选择旋转
-    if UseLegacyFacing:
-        SelectedRot = ModifiedLookAtRot   # Select_0 的 Option 1（True 分支）
+            # 3.1.2 首先绘制 RT_Composite (同上)
+            rt_composite = MyRenderTargetsMap.Find("RT_Composite")
+            material_composite = MyMICompositeAndGradient
+            DrawMaterialToRenderTarget(rt_composite, material_composite)
+
+            # 3.1.3 设置材质参数 (用于碰撞画刷)
+            # 获取纹理 RT_Painter (从 Map 查找 "RT_Painter")
+            rt_painter = MyRenderTargetsMap.Find("RT_Painter")
+            # 设置纹理参数到 MyMICollisionPainterOffset 材质
+            SetTextureParameterValue(
+                Target=MyMICollisionPainterOffset,
+                ParameterName="Texture",
+                Value=rt_painter
+            )
+            # 设置标量参数 WorldOffsetDeltaX 和 WorldOffsetDeltaY (此处值可能为0，但未连接)
+            # 实际上这些参数在后续设置，但此处先设置纹理。
+            # 接下来判断是否使用简单画刷模式 (但此处为 False)
+            # 然后进行一系列标量参数设置：
+            # 设置 MyMICollisionPainterLine 材质的 VeloMult 参数为 MyVeloFromBrushMotion
+            SetScalarParameterValue(
+                Target=MyMICollisionPainterLine,   # 或者 MyMICollisionPainterDot，根据条件选择
+                ParameterName="VeloMult",
+                Value=MyVeloFromBrushMotion
+            )
+            # 设置 MyMICollisionPainterLine 的 DensityTxtScale 和 DensityTxtMult
+            SetScalarParameterValue(
+                Target=MyMICollisionPainterLine,
+                ParameterName="DensityTxtScale",
+                Value=MyDensityTxtScale
+            )
+            SetScalarParameterValue(
+                Target=MyMICollisionPainterLine,
+                ParameterName="DensityTxtMult",
+                Value=MyDensityTxtMult
+            )
+            # 然后绘制 RT_Composite 再次? 实际上后续有 DrawMaterialToRenderTarget 使用这些材质绘制到不同 RT。
+            # 这里逻辑复杂，但总体是多个 DrawMaterialToRenderTarget 调用，分别绘制到 RT_Advection, RT_PressureDivergenceTemp, RT_PressureDivergence 等。
+
+            # 为了简明，我们列出所有绘图调用及其条件：
+            # a) 绘制 RT_Advection (条件：MySimplePainterMode 为 False)
+            if not MySimplePainterMode:  # 此处为 True
+                rt_advection = MyRenderTargetsMap.Find("RT_Advection")
+                material_advection = MyMIAdvection
+                DrawMaterialToRenderTarget(rt_advection, material_advection)
+
+            # b) 绘制 RT_PressureDivergenceTemp (在循环外？实际上在一个 ForLoop 中)
+            # 但 ForLoop 是在 ExecutionSequence_1 的 then_1 分支中。
+            # 由于 MySimplePainterMode 为 False，执行流进入 IfThenElse_11 的 false 分支，
+            # 然后进入 ExecutionSequence_1 (见下面)
+
+            # 3.1.4 进入 ExecutionSequence_1 (顺序执行)
+            # then_0: 绘制 RT_Advection (如果尚未绘制)
+            # 但注意，如果 MySimplePainterMode 为 False，上面的绘制可能已经执行，这里再次绘制？根据蓝图，ExecutionSequence_1 的 then_0 直接连接 DrawMaterialToRenderTarget，可能重复，但实际顺序如此。
+            # 我们按照蓝图连接，即使重复也列出。
+            rt_advection = MyRenderTargetsMap.Find("RT_Advection")
+            material_advection = MyMIAdvection
+            DrawMaterialToRenderTarget(rt_advection, material_advection)
+
+            # then_1: 进入 ForLoop (压力迭代)
+            # 计算循环次数 N
+            # 先计算迭代次数基准:
+            # 如果 MyLOD1ReduceSimQuality 为 True，则迭代次数 = min(FluidSolver1Iterations, PressureSolver1_MaxIterations)
+            # 否则迭代次数 = 0? 实际上通过 Select_0 选择:
+            # Option 0 = PressureSolver2_MaxIterations - 1
+            # Option 1 = max( (选中的值 - 2), 0 )? 具体：
+            # 计算 A = min(FluidSolver1Iterations, PressureSolver1_MaxIterations)
+            # 然后 B = SelectInt( A, PressureSolver1_MaxIterations? 实际上更复杂 )
+            # 但最后 Select_0 的 Index 是 MyUsePressureSolver1DefaultIs2
+            # 如果 Index 为 False，则 N = PressureSolver2_MaxIterations - 1
+            # 如果 Index 为 True，则 N = max( (A - 2), 0 )? 等等。
+            # 我们直接按蓝图逻辑：
+            # 先计算 A = min(FluidSolver1Iterations, PressureSolver1_MaxIterations)
+            # 然后 B = SelectInt(A, 0?, 条件 MyLOD1ReduceSimQuality) 实际上 SelectInt 选择 A 或 0? 看连接：A= A, B= 0? 但 B 来自 Knot_489，而 Knot_489 来自 PressureSolver1_MaxIterations 本身？需要仔细看。
+            # 节点 K2Node_CallFunction_608 (SelectInt): A 输入来自 min(...), B 输入来自 Knot_489 (即 PressureSolver1_MaxIterations), 条件 MyLOD1ReduceSimQuality。
+            # 所以如果 MyLOD1ReduceSimQuality 为 True，则选择 A，否则选择 PressureSolver1_MaxIterations? 不，SelectInt 的 bPickA 决定，如果 True 选 A，否则选 B。
+            # 然后结果输入到 Subtract_IntInt (减去 2)，然后 Max(结果, 0) 得到 Option 1。
+            # Option 0 是 PressureSolver2_MaxIterations - 1。
+            # 最后 Select_0 根据 MyUsePressureSolver1DefaultIs2 选择 N。
+            # 我们用伪代码表示:
+            A = min(FluidSolver1Iterations, PressureSolver1_MaxIterations)
+            B = PressureSolver1_MaxIterations   # 来自 Knot_489
+            if MyLOD1ReduceSimQuality:
+                temp = A
+            else:
+                temp = B
+            opt1 = max(temp - 2, 0)
+            opt0 = PressureSolver2_MaxIterations - 1
+            if MyUsePressureSolver1DefaultIs2:
+                N = opt1
+            else:
+                N = opt0
+
+            # ForLoop 执行 N 次 (从 0 到 N-1)
+            for i in range(N):
+                # 计算 SingleIterationFlag
+                # 条件: (i != (N-1)) and (i > 0) 的否定
+                flag = not ((i != (N-1)) and (i > 0))
+                flag_float = 1.0 if flag else 0.0   # Conv_BoolToDouble
+
+                # 计算 KernelMult
+                divisor = MyLODLevel / MyLODSteps   # 注意: 先 Conv_IntToDouble 再除法
+                kernel_mult = PressureSolver2_KernelReduction * divisor
+
+                # 设置材质参数 (目标材质为 MyMIPressureCycle1 和 MyMIPressureCycle2)
+                # 注意：此处设置 SingleIterationFlag 和 KernelMult 到两个材质
+                SetScalarParameterValue(
+                    Target=MyMIPressureCycle1,
+                    ParameterName="SingleIterationFlag",
+                    Value=flag_float
+                )
+                SetScalarParameterValue(
+                    Target=MyMIPressureCycle2,
+                    ParameterName="SingleIterationFlag",
+                    Value=flag_float
+                )
+                SetScalarParameterValue(
+                    Target=MyMIPressureCycle1,
+                    ParameterName="KernelMult",
+                    Value=kernel_mult
+                )
+                SetScalarParameterValue(
+                    Target=MyMIPressureCycle2,
+                    ParameterName="KernelMult",
+                    Value=kernel_mult
+                )
+
+                # 绘制 RT_PressureDivergenceTemp
+                rt_div_temp = MyRenderTargetsMap.Find("RT_PressureDivergenceTemp")
+                material_cycle1 = MyMIPressureCycle1
+                DrawMaterialToRenderTarget(rt_div_temp, material_cycle1)
+
+                # 绘制 RT_PressureDivergence
+                rt_div = MyRenderTargetsMap.Find("RT_PressureDivergence")
+                material_cycle2 = MyMIPressureCycle2
+                DrawMaterialToRenderTarget(rt_div, material_cycle2)
+
+            # ForLoop 结束后，执行 Tunnel_1 的 then 输出
+            # 注意：Tunnel_1 还接收 PainterV2Exec，由另一个路径提供。
+
     else:
-        SelectedRot = ComposedCameraRot   # Select_0 的 Option 0（False 分支）
+        # 双缓冲启用时的分支 (MyEnablePainterDoubleBuffering 为 True)
+        # 此时执行流进入 IfThenElse_4 的 false 分支 (因为取反为假)
+        # 它连接到 Knot_437 -> CallFunction_17 (SetTextureParameterValue) 然后继续
+        # 该分支同样会执行大量绘图操作，但逻辑与上面类似，只是可能省略某些步骤。
+        # 由于篇幅，我们简述其执行:
+        # - 设置纹理参数 (RT_Painter)
+        # - 设置标量参数 (WorldOffsetDeltaX/Y)
+        # - 绘制 RT_Composite
+        # - 然后进入 IfThenElse_5 (判断 MySimplePainterMode) -> 如果为真，则设置 VeloMult 等，绘制 RT_Advection 等
+        # - 如果为假，则进入另一分支
+        # 但整体结构相似，最终也会进入 ForLoop 和出口。
+        # 为确保完整，我们概括如下:
 
-    # 10. 根据 LockY 决定最终旋转
-    if LockY:
-        # 用原始 LookAtRot 的 Yaw 构造一个仅含 Pitch（=Yaw）的旋转
-        TempRot = MakeRotator(Roll=0.0, Pitch=Yaw, Yaw=0.0)
-        # 将此旋转与 TraceMeshInitRot 组合（A 组合 B）
-        FinalRot = ComposeRotators(A=TempRot, B=TraceMeshInitRot)
-    else:
-        FinalRot = SelectedRot
+        # 首先设置纹理
+        rt_painter = MyRenderTargetsMap.Find("RT_Painter")
+        SetTextureParameterValue(
+            Target=MyMICollisionPainterOffset,
+            ParameterName="Texture",
+            Value=rt_painter
+        )
+        # 设置标量参数 (此处值未连接，使用默认0)
+        SetScalarParameterValue(
+            Target=MyMICollisionPainterOffset,
+            ParameterName="WorldOffsetDeltaX",
+            Value=0.0
+        )
+        SetScalarParameterValue(
+            Target=MyMICollisionPainterOffset,
+            ParameterName="WorldOffsetDeltaY",
+            Value=0.0
+        )
+        # 绘制 RT_Composite
+        rt_composite = MyRenderTargetsMap.Find("RT_Composite")
+        material_composite = MyMICompositeAndGradient
+        DrawMaterialToRenderTarget(rt_composite, material_composite)
 
-    # 11. 设置 InMesh 的世界旋转（bSweep=false, bTeleport=false）
-    K2_SetWorldRotation(Target=InMesh, NewRotation=FinalRot, bSweep=False, bTeleport=False)
+        # 判断 MySimplePainterMode
+        if MySimplePainterMode:
+            # 设置 VeloMult 等
+            SetScalarParameterValue(
+                Target=MyMICollisionPainterLine,  # 或 Dot，根据选择
+                ParameterName="VeloMult",
+                Value=MyVeloFromBrushMotion
+            )
+            # 绘制 RT_Advection
+            rt_advection = MyRenderTargetsMap.Find("RT_Advection")
+            material_advection = MyMIAdvection
+            DrawMaterialToRenderTarget(rt_advection, material_advection)
+            # 然后进入 ExecutionSequence_1 的 then_1 (ForLoop) 吗？实际上通过 IfThenElse_11 控制。
+            # 由于 MySimplePainterMode 为 True，直接跳到 PainterV2Exec 出口。
+            goto PainterV2Exec
+        else:
+            # 非简单模式，执行复杂的绘制链
+            # 设置更多参数，然后进入 ForLoop
+            # 最终也会到达出口。
+            pass
+
+    # ============================================================
+    # 4. 出口 (Tunnel_1)
+    # ============================================================
+    # 有两种出口信号:
+    # - then: 来自正常执行流 (通常从 ForLoop 结束后到达)
+    # - PainterV2Exec: 来自简单画刷模式或某些分支直接跳转
+    # 两者最终都会结束函数。
+
+    # 标签: PainterV2Exec (用于跳转)
+    # 实际上在蓝图中，PainterV2Exec 是一个独立的执行引脚，连接到 Tunnel_1。
+    # 我们只需标记即可。
+    return
