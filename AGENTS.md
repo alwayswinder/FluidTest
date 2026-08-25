@@ -51,7 +51,9 @@
   `CreateOuputMaterialAndSetItOnTargets_Step03 → MyCreateOutputMaterialAndSetItOnTargetsStep03`、
   `PresetLoader → MyPresetLoader`、
   `AfterCreateRT → MyAfterCreateRT`、
-  `LOD-DistaceStepsPrecalc（复合节点）→ MyLODDistaceStepsPrecalc`
+  `LOD-DistaceStepsPrecalc（复合节点）→ MyLODDistaceStepsPrecalc`、
+  `AfterBind 初始化流程 → MyAfterBind`、
+  `BeginPlay / CheckReady / RePlay 初始化流程 → BeginPlay / MyCheckReady / MyRePlay`
 
 ## 常用操作
 

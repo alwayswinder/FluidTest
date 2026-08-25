@@ -43,6 +43,42 @@ UMyNinjaLiveComponent::UMyNinjaLiveComponent()
 	};
 }
 
+void UMyNinjaLiveComponent::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(MyTimerCheckReady);
+		World->GetTimerManager().SetTimer(MyTimerCheckReady, this,
+			&UMyNinjaLiveComponent::MyCheckReady, 0.2f, true, 0.0f);
+	}
+}
+
+void UMyNinjaLiveComponent::MyCheckReady()
+{
+	if (!IsValid(MyTraceMeshComponent))
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(MyTimerCheckReady);
+	}
+	MyTimerCheckReady.Invalidate();
+	MyComponentRePlayEvent.AddDynamic(this, &UMyNinjaLiveComponent::MyRePlay);
+	MyProximityActivationMasterVarsQuantizerOutMat();
+	MyAfterBind();
+}
+
+void UMyNinjaLiveComponent::MyRePlay()
+{
+	MyResetTempArrays();
+	MyProximityActivationMasterVarsQuantizerOutMatFromOwner();
+	MyAfterBind();
+}
+
 void UMyNinjaLiveComponent::MyResetTempArrays()
 {
 	// 清空 TempArray0~39
@@ -1644,6 +1680,19 @@ void UMyNinjaLiveComponent::MyLODDistaceStepsPrecalc()
 		const double Distance = MyLODNearBound + static_cast<double>(Index) * MyLODStepRange;
 		MyLODStepsArray.Add(static_cast<double>(FMath::TruncToInt(Distance)));
 	}
+}
+
+void UMyNinjaLiveComponent::MyAfterBind()
+{
+	MyLightDirectionProviderCheck();
+	MyTraceChannelAutoFind();
+	MySceneCapCameraVSInputMaterials();
+	MyLODDistaceStepsPrecalc();
+	MySetTraceMeshProperties();
+	MyFPSPrecisionResolution();
+	MyEnableOwnerInput();
+	MyCreateOrAcquireRenderTargets();
+	MyAfterCreateRT();
 }
 
 

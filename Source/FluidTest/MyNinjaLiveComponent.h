@@ -28,6 +28,8 @@ class UNiagaraComponent;
 class UNiagaraSystem;
 class UTexture2D;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FMyComponentRePlayEvent);
+
 /**
  * NinjaLiveComponent 蓝图组件的 C++ 父类。
  * 已迁移：临时数组（TempArray0~39）、Map/长度变量、数组操作与若干工具函数。
@@ -40,6 +42,22 @@ class FLUIDTEST_API UMyNinjaLiveComponent : public UActorComponent
 
 public:
 	UMyNinjaLiveComponent();
+
+	/** 延迟检查 TraceMesh 是否创建完成的定时器。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Init")
+	FTimerHandle MyTimerCheckReady;
+
+	/** TraceMesh 准备完成后可由 Owner 触发的重播事件。 */
+	UPROPERTY(BlueprintAssignable, Category = "FluidSim|Init")
+	FMyComponentRePlayEvent MyComponentRePlayEvent;
+
+	/** TraceMesh 就绪后完成首次初始化与重播事件绑定。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
+	void MyCheckReady();
+
+	/** 重置临时数据并按 Owner 设置重新初始化模拟。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
+	void MyRePlay();
 
 	// ------------------------------------------------------------------
 	// 临时 Name 数组 TempArray0~39（蓝图类型 TArray<FName>）
@@ -553,6 +571,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|LOD")
 	void MyLODDistaceStepsPrecalc();
 
+	/** 执行 AfterBind 初始化流程。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
+	void MyAfterBind();
+
 	/** 自定义 Tick 间隔，等于最高采样帧率的倒数。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	double MyTickRateCustom = 1.0 / 60.0;
@@ -962,6 +984,10 @@ private:
 
 	/** 倒带并重播当前媒体输入。 */
 	void MyRestartInputMedia();
+
+protected:
+	/** 启动 TraceMesh 就绪检查。 */
+	virtual void BeginPlay() override;
 
 	/** 在安全延迟后写入 Painter v2 的输入缓冲。 */
 	void MySetPainterV2PaintbufferInput();
