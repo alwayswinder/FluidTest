@@ -417,6 +417,31 @@ int32 UMyNinjaLiveComponent::MyQuantizerValues(EMyQuantizerMode InQuantizerMode)
 	}
 }
 
+void UMyNinjaLiveComponent::MySingleTargetVelocity()
+{
+	FLinearColor CurrentPosition = MyPosition2_2D;
+	FLinearColor PreviousPosition = MyLastPosition2_2D;
+	if (MyMousePass && MyPosition3_2D.IsValidIndex(MyTouchLookupIndex) &&
+		MyLastPosition3_2D.IsValidIndex(MyTouchLookupIndex))
+	{
+		CurrentPosition = MyPosition3_2D[MyTouchLookupIndex];
+		PreviousPosition = MyLastPosition3_2D[MyTouchLookupIndex];
+	}
+
+	// 原节点将位置色转换为向量、相减后乘以 15，并交由材质侧做范围限制。
+	const FVector Velocity = (FVector(CurrentPosition.R, CurrentPosition.G, CurrentPosition.B) -
+		FVector(PreviousPosition.R, PreviousPosition.G, PreviousPosition.B)) * 15.0;
+	if (IsValid(MyMICollisionPainterLine))
+	{
+		MyMICollisionPainterLine->SetVectorParameterValue(TEXT("Velocity"), FLinearColor(Velocity));
+	}
+
+	if (MySingleTargetMode_LEGACY && MySingleTargetModeSetSimSpeed_LEGACY)
+	{
+		MySpeedTemp = Velocity.Length();
+	}
+}
+
 void UMyNinjaLiveComponent::MyProximityActivationMasterVarsQuantizerOutMat()
 {
 	// In2 路径（不检查 Owner）：

@@ -453,6 +453,38 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MySingleTargetMode_LEGACY = false;
 
+	/** 旧版单目标模式是否以画笔速度更新模拟速度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
+	bool MySingleTargetModeSetSimSpeed_LEGACY = false;
+
+	/** SingleTargetVelocity 写入的当前速度长度。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	double MySpeedTemp = 0.0;
+
+	/** SingleTargetVelocity 是否从多触点数组读取当前位置。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	bool MyMousePass = false;
+
+	/** 多触点位置数组的当前读取索引。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	int32 MyTouchLookupIndex = 0;
+
+	/** 单触点当前位置与上一帧位置。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	FLinearColor MyPosition2_2D = FLinearColor::Black;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	FLinearColor MyLastPosition2_2D = FLinearColor::Black;
+
+	/** 多触点当前位置与上一帧位置。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	TArray<FLinearColor> MyPosition3_2D;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	TArray<FLinearColor> MyLastPosition3_2D;
+
+	/** 计算旧版单目标画笔速度并写入线形 Painter 材质。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Velocity")
+	void MySingleTargetVelocity();
+
 	// ------------------------------------------------------------------
 	// ProximityActivation-MasterVars-Quantizer-OutMat 复合节点
 	// 蓝图实现：In1=Owner 激活设置（含 CheckComponentOwner），In2=直接初始化；

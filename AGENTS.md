@@ -56,7 +56,8 @@
   `BeginPlay / CheckReady / RePlay 初始化流程 → BeginPlay / MyCheckReady / MyRePlay`、
   `AfterTickDelay（事件图）→ MyAfterTickDelay`、
   `MuteBrush（复合节点）→ MyMuteBrush`、
-  `CameraFacing（复合节点）→ MyCameraFacing`
+  `CameraFacing（复合节点）→ MyCameraFacing`、
+  `SingleTargetVelocity（复合节点）→ MySingleTargetVelocity`
 
 ## 常用操作
 
