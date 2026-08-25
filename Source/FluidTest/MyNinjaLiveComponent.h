@@ -542,11 +542,11 @@ public:
 	bool MyLOD2ReduceSamplingFPS = false;
 
 	/** 当前 LOD 等级、相邻阈值间距及预计算出的整数距离阈值。 */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|LOD")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
 	int32 MyLODLevel = 0;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|LOD")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
 	double MyLODStepRange = 0.0;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|LOD")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
 	TArray<double> MyLODStepsArray;
 
 	/** 预计算 LOD 距离阈值；仅在任一 LOD 降级选项启用时刷新阈值数组。 */

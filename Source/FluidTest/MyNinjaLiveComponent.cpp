@@ -1386,6 +1386,21 @@ void UMyNinjaLiveComponent::MyAfterCreateRT()
 	MyLoadedDataTable = LoadedDataTable;
 	MyLoadedDataTablePath = MoveTemp(LoadedDataTablePath);
 	MyPresetMap = MoveTemp(PresetMap);
+	UE_LOG(LogTemp, Display, TEXT("[FluidSim][Preset] Loaded preset='%s', data table='%s', path='%s', values=%d"),
+		*MyActualPreset,
+		*GetPathNameSafe(MyLoadedDataTable),
+		*MyLoadedDataTablePath,
+		MyPresetMap.Num());
+
+	TArray<FString> PresetKeys;
+	MyPresetMap.GetKeys(PresetKeys);
+	PresetKeys.Sort();
+	for (const FString& Key : PresetKeys)
+	{
+		UE_LOG(LogTemp, Display, TEXT("[FluidSim][Preset] %s = %.17g"),
+			*Key,
+			MyPresetMap.FindRef(Key));
+	}
 	MyParsePresetMapAndSetVariables(MyPresetMap);
 	MyLoadTextures();
 }
