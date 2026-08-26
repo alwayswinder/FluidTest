@@ -81,6 +81,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyDynamicSimspeedAndWorldOffsetAdjustmentFinal();
 
+	/** 将指定轴的位置还原为 TraceMesh 初始世界坐标。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Trace")
+	FVector MyLockMovementOnGivenAxis(FVector Pos, EMyQuantizerAxisIgnore LockThisAxis) const;
+
+	/** 按量化锁轴或相机朝向屏蔽两组位置分量。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	void MyKillFracOnGivenAxis(FVector Frac, FVector FracInit, EMyQuantizerAxisIgnore QuantizerIgnoresThisAxis,
+		FVector& FracOut, FVector& FracInitOut) const;
+
 	// ------------------------------------------------------------------
 	// 临时 Name 数组 TempArray0~39（蓝图类型 TArray<FName>）
 	// ------------------------------------------------------------------
@@ -223,6 +232,10 @@ public:
 	/** TraceMesh 父级上一帧位置 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
 	FVector MyTraceMeshParentLastPos = FVector::ZeroVector;
+
+	/** TraceMesh 的初始世界位置，用于锁定量化移动轴。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	FVector MyTraceMeshPosInitialWorld = FVector::ZeroVector;
 
 	/** TraceMesh 上一帧世界位置，用于计算本帧模拟区域位移。 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")

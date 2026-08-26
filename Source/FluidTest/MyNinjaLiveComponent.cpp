@@ -7,10 +7,12 @@
 #include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
 #include "Components/VolumetricCloudComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Engine/Texture2D.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetMaterialLibrary.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -288,6 +290,66 @@ void UMyNinjaLiveComponent::MyDynamicSimspeedAndWorldOffsetAdjustmentFinal()
 			Material->SetScalarParameterValue(TEXT("BrushPuncture"), BrushPuncture);
 		}
 	}
+}
+
+FVector UMyNinjaLiveComponent::MyLockMovementOnGivenAxis(FVector Pos, EMyQuantizerAxisIgnore LockThisAxis) const
+{
+	switch (LockThisAxis)
+	{
+	case EMyQuantizerAxisIgnore::X:
+		return FVector(MyTraceMeshPosInitialWorld.X, Pos.Y, Pos.Z);
+	case EMyQuantizerAxisIgnore::Y:
+		return FVector(Pos.X, MyTraceMeshPosInitialWorld.Y, Pos.Z);
+	case EMyQuantizerAxisIgnore::Z:
+		return FVector(Pos.X, Pos.Y, MyTraceMeshPosInitialWorld.Z);
+	case EMyQuantizerAxisIgnore::All:
+		return MyTraceMeshPosInitialWorld;
+	case EMyQuantizerAxisIgnore::Camera:
+	case EMyQuantizerAxisIgnore::None:
+	default:
+		return Pos;
+	}
+}
+
+void UMyNinjaLiveComponent::MyKillFracOnGivenAxis(FVector Frac, FVector FracInit,
+	EMyQuantizerAxisIgnore QuantizerIgnoresThisAxis, FVector& FracOut, FVector& FracInitOut) const
+{
+	const APlayerCameraManager* PlayerCameraManager = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	const FVector CameraLocation = IsValid(PlayerCameraManager)
+		? PlayerCameraManager->GetCameraLocation()
+		: FVector::ZeroVector;
+	const FVector LookAtTarget = Frac + MyTraceMeshPos;
+	const FVector CameraForward = UKismetMathLibrary::GetForwardVector(
+		UKismetMathLibrary::FindLookAtRotation(CameraLocation, LookAtTarget));
+	const FVector CameraMask = FVector::OneVector - CameraForward.GetAbs();
+
+	auto KillFracOnAxis = [&CameraMask, QuantizerIgnoresThisAxis](FVector Value)
+	{
+		switch (QuantizerIgnoresThisAxis)
+		{
+		case EMyQuantizerAxisIgnore::X:
+			return Value * FVector(0.0, 1.0, 1.0);
+		case EMyQuantizerAxisIgnore::Y:
+			return Value * FVector(1.0, 0.0, 1.0);
+		case EMyQuantizerAxisIgnore::Z:
+			return Value * FVector(1.0, 1.0, 0.0);
+		case EMyQuantizerAxisIgnore::Camera:
+			return Value * CameraMask;
+		case EMyQuantizerAxisIgnore::All:
+			return Value * FVector::ZeroVector;
+		case EMyQuantizerAxisIgnore::None:
+		default:
+			return Value;
+		}
+	};
+
+	const FVector CameraFacingFrac = Frac * CameraMask;
+	const FVector CameraFacingFracInit = FracInit * CameraMask;
+	const FVector SelectedFrac = MyCameraFacingTraceMesh ? CameraFacingFrac : KillFracOnAxis(Frac);
+	const FVector SelectedFracInit = MyCameraFacingTraceMesh ? CameraFacingFracInit : KillFracOnAxis(FracInit);
+	const int32 QuantizerEnabled = MyQuantizerStepSize > 0 ? 1 : 0;
+	FracOut = SelectedFrac * QuantizerEnabled;
+	FracInitOut = SelectedFracInit * QuantizerEnabled;
 }
 
 void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exec)
