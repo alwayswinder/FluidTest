@@ -73,6 +73,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
 	void MyMuteBrush();
 
+	/** 根据模拟区域尺寸限制世界位移引起的纹理偏移。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Simulation")
+	FVector MyCorrectExtremes(FVector DeltaPos, FVector Scale, FVector Composite) const;
+
+	/** 根据 TraceMesh 位移更新模拟纹理偏移与相关动态材质参数。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
+	void MyDynamicSimspeedAndWorldOffsetAdjustmentFinal();
+
 	// ------------------------------------------------------------------
 	// 临时 Name 数组 TempArray0~39（蓝图类型 TArray<FName>）
 	// ------------------------------------------------------------------
@@ -200,6 +208,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
 	double MyVeloFromSimAreaMotion = 0.0;
 
+	/** 模拟区域运动对画笔穿透强度的影响。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	double MySimAreaMotionEffectsBrushPuncture = 0.0;
+
 	/** TraceMesh 组件引用 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
 	TObjectPtr<UStaticMeshComponent> MyTraceMeshComponent = nullptr;
@@ -211,6 +223,14 @@ public:
 	/** TraceMesh 父级上一帧位置 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
 	FVector MyTraceMeshParentLastPos = FVector::ZeroVector;
+
+	/** TraceMesh 上一帧世界位置，用于计算本帧模拟区域位移。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	FVector MyTraceMeshLastPos = FVector::ZeroVector;
+
+	/** 本帧 TraceMesh 的世界空间位移。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	FVector MyTraceMeshDeltaPos = FVector::ZeroVector;
 
 	// ------------------------------------------------------------------
 	// Enable OWNER Input 相关（用户输入方式）
@@ -716,6 +736,10 @@ public:
 	/** 执行核心流体求解步骤；ThenExec 与 PainterV2Exec 分别对应原复合节点的两个执行出口。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exec);
+
+	/** 将补充的流体参数写入 Composite、Gradient 与 Divergence 动态材质。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Solver")
+	void MySetAdditionalFluidsimParams();
 
 	/** 是否连接 Painter v2 追踪点生成轨迹线。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")

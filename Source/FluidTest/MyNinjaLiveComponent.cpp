@@ -125,6 +125,171 @@ bool UMyNinjaLiveComponent::MyAfterTickDelay(double DeltaSeconds)
 	return false;
 }
 
+void UMyNinjaLiveComponent::MySetAdditionalFluidsimParams()
+{
+	double VelocityX = 0.0;
+	double VelocityY = 0.0;
+	double VelocityZ = 0.0;
+	MyVelocityHandlerForSimArea(-0.01, VelocityX, VelocityY, VelocityZ);
+
+	if (IsValid(MyMICompositeAndGradient))
+	{
+		auto SetCompositeScalar = [this](FName ParameterName, double Value)
+		{
+			MyMICompositeAndGradient->SetScalarParameterValue(ParameterName, static_cast<float>(Value));
+		};
+
+		SetCompositeScalar(TEXT("VeloFromBrushMotion"), MyVeloFromBrushMotion);
+		SetCompositeScalar(TEXT("VeloStrength"), MyVeloStrength);
+		SetCompositeScalar(TEXT("VeloRotate"), MyVeloRotate);
+		SetCompositeScalar(TEXT("VeloOffsetX"), MyVeloOffsetX + VelocityX);
+		SetCompositeScalar(TEXT("VeloOffsetY"), MyVeloOffsetY + VelocityY);
+		SetCompositeScalar(TEXT("VeloAmpNoise"), MyVeloAmpNoise);
+		SetCompositeScalar(TEXT("VeloDirNoise"), MyVeloDirNoise);
+		SetCompositeScalar(TEXT("SimEdgeBouncyness"),
+			FMath::Max(MySimEdgeBouncyness, MyCollisionMaskIsNonDefault ? 1.0 : 0.0));
+		SetCompositeScalar(TEXT("VeloDirNoiseSize"), MyVeloDirNoiseSize);
+		SetCompositeScalar(TEXT("VeloDirNoiseSpeed"), MyVeloDirNoiseSpeed);
+		SetCompositeScalar(TEXT("EdgeMaskWidth"), MyEdgeMaskWidth);
+		SetCompositeScalar(TEXT("DensityTxtOffsetX"), MyDensityTxtOffsetX);
+		SetCompositeScalar(TEXT("DensityTxtScale"), MyDensityTxtScale);
+		SetCompositeScalar(TEXT("DensityTxtOffsetY"), MyDensityTxtOffsetY);
+		SetCompositeScalar(TEXT("VeloInputTile"), MyVeloInputTile);
+		SetCompositeScalar(TEXT("VeloInputOffsetSpeed"), MyVeloInputOffsetSpeed);
+		SetCompositeScalar(TEXT("DensityNoiseSpeed"), MyDensityInputNoiseOffset);
+		SetCompositeScalar(TEXT("DensityNoiseAmount"), MyDensityInputNoiseAmp);
+		SetCompositeScalar(TEXT("DensityNoiseTile"), MyDensityInputNoiseTile);
+		SetCompositeScalar(TEXT("DensityTxtMult"), MyDensityTxtMult);
+		SetCompositeScalar(TEXT("FlowFeedback"), MyFlowFeedback);
+		SetCompositeScalar(TEXT("FadeDensityAtSimEdge"), MyFadeDensityAtSimEdge);
+	}
+
+	if (IsValid(MyMIDivergence))
+	{
+		MyMIDivergence->SetScalarParameterValue(TEXT("Divergence"), static_cast<float>(MyDivergence));
+		MyMIDivergence->SetScalarParameterValue(TEXT("BrushPuncture"),
+			static_cast<float>(MyBrushPuncture + VelocityZ));
+	}
+}
+
+FVector UMyNinjaLiveComponent::MyCorrectExtremes(FVector DeltaPos, FVector Scale, FVector Composite) const
+{
+	const double MaxScaleElement = Scale.GetMax();
+	const double HalfMaxScale = MaxScaleElement * 0.5;
+	const double InverseHalfScale = FMath::Clamp(1.0 / HalfMaxScale, 0.0, 0.9);
+	const double DeltaLength = FMath::Max(DeltaPos.Length(), 0.001);
+	const double Correction = FMath::Clamp((1.0 - InverseHalfScale) * (MaxScaleElement / DeltaLength), 0.35, 1.0);
+	return Composite * Correction;
+}
+
+void UMyNinjaLiveComponent::MyDynamicSimspeedAndWorldOffsetAdjustmentFinal()
+{
+	if (!IsValid(MyTraceMeshComponent))
+	{
+		return;
+	}
+
+	const FVector DeltaPos = MyTraceMeshPos - MyTraceMeshLastPos;
+	const int32 Step = FMath::Max(MyQuantizerStepSize, 1);
+	const FVector ComponentScale = MyTraceMeshComponent->GetComponentScale();
+	const FVector ScaleForSimulation(ComponentScale.X, ComponentScale.Y, ComponentScale.X);
+	FVector AdjustedDelta = DeltaPos;
+	if (MyQuantizerStepSize >= -1)
+	{
+		const double StepAsDouble = static_cast<double>(Step);
+		AdjustedDelta = (DeltaPos * (1.0 / (StepAsDouble * 100.0))) *
+			(FVector::OneVector / ScaleForSimulation) * StepAsDouble;
+	}
+
+	if (MyQuantizerStepSize == -1)
+	{
+		AdjustedDelta = MyCorrectExtremes(DeltaPos, ComponentScale, AdjustedDelta);
+	}
+
+	const FVector LocalDelta = FTransform(MyTraceMeshComponent->GetComponentRotation().Quaternion())
+		.InverseTransformVectorNoScale(AdjustedDelta);
+	const double Multiplier = MyQuantizerStepSize == -3
+		? 0.0
+		: MyQuantizerStepSize == -2 ? MyOffsetFromSimAreaMotion * 0.001 : 1.0;
+	const FVector FrameOffset = LocalDelta * Multiplier;
+	MyTraceMeshDeltaPos += FrameOffset;
+
+	const float FrameOffsetX = static_cast<float>(FrameOffset.X);
+	const float FrameOffsetY = static_cast<float>(FrameOffset.Y);
+	const float AccumulatedOffsetX = static_cast<float>(MyTraceMeshDeltaPos.X);
+	const float AccumulatedOffsetY = static_cast<float>(MyTraceMeshDeltaPos.Y);
+	const float BrushPuncture = static_cast<float>(MyBrushPuncture +
+		FMath::Abs(FrameOffset.Z) * (MySimAreaMotionEffectsBrushPuncture * -20000.0));
+
+	auto SetDeltaOffset = [FrameOffsetX, FrameOffsetY](UMaterialInstanceDynamic* Material)
+	{
+		if (!IsValid(Material))
+		{
+			return;
+		}
+
+		Material->SetScalarParameterValue(TEXT("WorldOffsetDeltaX"), FrameOffsetX);
+		Material->SetScalarParameterValue(TEXT("WorldOffsetDeltaY"), FrameOffsetY);
+	};
+	auto SetWorldOffsetX = [AccumulatedOffsetX](UMaterialInstanceDynamic* Material)
+	{
+		if (!IsValid(Material))
+		{
+			return;
+		}
+
+		Material->SetScalarParameterValue(TEXT("WorldOffsetX"), AccumulatedOffsetX);
+	};
+	auto SetWorldOffsetY = [AccumulatedOffsetY](UMaterialInstanceDynamic* Material)
+	{
+		if (!IsValid(Material))
+		{
+			return;
+		}
+
+		Material->SetScalarParameterValue(TEXT("WorldOffsetY"), AccumulatedOffsetY);
+	};
+
+	if (MySimplePainterMode)
+	{
+		SetDeltaOffset(MyMICollisionPainterOffset);
+		SetDeltaOffset(MyMICollisionPainterDot);
+		SetDeltaOffset(MyQuantizerStepSize < 1 ? MyMINull.Get() : MyMICollisionPainterLine.Get());
+		for (UMaterialInstanceDynamic* Material : {
+			MyMICollisionPainterOffset.Get(), MyMICollisionPainterDot.Get(), MyMIOutput.Get() })
+		{
+			SetWorldOffsetX(Material);
+			SetWorldOffsetY(Material);
+		}
+	}
+	else
+	{
+		for (UMaterialInstanceDynamic* Material : {
+			MyMICompositeAndGradient.Get(), MyMIDivergence.Get(), MyMIPressureCycle1.Get(),
+			MyMIPressureCycle2.Get(), MyMICollisionPainterOffset.Get(), MyMICollisionPainterDot.Get(),
+			MyQuantizerStepSize < 1 ? MyMINull.Get() : MyMICollisionPainterLine.Get() })
+		{
+			SetDeltaOffset(Material);
+		}
+		SetWorldOffsetX(MyMICompositeAndGradient);
+		SetWorldOffsetX(MyMIOutput);
+		for (UMaterialInstanceDynamic* Material : {
+			MyMICompositeAndGradient.Get(), MyMICollisionPainterDot.Get(), MyMIOutput.Get() })
+		{
+			SetWorldOffsetY(Material);
+		}
+	}
+
+	for (UMaterialInstanceDynamic* Material : {
+		MyMIDivergence.Get(), MyMICollisionPainterLine.Get(), MyMICollisionPainterDot.Get() })
+	{
+		if (IsValid(Material))
+		{
+			Material->SetScalarParameterValue(TEXT("BrushPuncture"), BrushPuncture);
+		}
+	}
+}
+
 void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exec)
 {
 	// 简单画笔仅触发 PainterV2Exec；非简单画笔在压力循环完成后还会触发 ThenExec。

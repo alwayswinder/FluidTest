@@ -1,180 +1,108 @@
 
-void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& PainterV2Exec)
+void UMyNinjaLiveComponent::MyDynamicSimspeedAndWorldOffsetAdjustmentFinal()
 {
-	// 原复合节点的两个出口最终都会触发 Painter V2 分支。
-	PainterV2Exec = true;
-
-	auto FindRenderTarget = [this](const TCHAR* Name) -> UTextureRenderTarget2D*
+	if (!IsValid(MyTraceMeshComponent))
 	{
-		const TObjectPtr<UTextureRenderTarget2D>* Found = MyRenderTargetsMap.Find(Name);
-		return Found ? Found->Get() : nullptr;
+		return;
+	}
+
+	const FVector DeltaPos = MyTraceMeshPos - MyTraceMeshLastPos;
+	const int32 Step = FMath::Max(MyQuantizerStepSize, 1);
+	const FVector ComponentScale = MyTraceMeshComponent->GetComponentScale();
+	const FVector ScaleForSimulation(ComponentScale.X, ComponentScale.Y, ComponentScale.X);
+	FVector AdjustedDelta = DeltaPos;
+	if (MyQuantizerStepSize >= -1)
+	{
+		const double StepAsDouble = static_cast<double>(Step);
+		AdjustedDelta = (DeltaPos * (1.0 / (StepAsDouble * 100.0))) *
+			(FVector::OneVector / ScaleForSimulation) * StepAsDouble;
+	}
+
+	if (MyQuantizerStepSize == -1)
+	{
+		AdjustedDelta = MyCorrectExtremes(DeltaPos, ComponentScale, AdjustedDelta);
+	}
+
+	const FVector LocalDelta = FTransform(MyTraceMeshComponent->GetComponentRotation().Quaternion())
+		.InverseTransformVectorNoScale(AdjustedDelta);
+	const double Multiplier = MyQuantizerStepSize == -3
+		? 0.0
+		: MyQuantizerStepSize == -2 ? MyOffsetFromSimAreaMotion * 0.001 : 1.0;
+	const FVector FrameOffset = LocalDelta * Multiplier;
+	MyTraceMeshDeltaPos += FrameOffset;
+
+	const float FrameOffsetX = static_cast<float>(FrameOffset.X);
+	const float FrameOffsetY = static_cast<float>(FrameOffset.Y);
+	const float AccumulatedOffsetX = static_cast<float>(MyTraceMeshDeltaPos.X);
+	const float AccumulatedOffsetY = static_cast<float>(MyTraceMeshDeltaPos.Y);
+	const float BrushPuncture = static_cast<float>(MyBrushPuncture +
+		FMath::Abs(FrameOffset.Z) * (MySimAreaMotionEffectsBrushPuncture * -20000.0));
+
+	auto SetDeltaOffset = [FrameOffsetX, FrameOffsetY](UMaterialInstanceDynamic* Material)
+	{
+		if (!IsValid(Material))
+		{
+			return;
+		}
+
+		Material->SetScalarParameterValue(TEXT("WorldOffsetDeltaX"), FrameOffsetX);
+		Material->SetScalarParameterValue(TEXT("WorldOffsetDeltaY"), FrameOffsetY);
 	};
-	auto Draw = [this](UTextureRenderTarget2D* Target, UMaterialInterface* Material)
+	auto SetWorldOffsetX = [AccumulatedOffsetX](UMaterialInstanceDynamic* Material)
 	{
-		if (IsValid(Target) && IsValid(Material))
+		if (!IsValid(Material))
 		{
-			UKismetRenderingLibrary::DrawMaterialToRenderTarget(this, Target, Material);
+			return;
 		}
+
+		Material->SetScalarParameterValue(TEXT("WorldOffsetX"), AccumulatedOffsetX);
+	};
+	auto SetWorldOffsetY = [AccumulatedOffsetY](UMaterialInstanceDynamic* Material)
+	{
+		if (!IsValid(Material))
+		{
+			return;
+		}
+
+		Material->SetScalarParameterValue(TEXT("WorldOffsetY"), AccumulatedOffsetY);
 	};
 
-	// 输入材质绘制在原图中发生于两个执行序列之前。
-	if (MyUseInputMaterials && MyInputMaterials.IsValidIndex(MyInputMaterialSelected))
+	if (MySimplePainterMode)
 	{
-		Draw(FindRenderTarget(TEXT("RT_DensityInputMaterial")), MyInputMaterials[MyInputMaterialSelected]);
+		SetDeltaOffset(MyMICollisionPainterOffset);
+		SetDeltaOffset(MyMICollisionPainterDot);
+		SetDeltaOffset(MyQuantizerStepSize < 1 ? MyMINull.Get() : MyMICollisionPainterLine.Get());
+		for (UMaterialInstanceDynamic* Material : {
+			MyMICollisionPainterOffset.Get(), MyMICollisionPainterDot.Get(), MyMIOutput.Get() })
+		{
+			SetWorldOffsetX(Material);
+			SetWorldOffsetY(Material);
+		}
 	}
-
-	MyWorldSpaceOffset.Broadcast(MyTraceMeshPos);
-	const bool bUpdateTraceMeshPosition =
-		MyQuantizerStepSize > 0 || MyMovementIsLockedOnThisAxis != EMyQuantizerAxisIgnore::None;
-	if (bUpdateTraceMeshPosition)
+	else
 	{
-		if (IsValid(MyTraceMeshComponent))
+		for (UMaterialInstanceDynamic* Material : {
+			MyMICompositeAndGradient.Get(), MyMIDivergence.Get(), MyMIPressureCycle1.Get(),
+			MyMIPressureCycle2.Get(), MyMICollisionPainterOffset.Get(), MyMICollisionPainterDot.Get(),
+			MyQuantizerStepSize < 1 ? MyMINull.Get() : MyMICollisionPainterLine.Get() })
 		{
-			MyTraceMeshComponent->SetWorldLocation(MyTraceMeshPos, false, nullptr, ETeleportType::TeleportPhysics);
+			SetDeltaOffset(Material);
 		}
-		if (MyInteractionVolumeIsPresent && IsValid(MyInteractionVolume))
+		SetWorldOffsetX(MyMICompositeAndGradient);
+		SetWorldOffsetX(MyMIOutput);
+		for (UMaterialInstanceDynamic* Material : {
+			MyMICompositeAndGradient.Get(), MyMICollisionPainterDot.Get(), MyMIOutput.Get() })
 		{
-			MyInteractionVolume->SetWorldLocation(MyTraceMeshPos, false, nullptr, ETeleportType::TeleportPhysics);
-		}
-
-		// 两个 Select 节点分别处理 Secondary 和 Tertiary；后者优先级更高。
-		UMaterialInstanceDynamic* PositionMaterial = MyMIOutput;
-		if (MySecondaryMaterialsPresent && IsValid(MyMISecondaryOutput))
-		{
-			PositionMaterial = MyMISecondaryOutput;
-		}
-		if (MyTertiaryMaterialsPresent && IsValid(MyMITertiaryOutput))
-		{
-			PositionMaterial = MyMITertiaryOutput;
-		}
-
-		const FLinearColor TracePositionColor(MyTraceMeshPos);
-		if (IsValid(PositionMaterial))
-		{
-			if (MyLWCSupport)
-			{
-				PositionMaterial->SetDoubleVectorParameterValue(
-					TEXT("TraceMeshPosDouble"), FVector4(MyTraceMeshPos, 0.0));
-			}
-			else
-			{
-				PositionMaterial->SetVectorParameterValue(TEXT("TraceMeshPos"), TracePositionColor);
-			}
-		}
-		if (MyMaterialCollectionPresent && IsValid(MySetInternalParamsToMaterialParamCollection))
-		{
-			UKismetMaterialLibrary::SetVectorParameterValue(
-				this, MySetInternalParamsToMaterialParamCollection, TEXT("TraceMeshPos"), TracePositionColor);
-		}
-
-		if (MyNiagaraSystemsPresent)
-		{
-			for (UNiagaraComponent* NiagaraComponent : MyNiagaraSystemsToDrive)
-			{
-				if (!IsValid(NiagaraComponent))
-				{
-					continue;
-				}
-
-				if (MyLWCSupport)
-				{
-					NiagaraComponent->SetVariablePosition(TEXT("TraceMeshPosDouble"), MyTraceMeshPos);
-				}
-				else if (!MyLWCAvoidNiagaraWarnings)
-				{
-					NiagaraComponent->SetVectorParameter(TEXT("TraceMeshPos"), MyTraceMeshPos);
-				}
-			}
+			SetWorldOffsetY(Material);
 		}
 	}
 
-	const double KernelMultiplier = MyLODSteps > 0
-		? MyPressureSolver2KernelReduction * static_cast<double>(MyLODLevel) / static_cast<double>(MyLODSteps)
-		: 0.0;
-
-	if (MyEnablePainterDoubleBuffering && IsValid(MyMICollisionPainterOffset))
+	for (UMaterialInstanceDynamic* Material : {
+		MyMIDivergence.Get(), MyMICollisionPainterLine.Get(), MyMICollisionPainterDot.Get() })
 	{
-		UTextureRenderTarget2D* Painter = FindRenderTarget(TEXT("RT_Painter"));
-		UTextureRenderTarget2D* Composite = FindRenderTarget(TEXT("RT_Composite"));
-		MyMICollisionPainterOffset->SetTextureParameterValue(TEXT("Texture"), Painter);
-		Draw(Composite, MyMICollisionPainterOffset);
-		MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("WorldOffsetDeltaX"), 0.0f);
-		MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("WorldOffsetDeltaY"), 0.0f);
-		MyMICollisionPainterOffset->SetTextureParameterValue(TEXT("Texture"), Composite);
-
-		if (MySimplePainterMode)
+		if (IsValid(Material))
 		{
-			for (UMaterialInstanceDynamic* PainterMaterial : { MyMICollisionPainterLine.Get(), MyMICollisionPainterDot.Get() })
-			{
-				if (IsValid(PainterMaterial))
-				{
-					PainterMaterial->SetScalarParameterValue(TEXT("VeloMult"), static_cast<float>(MyVeloFromBrushMotion));
-				}
-			}
-			MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("DensityTxtScale"), static_cast<float>(MyDensityTxtScale));
-			MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("DensityTxtMult"), static_cast<float>(MyDensityTxtMult));
-		}
-
-		Draw(Painter, MyMICollisionPainterOffset);
-		if (!MySimplePainterMode)
-		{
-			Draw(Composite, MyMICompositeAndGradient);
-		}
-	}
-	else if (!MySimplePainterMode)
-	{
-		Draw(FindRenderTarget(TEXT("RT_Composite")), MyMICompositeAndGradient);
-	}
-
-	// 原图在压力求解前输出第一缓冲；简单画笔模式到此只会走 PainterV2Exec。
-	if (MyMake1stOutputAvailableFor2ndOutput || MyMake1stOutputAvailableForNiagara)
-	{
-		Draw(FindRenderTarget(TEXT("RT_Output")), MyMIOutput);
-	}
-
-	if (!MySimplePainterMode)
-	{
-		Draw(FindRenderTarget(TEXT("RT_Advection")), MyMIAdvection);
-		Draw(FindRenderTarget(TEXT("RT_PressureDivergence")), MyMIDivergence);
-
-		const int32 Solver1Iterations = MyLOD1ReduceSimQuality
-			? FMath::Min(MyFluidSolver1Iterations, MyPressureSolver1MaxIterations)
-			: MyPressureSolver1MaxIterations;
-		const int32 LastIteration = MyUsePressureSolver1DefaultIs2
-			? FMath::Max(Solver1Iterations - 2, 0)
-			: MyPressureSolver2MaxIterations - 1;
-		for (int32 Iteration = 0; Iteration <= LastIteration; ++Iteration)
-		{
-			const bool bLastIteration = Iteration == LastIteration;
-			const float SingleIterationFlag =
-				(!(Iteration != LastIteration && LastIteration > 0)) ? 1.0f : 0.0f;
-			for (UMaterialInstanceDynamic* PressureMaterial : { MyMIPressureCycle1.Get(), MyMIPressureCycle2.Get() })
-			{
-				if (IsValid(PressureMaterial))
-				{
-					PressureMaterial->SetScalarParameterValue(TEXT("SingleIterationFlag"), SingleIterationFlag);
-				}
-			}
-
-			Draw(FindRenderTarget(TEXT("RT_PressureDivergenceTemp")), MyMIPressureCycle1);
-			if (IsValid(MyMIPressureCycle1))
-			{
-				MyMIPressureCycle1->SetScalarParameterValue(TEXT("KernelMult"), static_cast<float>(KernelMultiplier));
-				MyMIPressureCycle1->SetScalarParameterValue(TEXT("WorldOffsetDeltaX"), 0.0f);
-				MyMIPressureCycle1->SetScalarParameterValue(TEXT("WorldOffsetDeltaY"), 0.0f);
-			}
-			if (IsValid(MyMIPressureCycle2))
-			{
-				MyMIPressureCycle2->SetScalarParameterValue(TEXT("KeepDivergenceBuffer"),
-					bLastIteration ? 0.0f : 1.0f);
-				MyMIPressureCycle2->SetScalarParameterValue(TEXT("WorldOffsetDeltaX"), 0.0f);
-				MyMIPressureCycle2->SetScalarParameterValue(TEXT("WorldOffsetDeltaY"), 0.0f);
-			}
-			Draw(FindRenderTarget(TEXT("RT_PressureDivergence")), MyMIPressureCycle2);
-			if (IsValid(MyMIPressureCycle2))
-			{
-				MyMIPressureCycle2->SetScalarParameterValue(TEXT("KernelMult"), static_cast<float>(KernelMultiplier));
-			}
+			Material->SetScalarParameterValue(TEXT("BrushPuncture"), BrushPuncture);
 		}
 	}
 }

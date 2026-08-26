@@ -1,66 +1,87 @@
-# 复合节点: Draw Internal RenderTarget to External RT
-# 入口: Tunnel_0.execute
-# 变量: DrawInternalRenderTargetToExternal (bool)
-# 数组: InternalRenderTargetsToExport (byte 枚举数组), ExternalRenderTargets (TextureRenderTarget2D 数组)
-# 材质变量: MyMICompositeAndGradient, MyMIDivergence, MyMIPressureCycle1,
-#          MyMICollisionPainterLine, MyMICollisionPainterDot, MyMIOutput
-# 枚举定义: RenderTargetList (NewEnumerator0,1,2,4,13)
+# 事件/函数: DynamicSimspeedAndWorldOffsetAdjustment_Final
+# 入口: CustomEvent (无参数)
+# 变量说明:
+#   MyTraceMeshPos, MyTraceMeshLastPos: Vector
+#   MyTraceMeshComponent: SceneComponent (用于获取Scale和Rotation)
+#   MyQuantizerStepSize: int
+#   MyOffsetFromSimAreaMotion: float
+#   SimAreaMotionEffectsBrushPuncture: float
+#   MyBrushPuncture: float
+#   MySimplePainterMode: bool
+#   材质实例: MyMICollisionPainterOffset, MyMIOutput, MyMICollisionPainterDot, MyMICollisionPainterLine,
+#             MyMICompositeAndGradient, MyMIDivergence, MyMIPressureCycle1, MyMIPressureCycle2
 
-# 静态标志，模拟 DoOnce 宏（仅第一次执行，无重置）
-_do_once_done = False
+def DynamicSimspeedAndWorldOffsetAdjustment_Final():
+    # 1. 计算位置增量 delta = MyTraceMeshPos - MyTraceMeshLastPos
+    delta = MyTraceMeshPos - MyTraceMeshLastPos
 
-def DrawInternalRenderTargetToExternal():
-    global _do_once_done
+    # 2. 获取量化步长并限制最小值
+    step = max(MyQuantizerStepSize, 1)
 
-    # 1. 判断是否启用
-    if not DrawInternalRenderTargetToExternal:
-        return  # 直接结束
+    # 3. 获取组件缩放
+    scale = MyTraceMeshComponent.K2_GetComponentScale()
 
-    # 2. DoOnce 宏：确保后续逻辑只执行一次（之后不再执行）
-    if _do_once_done:
-        return
-    _do_once_done = True
+    # 4. 根据 MyQuantizerStepSize 调整 delta
+    if MyQuantizerStepSize < -1:
+        adjusted_delta = delta  # 不缩放
+    else:
+        # 缩放: delta / (100 * scale)
+        adjusted_delta = delta / (100.0 * scale)  # 分量除法
 
-    # 3. 比较两个数组长度是否相等
-    if len(InternalRenderTargetsToExport) != len(ExternalRenderTargets):
-        return  # 长度不等，不执行绘制
+    # 5. 将调整后的向量从世界空间转换到组件局部空间（基于旋转）
+    #    构造 Transform（位置=0，旋转=组件的旋转，缩放=1）
+    transform = MakeTransform(Location=Vector(0,0,0), Rotation=MyTraceMeshComponent.K2_GetComponentRotation(), Scale=Vector(1,1,1))
+    local_delta = InverseTransformDirection(transform, adjusted_delta)
 
-    # 4. 检查外部 RT 数组是否全部有效
-    #    如果存在无效元素，则关闭 Gate，后续绘制不执行
-    #    等价于：遍历并检查 IsValid，若有无效则跳过绘制
-    for ext_rt in ExternalRenderTargets:
-        if not IsValid(ext_rt):
-            return  # 遇到无效元素，直接返回（不执行绘制）
+    # 6. 根据 MyQuantizerStepSize 确定乘数
+    if MyQuantizerStepSize == -3:
+        multiplier = 0.0
+    elif MyQuantizerStepSize == -2:
+        multiplier = MyOffsetFromSimAreaMotion * 0.001
+    else:
+        multiplier = 1.0
 
-    # 5. 所有外部 RT 有效，执行绘制循环
-    #    遍历内部枚举数组，对每个枚举值选择对应材质，绘制到外部 RT 的相同索引位置
-    for idx, enum_val in enumerate(InternalRenderTargetsToExport):
-        # 根据枚举值选择材质
-        if enum_val == "NewEnumerator0":          # RT_VelocityDensity
-            material = MyMICompositeAndGradient
-        elif enum_val == "NewEnumerator1":        # RT_Divergence
-            material = MyMIDivergence
-        elif enum_val == "NewEnumerator2":        # RT_Pressure
-            material = MyMIPressureCycle1
-        elif enum_val == "NewEnumerator4":        # RT_Painter
-            # 此分支内嵌一个 Select，根据 MySingleTargetMode_LEGACY 选择材质
-            if MySingleTargetMode_LEGACY:
-                material = MyMICollisionPainterLine   # Option 1
-            else:
-                material = MyMICollisionPainterDot    # Option 0
-        elif enum_val == "NewEnumerator13":       # RT_Output
-            material = MyMIOutput
-        else:
-            material = None   # 其他枚举值（若有）未定义，跳过
+    # 7. 累加到 TraceMeshDeltaPos
+    TraceMeshDeltaPos = TraceMeshDeltaPos + local_delta * multiplier
 
-        if material is None:
-            continue
+    # 8. 分解 TraceMeshDeltaPos 为 x, y, z
+    x = TraceMeshDeltaPos.X
+    y = TraceMeshDeltaPos.Y
+    z = TraceMeshDeltaPos.Z
 
-        # 获取对应的外部 RT（索引 idx）
-        if idx < len(ExternalRenderTargets):
-            ext_rt = ExternalRenderTargets[idx]
-            # 再次确保有效（虽然前面全检过，但安全）
-            if IsValid(ext_rt):
-                # 绘制材质到该 RT
-                DrawMaterialToRenderTarget(ext_rt, material)
-        # 若 idx 越界，则忽略（理论上不会发生，因为长度已比较）
+    # 9. 计算 BrushPuncture
+    brush_puncture = MyBrushPuncture + abs(z) * (SimAreaMotionEffectsBrushPuncture * -20000.0)
+
+    # 10. 根据 MySimplePainterMode 选择目标材质集合，并设置参数
+    if MySimplePainterMode:
+        # 目标材质: MyMICollisionPainterOffset, MyMIOutput, MyMICollisionPainterDot,
+        #           以及 MyMICollisionPainterLine 或 Dot（由 Select_1 决定，但最终会被设置）
+        target_materials = [
+            MyMICollisionPainterOffset,
+            MyMIOutput,
+            MyMICollisionPainterDot,
+            # MyMICollisionPainterLine 可能通过 Select_1 被包含
+        ]
+        # 注意：Select_1 根据 MyQuantizerStepSize < 1 选择 Line 或 Dot，但 Dot 已在列表中，
+        # 实际上蓝图中 Select_1 的输出连接到 CallFunction_1 的 self，所以 Line 或 Dot 也会被设置。
+        # 我们简化为包含所有可能涉及的材质。
+    else:
+        # 目标材质: MyMICompositeAndGradient, MyMIDivergence, MyMIPressureCycle1,
+        #           MyMIPressureCycle2, MyMICollisionPainterOffset, MyMICollisionPainterDot
+        target_materials = [
+            MyMICompositeAndGradient,
+            MyMIDivergence,
+            MyMIPressureCycle1,
+            MyMIPressureCycle2,
+            MyMICollisionPainterOffset,
+            MyMICollisionPainterDot,
+        ]
+
+    # 对于所有目标材质，设置以下参数（实际蓝图通过多个 SetScalarParameterValue 节点分别设置）:
+    for mat in target_materials:
+        if IsValid(mat):
+            mat.SetScalarParameterValue("WorldOffsetDeltaX", x)
+            mat.SetScalarParameterValue("WorldOffsetDeltaY", y)
+            mat.SetScalarParameterValue("BrushPuncture", brush_puncture)
+            mat.SetScalarParameterValue("WorldOffsetX", x)
+            mat.SetScalarParameterValue("WorldOffsetY", y)

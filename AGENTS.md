@@ -60,7 +60,8 @@
   `SingleTargetVelocity（复合节点）→ MySingleTargetVelocity`、
   `CoreFluidsimOPs（复合节点）→ MyCoreFluidsimOPs`、
   `Forward SCALAR params to Niagara（复合节点）→ MyForwardScalarParamsToNiagara`、
-  `Draw Internal RenderTarget to External RT（复合节点）→ MyDrawInternalRenderTargetToExternal`
+  `Draw Internal RenderTarget to External RT（复合节点）→ MyDrawInternalRenderTargetToExternal`、
+  `SetAdditionalFluidsimParams（复合节点）→ MySetAdditionalFluidsimParams`
 
 ## 常用操作
 
