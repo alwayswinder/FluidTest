@@ -82,3 +82,14 @@ enum class EMySimPrecision : uint8
 	Bit16 = 0 UMETA(DisplayName = "16 bit"),
 	Bit32 = 1 UMETA(DisplayName = "32 bit")
 };
+
+/** 可导出到外部 RenderTarget 的内部模拟阶段（对齐 RenderTargetList）。 */
+UENUM(BlueprintType)
+enum class EMyRenderTargetList : uint8
+{
+	VelocityDensity = 0 UMETA(DisplayName = "RT_VelocityDensity"),
+	Divergence = 1 UMETA(DisplayName = "RT_Divergence"),
+	Pressure = 2 UMETA(DisplayName = "RT_Pressure"),
+	Painter = 4 UMETA(DisplayName = "RT_Painter"),
+	Output = 13 UMETA(DisplayName = "RT_Output")
+};

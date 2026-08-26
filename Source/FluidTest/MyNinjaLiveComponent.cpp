@@ -958,6 +958,97 @@ void UMyNinjaLiveComponent::MyInitPainterV2()
 	}
 }
 
+void UMyNinjaLiveComponent::MyForwardScalarParamsToNiagara()
+{
+	if (!MyUsePAINTER_V2_ToTrackObjects || MySingleTargetMode_LEGACY ||
+		!IsValid(MyMICollisionPainterDot) || !IsValid(MyNiagaraBasedPainter))
+	{
+		return;
+	}
+
+	TArray<FMaterialParameterInfo> ParameterInfos;
+	TArray<FGuid> ParameterIds;
+	MyMICollisionPainterDot->GetAllScalarParameterInfo(ParameterInfos, ParameterIds);
+
+	for (const FMaterialParameterInfo& ParameterInfo : ParameterInfos)
+	{
+		// 蓝图仅排除 BrushSize；该值由 Painter v2 自身的轨迹数据驱动。
+		if (ParameterInfo.Name == TEXT("BrushSize"))
+		{
+			continue;
+		}
+
+		float ParameterValue = 0.0f;
+		if (MyMICollisionPainterDot->GetScalarParameterValue(
+			FHashedMaterialParameterInfo(ParameterInfo), ParameterValue))
+		{
+			MyNiagaraBasedPainter->SetVariableFloat(ParameterInfo.Name, ParameterValue);
+		}
+	}
+}
+
+void UMyNinjaLiveComponent::MyDrawInternalRenderTargetToExternal()
+{
+	if (!MyDrawInternalRenderTargetToExternalEnabled)
+	{
+		return;
+	}
+
+	// 蓝图 DoOnce：仅首轮校验数组配对与目标有效性，失败后 Gate 永久关闭。
+	if (!bMyExternalRenderTargetExportValidated)
+	{
+		bMyExternalRenderTargetExportValidated = true;
+		bMyExternalRenderTargetExportGateOpen =
+			MyInternalRenderTargetsToExport.Num() == MyExternalRenderTargets.Num();
+		for (UTextureRenderTarget2D* ExternalTarget : MyExternalRenderTargets)
+		{
+			if (!IsValid(ExternalTarget))
+			{
+				bMyExternalRenderTargetExportGateOpen = false;
+				break;
+			}
+		}
+	}
+
+	if (!bMyExternalRenderTargetExportGateOpen)
+	{
+		return;
+	}
+
+	for (int32 Index = 0; Index < MyInternalRenderTargetsToExport.Num(); ++Index)
+	{
+		UMaterialInstanceDynamic* SourceMaterial = nullptr;
+		switch (MyInternalRenderTargetsToExport[Index])
+		{
+		case EMyRenderTargetList::VelocityDensity:
+			SourceMaterial = MyMICompositeAndGradient;
+			break;
+		case EMyRenderTargetList::Divergence:
+			SourceMaterial = MyMIDivergence;
+			break;
+		case EMyRenderTargetList::Pressure:
+			SourceMaterial = MyMIPressureCycle1;
+			break;
+		case EMyRenderTargetList::Painter:
+			SourceMaterial = MySingleTargetMode_LEGACY
+				? MyMICollisionPainterLine.Get()
+				: MyMICollisionPainterDot.Get();
+			break;
+		case EMyRenderTargetList::Output:
+			SourceMaterial = MyMIOutput;
+			break;
+		default:
+			continue;
+		}
+
+		if (IsValid(SourceMaterial))
+		{
+			UKismetRenderingLibrary::DrawMaterialToRenderTarget(
+				this, MyExternalRenderTargets[Index], SourceMaterial);
+		}
+	}
+}
+
 void UMyNinjaLiveComponent::MySetPainterV2PaintbufferInput()
 {
 	if (IsValid(MyNiagaraBasedPainter))

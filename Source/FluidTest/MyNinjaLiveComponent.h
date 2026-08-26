@@ -737,6 +737,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
 	void MyInitPainterV2();
 
+	/** 将点画笔材质的标量参数同步到 Painter v2 Niagara，BrushSize 由 Niagara 单独控制。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
+	void MyForwardScalarParamsToNiagara();
+
+	/** 是否将选定的内部模拟阶段绘制到外部 RenderTarget。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RenderTarget|Export")
+	bool MyDrawInternalRenderTargetToExternalEnabled = false;
+
+	/** 与导出阶段列表按索引一一对应的外部 RenderTarget。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RenderTarget|Export")
+	TArray<TObjectPtr<UTextureRenderTarget2D>> MyExternalRenderTargets;
+
+	/** 要导出的内部模拟阶段；顺序决定写入的外部 RenderTarget。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RenderTarget|Export")
+	TArray<EMyRenderTargetList> MyInternalRenderTargetsToExport;
+
+	/** 将选定内部阶段的材质绘制到按索引匹配的外部 RenderTarget。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|RenderTarget|Export")
+	void MyDrawInternalRenderTargetToExternal();
+
 	/** Painter v2 使用的 Niagara 系统；索引 0/1 分别对应不连接/连接追踪点。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
 	TArray<TObjectPtr<UNiagaraSystem>> MyCoreNiagaraSystems;
@@ -1136,6 +1156,14 @@ protected:
 	/** 对应 SetTraceMeshProperties 内未连接 Reset 引脚的 DoOnce 状态。 */
 	UPROPERTY(Transient)
 	bool bMyTraceMeshInitialRotationCaptured = false;
+
+	/** 外部 RT 导出节点首次执行后的数组校验状态。 */
+	UPROPERTY(Transient)
+	bool bMyExternalRenderTargetExportValidated = false;
+
+	/** 外部 RT 导出节点的 Gate 状态；首次校验失败后保持关闭。 */
+	UPROPERTY(Transient)
+	bool bMyExternalRenderTargetExportGateOpen = false;
 
 };
 
