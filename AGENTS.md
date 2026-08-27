@@ -63,7 +63,9 @@
   `Draw Internal RenderTarget to External RT（复合节点）→ MyDrawInternalRenderTargetToExternal`、
   `SetAdditionalFluidsimParams（复合节点）→ MySetAdditionalFluidsimParams`、
   `DynamicSimspeedAndWorldOffsetAdjustment（复合节点）→ MyDynamicSimspeedAndWorldOffsetAdjustment`、
-  `Set Pos,Velocity, Scale arrays to Painter v2（复合节点）→ MySetPosVelocityScaleArraysToPainterV2`
+  `Set Pos,Velocity, Scale arrays to Painter v2（复合节点）→ MySetPosVelocityScaleArraysToPainterV2`、
+  `Build brush-POSITION array（复合节点）→ MyBuildBrushPositionArray`、
+  `BrushSizeCoEff（复合节点）→ MyBrushSizeCoEff`
 
 ## 常用操作
 

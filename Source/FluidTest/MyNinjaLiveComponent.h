@@ -546,6 +546,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
 	int32 MyTouchLookupIndex = 0;
 
+	/** Painter v2 位置数组使用的当前画笔位置。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	FLinearColor MyPosition1_2D = FLinearColor::Black;
+
 	/** 单触点当前位置与上一帧位置。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
 	FLinearColor MyPosition2_2D = FLinearColor::Black;
@@ -820,6 +824,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
 	void MySetPosVelocityScaleArraysToPainterV2();
 
+	/** Painter v2 启用时把当前画笔位置追加到位置数组。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
+	void MyBuildBrushPositionArray();
+
 	/** 是否将选定的内部模拟阶段绘制到外部 RenderTarget。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RenderTarget|Export")
 	bool MyDrawInternalRenderTargetToExternalEnabled = false;
@@ -950,6 +958,18 @@ public:
 	double MyInputFeedback = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushSize = 0.0;
+
+	/** 画笔尺寸全局缩放系数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyGlobalBrushScale = 0.0;
+
+	/** 重叠网格尺寸系数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyOverlappingMeshSizeCoeff = 0.0;
+
+	/** 计算画笔尺寸系数：BrushSize × TraceMeshSizeCoeff × OverlappingMeshSizeCoeff × GlobalBrushScale × 0.5。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
+	double MyBrushSizeCoEff() const;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushStrength = 0.0;
 	/** 当前画笔是否与交互区域重叠。 */

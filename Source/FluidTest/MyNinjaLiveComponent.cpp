@@ -1412,6 +1412,20 @@ void UMyNinjaLiveComponent::MySetPosVelocityScaleArraysToPainterV2()
 		MyNiagaraBasedPainter, TEXT("User.BrushSizeArray"), MyBrushSizeArray);
 }
 
+void UMyNinjaLiveComponent::MyBuildBrushPositionArray()
+{
+	// Painter v2 且非单目标模式：把当前画笔位置追加到位置数组。
+	if (MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY)
+	{
+		MyPositionArray.Add(FVector2D(MyPosition1_2D.R, MyPosition1_2D.G));
+	}
+}
+
+double UMyNinjaLiveComponent::MyBrushSizeCoEff() const
+{
+	return MyBrushSize * MyTraceMeshSizeCoeff * MyOverlappingMeshSizeCoeff * MyGlobalBrushScale * 0.5;
+}
+
 void UMyNinjaLiveComponent::MyDrawInternalRenderTargetToExternal()
 {
 	if (!MyDrawInternalRenderTargetToExternalEnabled)
