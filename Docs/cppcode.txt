@@ -1,122 +1,53 @@
 
-void UMyNinjaLiveComponent::MyDynamicSimspeedAndWorldOffsetAdjustment()
+void UMyNinjaLiveComponent::MySetPosVelocityScaleArraysToPainterV2()
 {
-	if (!IsValid(MyTraceMeshComponent))
+	if (!MyUsePAINTER_V2_ToTrackObjects || MySingleTargetMode_LEGACY || !IsValid(MyNiagaraBasedPainter))
 	{
 		return;
 	}
 
-	const int32 SamplingDivisor = FMath::Max(MySamplingFPS, 1);
-	const double BaseTexelSizeMultiplier = FMath::Max(
-		static_cast<double>(MyMaxSamplingFPS / SamplingDivisor) * 0.5, 1.0) * MySpeed;
-	const double SingleTargetTexelSizeMultiplier =
-		(MySpeedTemp * MySingleTargetModeSpeedInfluenceFactor_LEGACY +
-			(1.0 - MySingleTargetModeSpeedInfluenceFactor_LEGACY)) * BaseTexelSizeMultiplier;
-	const double NormalTexelSizeMultiplier = MyHalfResPressureAndDivergenceBuffers
-		? 1.0
-		: BaseTexelSizeMultiplier;
-	const double SingleTargetMultiplier = MyHalfResPressureAndDivergenceBuffers
-		? 1.0
-		: SingleTargetTexelSizeMultiplier;
-	auto SetTexelSizeMultiplier = [](UMaterialInstanceDynamic* Material, double Value)
+	if (MyPV2_Connect_TrackpointsWithLines)
 	{
-		if (IsValid(Material))
-		{
-			Material->SetScalarParameterValue(TEXT("TexelSizeMult"), static_cast<float>(Value));
-		}
-	};
-	auto SetTexelSizeMultiplierOnSolverMaterials = [SetTexelSizeMultiplier, this](double Value)
-	{
-		for (UMaterialInstanceDynamic* Material : {
-			MyMICompositeAndGradient.Get(), MyMIAdvection.Get(), MyMIDivergence.Get(),
-			MyMIPressureCycle1.Get(), MyMIPressureCycle2.Get() })
-		{
-			SetTexelSizeMultiplier(Material, Value);
-		}
-	};
+		const bool bPositionArraysMatch = MyLastPositionArray.Num() == MyPositionArray.Num();
+		const bool bTracePositionUnchanged = FVector2D(MyTraceMeshPos) == FVector2D(MyTraceMeshLastPos);
+		const bool bCanInterpolate =
+			(MyQuantizerStepSize < 1 || bTracePositionUnchanged) && bPositionArraysMatch;
+		const bool bEnableInterpolation = bCanInterpolate && MyPV2_Interpolation &&
+			MyMaxSamplingFPS == MySamplingFPS && MyHitValid;
+		MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), bEnableInterpolation);
 
-	if (!MySimplePainterMode)
+		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
+			MyNiagaraBasedPainter, TEXT("User.PositionArray2D"), MyPositionArray);
+
+		if (MyPositionArray.IsEmpty())
+		{
+			MyLastPositionArray.Reset();
+		}
+		else if (MyLastPositionArray.IsEmpty())
+		{
+			MyLastPositionArray = MyPositionArray;
+		}
+
+		const bool bTrackedComponentsUnchanged =
+			MyPrimitivesArray == MyLastPrimitivesArray && MySKmeshesArray == MyLastSKmeshesArray;
+		if (!bTrackedComponentsUnchanged)
+		{
+			MyLastPositionArray = MyPositionArray;
+		}
+
+		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
+			MyNiagaraBasedPainter, TEXT("User.LastPositionArray2D"), MyLastPositionArray);
+	}
+	else
 	{
-		if (MySingleTargetMode_LEGACY && MySingleTargetModeSetSimSpeed_LEGACY)
-		{
-			SetTexelSizeMultiplierOnSolverMaterials(SingleTargetMultiplier);
-		}
-		else if (UWorld* World = GetWorld())
-		{
-			World->GetTimerManager().SetTimer(MyTimerSimSpeedAdjustment,
-				FTimerDelegate::CreateWeakLambda(this, [this, NormalTexelSizeMultiplier, SetTexelSizeMultiplierOnSolverMaterials]()
-				{
-					SetTexelSizeMultiplierOnSolverMaterials(NormalTexelSizeMultiplier);
-				}),
-				FMath::Max(0.0, MySimSpeedAdjustmentLatency), false);
-		}
+		MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), false);
+		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
+			MyNiagaraBasedPainter, TEXT("User.PositionArray2D"), MyPositionArray);
 	}
 
-	USceneComponent* AttachParent = MyTraceMeshComponent->GetAttachParent();
-	const FVector CurrentParentPos = IsValid(AttachParent)
-		? AttachParent->GetComponentLocation()
-		: FVector::ZeroVector;
-	const FVector RawTraceMeshPos = MyTraceMeshComponent->GetComponentLocation();
+	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayColor(
+		MyNiagaraBasedPainter, TEXT("User.VelocityArray"), MyVelocityArray);
 
-	if (!MyDynamicSimPositionInitialized)
-	{
-		MyDynamicSimPositionInitialized = true;
-		MyTraceMeshPosInitialWorld = FVector(RawTraceMeshPos.X, RawTraceMeshPos.Y,
-			MyForceTraceMeshToCustomVerticalPos ? MyForceTraceMeshVerticalPosition : RawTraceMeshPos.Z);
-		MyTraceMeshPosInitialLocal = MyTraceMeshPosInitialWorld - CurrentParentPos;
-		MyTraceMeshPosInitialFractionalPart = FVector(
-			FMath::Frac(MyTraceMeshPosInitialLocal.X), FMath::Frac(MyTraceMeshPosInitialLocal.Y),
-			FMath::Frac(MyTraceMeshPosInitialLocal.Z));
-		MyTraceMeshPos = MyTraceMeshPosInitialWorld;
-		MyTraceMeshLastPos = MyTraceMeshPosInitialWorld;
-		MyTraceMeshParentPos = CurrentParentPos;
-		MyTraceMeshParentLastPos = CurrentParentPos;
-		MyTraceMeshDeltaPos = FVector::ZeroVector;
-
-		AMyNinjaLiveActor* NinjaLive = nullptr;
-		MyInteractionVolume = MyCheckComponentOwner(NinjaLive) && IsValid(NinjaLive)
-			? NinjaLive->MyInteractionVolume
-			: nullptr;
-		MyInteractionVolumeIsPresent = IsValid(MyInteractionVolume);
-
-		if (MyQuantizerStepSize > 0 || MyMovementIsLockedOnThisAxis != EMyQuantizerAxisIgnore::None)
-		{
-			MyTraceMeshComponent->SetAbsolute(true, MyTraceMeshComponent->IsUsingAbsoluteRotation(),
-				MyTraceMeshComponent->IsUsingAbsoluteScale());
-			if (IsValid(MyInteractionVolume))
-			{
-				MyInteractionVolume->SetAbsolute(true, MyInteractionVolume->IsUsingAbsoluteRotation(),
-					MyInteractionVolume->IsUsingAbsoluteScale());
-			}
-		}
-	}
-
-	if (!MyEnablePainterDoubleBuffering && MyTraceMeshPos != MyTraceMeshLastPos &&
-		MyTraceMeshLastPos != FVector::ZeroVector)
-	{
-		MyInputFeedback = 0.0;
-	}
-
-	MyTraceMeshParentLastPos = MyTraceMeshParentPos;
-	MyTraceMeshParentPos = CurrentParentPos;
-	MyTraceMeshLastPos = MyTraceMeshPos;
-
-	const int32 QuantizerStep = FMath::Max(MyQuantizerStepSize, 1);
-	const double QuantizerDivisor = static_cast<double>(QuantizerStep) * 100.0;
-	const FVector ScaledInitialPosition = (MyTraceMeshPosInitialLocal + MyTraceMeshParentPos) / QuantizerDivisor;
-	const FVector ScaledPositionFraction(
-		FMath::Frac(ScaledInitialPosition.X), FMath::Frac(ScaledInitialPosition.Y),
-		FMath::Frac(ScaledInitialPosition.Z));
-	FVector FractionToRemove;
-	FVector InitialFractionToRestore;
-	MyKillFracOnGivenAxis(ScaledPositionFraction, MyTraceMeshPosInitialFractionalPart,
-		MyMovementNotQuantizedToStepsOnAxis, FractionToRemove, InitialFractionToRestore);
-	const FVector QuantizedPosition =
-		(ScaledInitialPosition - FractionToRemove + InitialFractionToRestore) * QuantizerDivisor;
-	const bool bUseRawPosition = MyQuantizerStepSize < 1 &&
-		MyMovementIsLockedOnThisAxis == EMyQuantizerAxisIgnore::None;
-	MyTraceMeshPos = MyLockMovementOnGivenAxis(
-		bUseRawPosition ? RawTraceMeshPos : QuantizedPosition, MyMovementIsLockedOnThisAxis);
-
-	MyDynamicSimspeedAndWorldOffsetAdjustmentFinal();
+	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayFloat(
+		MyNiagaraBasedPainter, TEXT("User.BrushSizeArray"), MyBrushSizeArray);
 }

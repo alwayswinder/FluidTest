@@ -23,6 +23,7 @@
 #include "MediaPlayer.h"
 #include "MediaTexture.h"
 #include "NiagaraComponent.h"
+#include "NiagaraDataInterfaceArrayFunctionLibrary.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Misc/EngineVersion.h"
@@ -1356,6 +1357,59 @@ void UMyNinjaLiveComponent::MyForwardScalarParamsToNiagara()
 			MyNiagaraBasedPainter->SetVariableFloat(ParameterInfo.Name, ParameterValue);
 		}
 	}
+}
+
+void UMyNinjaLiveComponent::MySetPosVelocityScaleArraysToPainterV2()
+{
+	if (!MyUsePAINTER_V2_ToTrackObjects || MySingleTargetMode_LEGACY || !IsValid(MyNiagaraBasedPainter))
+	{
+		return;
+	}
+
+	if (MyPV2_Connect_TrackpointsWithLines)
+	{
+		const bool bPositionArraysMatch = MyLastPositionArray.Num() == MyPositionArray.Num();
+		const bool bTracePositionUnchanged = FVector2D(MyTraceMeshPos) == FVector2D(MyTraceMeshLastPos);
+		const bool bCanInterpolate =
+			(MyQuantizerStepSize < 1 || bTracePositionUnchanged) && bPositionArraysMatch;
+		const bool bEnableInterpolation = bCanInterpolate && MyPV2_Interpolation &&
+			MyMaxSamplingFPS == MySamplingFPS && MyHitValid;
+		MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), bEnableInterpolation);
+
+		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
+			MyNiagaraBasedPainter, TEXT("User.PositionArray2D"), MyPositionArray);
+
+		if (MyPositionArray.IsEmpty())
+		{
+			MyLastPositionArray.Reset();
+		}
+		else if (MyLastPositionArray.IsEmpty())
+		{
+			MyLastPositionArray = MyPositionArray;
+		}
+
+		const bool bTrackedComponentsUnchanged =
+			MyPrimitivesArray == MyLastPrimitivesArray && MySKmeshesArray == MyLastSKmeshesArray;
+		if (!bTrackedComponentsUnchanged)
+		{
+			MyLastPositionArray = MyPositionArray;
+		}
+
+		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
+			MyNiagaraBasedPainter, TEXT("User.LastPositionArray2D"), MyLastPositionArray);
+	}
+	else
+	{
+		MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), false);
+		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
+			MyNiagaraBasedPainter, TEXT("User.PositionArray2D"), MyPositionArray);
+	}
+
+	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayColor(
+		MyNiagaraBasedPainter, TEXT("User.VelocityArray"), MyVelocityArray);
+
+	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayFloat(
+		MyNiagaraBasedPainter, TEXT("User.BrushSizeArray"), MyBrushSizeArray);
 }
 
 void UMyNinjaLiveComponent::MyDrawInternalRenderTargetToExternal()

@@ -816,6 +816,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
 	void MyForwardScalarParamsToNiagara();
 
+	/** 将 Painter v2 的位置、历史位置、速度和画笔尺寸数组写入 Niagara。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
+	void MySetPosVelocityScaleArraysToPainterV2();
+
 	/** 是否将选定的内部模拟阶段绘制到外部 RenderTarget。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RenderTarget|Export")
 	bool MyDrawInternalRenderTargetToExternalEnabled = false;
@@ -848,7 +852,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
 	TArray<FLinearColor> MyVelocityArray;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
-	TArray<double> MyBrushSizeArray;
+	TArray<float> MyBrushSizeArray;
+
+	/** 本帧及上一帧参与 Painter v2 追踪的组件集合。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	TArray<TObjectPtr<UPrimitiveComponent>> MyPrimitivesArray;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	TArray<TObjectPtr<UPrimitiveComponent>> MyLastPrimitivesArray;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	TArray<TObjectPtr<UPrimitiveComponent>> MySKmeshesArray;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	TArray<TObjectPtr<UPrimitiveComponent>> MyLastSKmeshesArray;
+
+	/** 当前帧是否存在有效追踪命中。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
+	bool MyHitValid = false;
 
 	/** Painter v2 的线条、速度和噪声参数。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")

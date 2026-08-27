@@ -62,7 +62,8 @@
   `Forward SCALAR params to Niagara（复合节点）→ MyForwardScalarParamsToNiagara`、
   `Draw Internal RenderTarget to External RT（复合节点）→ MyDrawInternalRenderTargetToExternal`、
   `SetAdditionalFluidsimParams（复合节点）→ MySetAdditionalFluidsimParams`、
-  `DynamicSimspeedAndWorldOffsetAdjustment（复合节点）→ MyDynamicSimspeedAndWorldOffsetAdjustment`
+  `DynamicSimspeedAndWorldOffsetAdjustment（复合节点）→ MyDynamicSimspeedAndWorldOffsetAdjustment`、
+  `Set Pos,Velocity, Scale arrays to Painter v2（复合节点）→ MySetPosVelocityScaleArraysToPainterV2`
 
 ## 常用操作
 
