@@ -65,7 +65,9 @@
   `DynamicSimspeedAndWorldOffsetAdjustment（复合节点）→ MyDynamicSimspeedAndWorldOffsetAdjustment`、
   `Set Pos,Velocity, Scale arrays to Painter v2（复合节点）→ MySetPosVelocityScaleArraysToPainterV2`、
   `Build brush-POSITION array（复合节点）→ MyBuildBrushPositionArray`、
-  `BrushSizeCoEff（复合节点）→ MyBrushSizeCoEff`
+  `BrushSizeCoEff（复合节点）→ MyBrushSizeCoEff`、
+  `MultiObjectVelocity（复合节点）→ MyMultiObjectVelocity`、
+  `SetBrushDensityParams3（复合节点）→ MySetBrushDensityParams3`
 
 ## 常用操作
 

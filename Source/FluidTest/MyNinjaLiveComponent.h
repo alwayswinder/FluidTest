@@ -566,6 +566,28 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Velocity")
 	void MySingleTargetVelocity();
 
+	/** 多物体画笔速度的最大局部空间长度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	double MyBrushVelocityClamp = 0.0;
+
+	/** 是否为静态网格写入额外的画笔速度偏移。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	bool MyDampenIgnoresStaticMeshes = false;
+
+	/** MultiObjectVelocity 当前处理的重叠对象及其类型索引（0：组件，1：骨骼网格）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	TObjectPtr<UPrimitiveComponent> MyOverlappingComponent = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	TObjectPtr<UPrimitiveComponent> MyOverlappingSkeletalMesh = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	FName MyOverlappingBone = NAME_None;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	int32 MyPosDataType = 0;
+
+	/** 计算多物体画笔速度、写入点状 Painter 材质并返回最终速度颜色。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Velocity")
+	void MyMultiObjectVelocity(FLinearColor& Velocity);
+
 	// ------------------------------------------------------------------
 	// ProximityActivation-MasterVars-Quantizer-OutMat 复合节点
 	// 蓝图实现：In1=Owner 激活设置（含 CheckComponentOwner），In2=直接初始化；
@@ -981,6 +1003,9 @@ public:
 	/** MuteBrush 计算出的实际画笔强度。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyBrushStrengthTemp1 = 0.001;
+	/** SetBrushDensityParams3 用于限制画笔强度的临时值。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyBrushStrengthTemp2 = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushHardness = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
@@ -1007,6 +1032,10 @@ public:
 	double MyDensityTxtOffsetY = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushNoise = 0.0;
+
+	/** 将画笔密度相关参数写入 Painter 与 Composite 动态材质。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
+	void MySetBrushDensityParams3(double Value);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyVeloInputTile = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
@@ -1279,4 +1308,3 @@ protected:
 	bool bMyExternalRenderTargetExportGateOpen = false;
 
 };
-

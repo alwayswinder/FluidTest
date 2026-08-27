@@ -1,53 +1,37 @@
-
-void UMyNinjaLiveComponent::MySetPosVelocityScaleArraysToPainterV2()
+void UMyNinjaLiveComponent::MyMultiObjectVelocity(FLinearColor& Velocity)
 {
-	if (!MyUsePAINTER_V2_ToTrackObjects || MySingleTargetMode_LEGACY || !IsValid(MyNiagaraBasedPainter))
+	Velocity = FLinearColor::Black;
+
+	UPrimitiveComponent* OverlappingPrimitive = MyPosDataType == 1
+		? MyOverlappingSkeletalMesh.Get()
+		: MyOverlappingComponent.Get();
+	if (!IsValid(OverlappingPrimitive) || !IsValid(MyTraceMeshComponent) || !IsValid(MyMICollisionPainterDot))
 	{
 		return;
 	}
 
-	if (MyPV2_Connect_TrackpointsWithLines)
-	{
-		const bool bPositionArraysMatch = MyLastPositionArray.Num() == MyPositionArray.Num();
-		const bool bTracePositionUnchanged = FVector2D(MyTraceMeshPos) == FVector2D(MyTraceMeshLastPos);
-		const bool bCanInterpolate =
-			(MyQuantizerStepSize < 1 || bTracePositionUnchanged) && bPositionArraysMatch;
-		const bool bEnableInterpolation = bCanInterpolate && MyPV2_Interpolation &&
-			MyMaxSamplingFPS == MySamplingFPS && MyHitValid;
-		MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), bEnableInterpolation);
+	const FVector PhysicsVelocity = OverlappingPrimitive->GetPhysicsLinearVelocity(MyOverlappingBone);
+	const bool bUseOwnerVelocity = PhysicsVelocity == FVector::ZeroVector && MyPosDataType == 1;
+	const AActor* OwnerActor = GetOwner();
+	const FVector SourceVelocity = bUseOwnerVelocity && IsValid(OwnerActor)
+		? OwnerActor->GetVelocity()
+		: PhysicsVelocity;
 
-		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
-			MyNiagaraBasedPainter, TEXT("User.PositionArray2D"), MyPositionArray);
+	const FVector ScaledVelocity = SourceVelocity * 0.0005;
+	const FTransform TraceMeshTransform(MyTraceMeshComponent->GetComponentRotation());
+	const FVector LocalVelocity = TraceMeshTransform.InverseTransformVectorNoScale(ScaledVelocity);
+	const FVector ClampedVelocity = UKismetMathLibrary::ClampVectorSize(
+		LocalVelocity, -MyBrushVelocityClamp, MyBrushVelocityClamp);
+	const FLinearColor VelocityColor(ClampedVelocity);
 
-		if (MyPositionArray.IsEmpty())
-		{
-			MyLastPositionArray.Reset();
-		}
-		else if (MyLastPositionArray.IsEmpty())
-		{
-			MyLastPositionArray = MyPositionArray;
-		}
+	const bool bIsStaticMesh = IsValid(MyOverlappingComponent) &&
+		MyOverlappingComponent->GetClass() == UStaticMeshComponent::StaticClass();
+	const float StaticMeshDampen = static_cast<float>(bIsStaticMesh ? 1 - MyPosDataType : 0) * 0.001f;
+	const FLinearColor StaticMeshOffset(StaticMeshDampen, StaticMeshDampen, StaticMeshDampen, 1.0f);
+	const FLinearColor FinalVelocity = MyDampenIgnoresStaticMeshes
+		? VelocityColor + StaticMeshOffset
+		: VelocityColor;
 
-		const bool bTrackedComponentsUnchanged =
-			MyPrimitivesArray == MyLastPrimitivesArray && MySKmeshesArray == MyLastSKmeshesArray;
-		if (!bTrackedComponentsUnchanged)
-		{
-			MyLastPositionArray = MyPositionArray;
-		}
-
-		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
-			MyNiagaraBasedPainter, TEXT("User.LastPositionArray2D"), MyLastPositionArray);
-	}
-	else
-	{
-		MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), false);
-		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
-			MyNiagaraBasedPainter, TEXT("User.PositionArray2D"), MyPositionArray);
-	}
-
-	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayColor(
-		MyNiagaraBasedPainter, TEXT("User.VelocityArray"), MyVelocityArray);
-
-	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayFloat(
-		MyNiagaraBasedPainter, TEXT("User.BrushSizeArray"), MyBrushSizeArray);
+	Velocity = FinalVelocity;
+	MyMICollisionPainterDot->SetVectorParameterValue(TEXT("Velocity"), FinalVelocity);
 }

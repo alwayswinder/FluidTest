@@ -688,6 +688,28 @@ void UMyNinjaLiveComponent::MyMuteBrush()
 	MyBrushStrengthTemp1 = (BrushActiveValue * MyBrushStrength) + 0.001;
 }
 
+void UMyNinjaLiveComponent::MySetBrushDensityParams3(double Value)
+{
+	if (!IsValid(MyMICollisionPainterDot))
+	{
+		return;
+	}
+
+	MyMICollisionPainterDot->SetScalarParameterValue(TEXT("BrushSize"), static_cast<float>(Value));
+	MyMICollisionPainterDot->SetScalarParameterValue(TEXT("BrushStrength"),
+		static_cast<float>(FMath::Min(MyBrushStrengthTemp2, MyBrushStrengthTemp1)));
+	MyMICollisionPainterDot->SetScalarParameterValue(TEXT("BrushHardness"),
+		static_cast<float>(FMath::Min(MyBrushHardness, 1.0)));
+	MyMICollisionPainterDot->SetVectorParameterValue(TEXT("Position"), MyPosition1_2D);
+	MyMICollisionPainterDot->SetScalarParameterValue(TEXT("BrushPuncture"), static_cast<float>(MyBrushPuncture));
+	MyMICollisionPainterDot->SetScalarParameterValue(TEXT("BrushNoise"), static_cast<float>(MyBrushNoise));
+
+	if (!MySimplePainterMode && IsValid(MyMICompositeAndGradient))
+	{
+		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("EraserSwitch"), MyEraserMode ? 1.0f : 0.0f);
+	}
+}
+
 void UMyNinjaLiveComponent::MyCameraFacing()
 {
 	if (!MyCameraFacingTraceMesh)
@@ -998,6 +1020,44 @@ void UMyNinjaLiveComponent::MySingleTargetVelocity()
 	{
 		MySpeedTemp = Velocity.Length();
 	}
+}
+
+void UMyNinjaLiveComponent::MyMultiObjectVelocity(FLinearColor& Velocity)
+{
+	Velocity = FLinearColor::Black;
+
+	UPrimitiveComponent* OverlappingPrimitive = MyPosDataType == 1
+		? MyOverlappingSkeletalMesh.Get()
+		: MyOverlappingComponent.Get();
+	if (!IsValid(OverlappingPrimitive) || !IsValid(MyTraceMeshComponent) || !IsValid(MyMICollisionPainterDot))
+	{
+		return;
+	}
+
+	const FVector PhysicsVelocity = OverlappingPrimitive->GetPhysicsLinearVelocity(MyOverlappingBone);
+	const bool bUseOwnerVelocity = PhysicsVelocity == FVector::ZeroVector && MyPosDataType == 1;
+	const AActor* OwnerActor = GetOwner();
+	const FVector SourceVelocity = bUseOwnerVelocity && IsValid(OwnerActor)
+		? OwnerActor->GetVelocity()
+		: PhysicsVelocity;
+
+	const FVector ScaledVelocity = SourceVelocity * 0.0005;
+	const FTransform TraceMeshTransform(MyTraceMeshComponent->GetComponentRotation());
+	const FVector LocalVelocity = TraceMeshTransform.InverseTransformVectorNoScale(ScaledVelocity);
+	const FVector ClampedVelocity = UKismetMathLibrary::ClampVectorSize(
+		LocalVelocity, -MyBrushVelocityClamp, MyBrushVelocityClamp);
+	const FLinearColor VelocityColor(ClampedVelocity);
+
+	const bool bIsStaticMesh = IsValid(MyOverlappingComponent) &&
+		MyOverlappingComponent->GetClass() == UStaticMeshComponent::StaticClass();
+	const float StaticMeshDampen = static_cast<float>(bIsStaticMesh ? 1 - MyPosDataType : 0) * 0.001f;
+	const FLinearColor StaticMeshOffset(StaticMeshDampen, StaticMeshDampen, StaticMeshDampen, 1.0f);
+	const FLinearColor FinalVelocity = MyDampenIgnoresStaticMeshes
+		? VelocityColor + StaticMeshOffset
+		: VelocityColor;
+
+	Velocity = FinalVelocity;
+	MyMICollisionPainterDot->SetVectorParameterValue(TEXT("Velocity"), FinalVelocity);
 }
 
 void UMyNinjaLiveComponent::MyProximityActivationMasterVarsQuantizerOutMat()
@@ -2501,5 +2561,3 @@ void UMyNinjaLiveComponent::MyAfterBind()
 	MyCreateOrAcquireRenderTargets();
 	MyAfterCreateRT();
 }
-
-

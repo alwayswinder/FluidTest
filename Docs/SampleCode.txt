@@ -1,110 +1,55 @@
-// ============================================================================
-// 复合图: Set Pos, Velocity, Scale arrays to Painter v2
-// 入口: Tunnel_0, 出口: Tunnel_1
-// ============================================================================
+// 输入：执行流，输出：最终速度颜色（LinearColor）到 Tunnel_1
+// 依赖变量：PosDataType (int), OverlappingComponent, OverlappingSkeletalMesh (PrimitiveComponent*), 
+//           OverlappingBone (FName), MyTraceMeshComponent (StaticMeshComponent*), 
+//           BrushVelocityClamp (float), DampenIgnoresStaticMeshes (bool), 
+//           MyMICollisionPainterDot (MaterialInstanceDynamic*)
 
-void UMyNinjaLiveComponent::SetPosVelocityScaleArraysToPainterV2()
+void MultiObjectVelocity(/* out */ FLinearColor& OutVelocityColor)
 {
-    // ---- 1. 条件判断: 是否启用 Painter V2 且非单目标模式 ----
-    // K2Node_IfThenElse_22 条件 = MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY
-    if (!(MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY))
+    // 1. 选择目标组件
+    UPrimitiveComponent* TargetComp = (PosDataType == 0) ? OverlappingComponent : OverlappingSkeletalMesh;
+
+    // 2. 获取物理速度（若为骨骼组件则指定骨骼名）
+    FVector RawVelocity = TargetComp->GetPhysicsLinearVelocity(OverlappingBone);
+
+    // 3. 决定是否使用原始速度（条件：速度非零 且 PosDataType == 1）
+    bool bUseRaw = (!RawVelocity.IsNearlyZero()) && (PosDataType == 1);
+
+    FVector FinalVelocity;
+    if (bUseRaw)
     {
-        // 直接跳到出口 (Knot_20 -> Knot_19 -> Tunnel_1)
-        return;
+        FinalVelocity = RawVelocity;
+    }
+    else
+    {
+        // 缩放
+        FVector Scaled = RawVelocity * 0.0005f;
+
+        // 转换到局部空间（基于 MyTraceMeshComponent 的旋转）
+        FTransform LocalTransform = FTransform(MyTraceMeshComponent->GetComponentRotation(),
+                                               FVector::ZeroVector,
+                                               FVector::OneVector);
+        FVector LocalVel = LocalTransform.InverseTransformDirection(Scaled);
+
+        // 钳制大小到 [-BrushVelocityClamp, BrushVelocityClamp]
+        FinalVelocity = ClampVectorSize(LocalVel, -BrushVelocityClamp, BrushVelocityClamp);
     }
 
-    // ---- 2. 根据 MyPV2_Connect_TrackpointsWithLines 分支 ----
-    if (MyPV2_Connect_TrackpointsWithLines)   // K2Node_IfThenElse_4 true
+    // 4. 将速度转换为颜色
+    FLinearColor BaseColor = Conv_VectorToLinearColor(FinalVelocity);
+
+    // 5. 根据是否忽略静态网格阻尼，决定是否添加偏移颜色
+    if (DampenIgnoresStaticMeshes)   // 若为true，则选择带偏移的B通道（实际蓝图中为 SelectColor 的 B 输入）
     {
-        // ---- 2.1 计算插值标志 (K2Node_IfThenElse_17 条件) ----
-        // 条件1: MyQuantizerStepSize < 1  (K2Node_PromotableOperator_25)
-        bool bStepSizeLessThan1 = (MyQuantizerStepSize < 1);
-        // 条件2: MyTraceMeshPos == MyTraceMeshLastPos (转换为Vector2D后比较) (K2Node_CallFunction_30)
-        FVector2D Pos2D = FVector2D(MyTraceMeshPos.X, MyTraceMeshPos.Y);
-        FVector2D LastPos2D = FVector2D(MyTraceMeshLastPos.X, MyTraceMeshLastPos.Y);
-        bool bPosEqual = (Pos2D == LastPos2D);
-        // 条件3: MyLastPositionArray 长度 == MyPositionArray 长度 (K2Node_PromotableOperator_17)
-        bool bLengthEqual = (MyLastPositionArray.Num() == MyPositionArray.Num());
-
-        // K2Node_CommutativeAssociativeBinaryOperator_5: OR(bStepSizeLessThan1, bPosEqual)
-        bool bOrCondition = bStepSizeLessThan1 || bPosEqual;
-        // K2Node_CommutativeAssociativeBinaryOperator_0: AND(bOrCondition, bLengthEqual)
-        bool bInterpolCondition = bOrCondition && bLengthEqual;
-
-        // ---- 2.2 根据插值条件设置 User.PosInterpol ----
-        if (bInterpolCondition)   // K2Node_IfThenElse_17 true
-        {
-            // 计算 User.PosInterpol 的值: 来自 K2Node_CommutativeAssociativeBinaryOperator_15
-            // = MyPV2_Interpolation && (MyMaxSamplingFPS == MySamplingFPS) && HitValid
-            bool bSamplingEqual = (MyMaxSamplingFPS == MySamplingFPS); // K2Node_PromotableOperator_22
-            bool bPosInterpolValue = MyPV2_Interpolation && bSamplingEqual && HitValid;
-            // 调用 SetVariableBool (K2Node_CallFunction_51) 设置 User.PosInterpol
-            MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), bPosInterpolValue);
-        }
-        else   // K2Node_IfThenElse_17 false
-        {
-            // 调用 SetVariableBool (K2Node_CallFunction_6) 设置 User.PosInterpol = false
-            MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), false);
-        }
-
-        // ---- 2.3 设置 User.PositionArray2D = MyPositionArray (K2Node_CallFunction_9) ----
-        // 注意: 此函数在 true/false 分支后都会执行 (因为两者 then 都连接到它)
-        SetNiagaraArrayVector2D(MyNiagaraBasedPainter, TEXT("User.PositionArray2D"), MyPositionArray);
+        // 添加一个计算出的偏移量（此处简化为一个固定小量，实际蓝图中有复杂计算）
+        FLinearColor Offset = FLinearColor(/* 由若干乘法与减法得到，约为 (1 - PosDataType) * 0.001 */);
+        BaseColor += Offset;
     }
-    else   // K2Node_IfThenElse_4 false
-    {
-        // ---- 设置 User.PosInterpol = false (K2Node_CallFunction_7) ----
-        MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), false);
+    // 否则直接使用 BaseColor
 
-        // ---- 设置 User.PositionArray2D = MyPositionArray (K2Node_CallFunction_75) ----
-        SetNiagaraArrayVector2D(MyNiagaraBasedPainter, TEXT("User.PositionArray2D"), MyPositionArray);
-    }
+    // 6. 设置材质参数
+    MyMICollisionPainterDot->SetVectorParameterValue(TEXT("Velocity"), BaseColor);
 
-    // ---- 3. 检查 MyPositionArray 是否为空 (K2Node_IfThenElse_31) ----
-    // 条件 = !Array_IsEmpty(MyPositionArray)  (通过 CallFunction_47 取反)
-    if (MyPositionArray.IsEmpty())   // 如果为空，则执行 else 分支
-    {
-        // ---- 清空 MyLastPositionArray (K2Node_CallArrayFunction_40) ----
-        MyLastPositionArray.Empty();   // 注意: 该节点修改数组
-        // 然后执行 Knot_13 -> Knot_12 -> 进入后续
-    }
-    else   // 数组非空，进入 K2Node_IfThenElse_24
-    {
-        // ---- K2Node_IfThenElse_24: 检查 MyLastPositionArray 是否为空 ----
-        if (MyLastPositionArray.IsEmpty())   // true 分支
-        {
-            // ---- 设置 MyLastPositionArray = MyPositionArray (K2Node_VariableSet_1) ----
-            MyLastPositionArray = MyPositionArray;
-            // 然后进入 K2Node_IfThenElse_2
-        }
-        else   // false 分支，跳过赋值
-        {
-            // 直接进入 K2Node_IfThenElse_2 (通过 Knot_13 -> Knot_12)
-        }
-    }
-
-    // ---- 4. K2Node_IfThenElse_2: 判断两个数组比较 ----
-    // 条件 = Array_Identical(PrimitivesArray, LastPrimitivesArray) && Array_Identical(SKmeshesArray, LastSKmeshesArray)
-    bool bPrimitivesSame = Array_Identical(PrimitivesArray, LastPrimitivesArray);   // K2Node_CallArrayFunction_0
-    bool bSKmeshesSame = Array_Identical(SKmeshesArray, LastSKmeshesArray);         // K2Node_CallArrayFunction_1
-    bool bArraysSame = bPrimitivesSame && bSKmeshesSame;   // K2Node_CommutativeAssociativeBinaryOperator_6
-
-    if (!bArraysSame)   // false 分支 (K2Node_IfThenElse_2 else)
-    {
-        // ---- 设置 MyLastPositionArray = MyPositionArray (K2Node_VariableSet_2) ----
-        MyLastPositionArray = MyPositionArray;
-    }
-    // 无论 true/false，后续都会执行相同的三个 Set 数组操作
-
-    // ---- 5. 设置 Niagara 数组 ----
-    // 5.1 设置 User.LastPositionArray2D = MyLastPositionArray (K2Node_CallFunction_76)
-    SetNiagaraArrayVector2D(MyNiagaraBasedPainter, TEXT("User.LastPositionArray2D"), MyLastPositionArray);
-
-    // 5.2 设置 User.VelocityArray = MyVelocityArray (K2Node_CallFunction_58)
-    SetNiagaraArrayColor(MyNiagaraBasedPainter, TEXT("User.VelocityArray"), MyVelocityArray);
-
-    // 5.3 设置 User.BrushSizeArray = MyBrushSizeArray (K2Node_CallFunction_48)
-    SetNiagaraArrayFloat(MyNiagaraBasedPainter, TEXT("User.BrushSizeArray"), MyBrushSizeArray);
-
-    // ---- 6. 出口 (Tunnel_1) ----
+    // 输出到隧道
+    OutVelocityColor = BaseColor;
 }
