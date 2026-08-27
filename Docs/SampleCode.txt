@@ -1,87 +1,204 @@
-# 事件/函数: DynamicSimspeedAndWorldOffsetAdjustment_Final
-# 入口: CustomEvent (无参数)
-# 变量说明:
-#   MyTraceMeshPos, MyTraceMeshLastPos: Vector
-#   MyTraceMeshComponent: SceneComponent (用于获取Scale和Rotation)
-#   MyQuantizerStepSize: int
-#   MyOffsetFromSimAreaMotion: float
-#   SimAreaMotionEffectsBrushPuncture: float
-#   MyBrushPuncture: float
-#   MySimplePainterMode: bool
-#   材质实例: MyMICollisionPainterOffset, MyMIOutput, MyMICollisionPainterDot, MyMICollisionPainterLine,
-#             MyMICompositeAndGradient, MyMIDivergence, MyMIPressureCycle1, MyMIPressureCycle2
+// ============================================================================
+// 复合图: DynamicSimspeedAndWorldOffsetAdjustment (入口 Tunnel_0, 出口 Tunnel_1)
+// ============================================================================
 
-def DynamicSimspeedAndWorldOffsetAdjustment_Final():
-    # 1. 计算位置增量 delta = MyTraceMeshPos - MyTraceMeshLastPos
-    delta = MyTraceMeshPos - MyTraceMeshLastPos
+// ---------- 1. 纯函数计算：材质参数 TexelSizeMult 的值 ----------
+int tempDiv = Divide_IntInt(MyMaxSamplingFPS, MySamplingFPS);           // K2Node_CallFunction_656
+double tempMul = Multiply_IntFloat(tempDiv, 0.5);                       // K2Node_CallFunction_342
+double tempFMax = FMax(tempMul, 1.0);                                  // K2Node_CommutativeAssociativeBinaryOperator_19
+double baseSpeedFactor = Multiply_DoubleDouble(tempFMax, MySpeed);     // K2Node_CommutativeAssociativeBinaryOperator_49 输出
 
-    # 2. 获取量化步长并限制最小值
-    step = max(MyQuantizerStepSize, 1)
+// 计算 Select_4 的 Option 0 值 (用于 True 分支的材质参数)
+double speedInfluence = SingleTargetMode_SpeedInfluenceFactor_LEGACY;   // 变量
+double speedTemp = MySpeedTemp;                                         // 变量
+double prod1 = Multiply_DoubleDouble(speedTemp, speedInfluence);       // K2Node_CommutativeAssociativeBinaryOperator_3
+double sub1 = Subtract_DoubleDouble(1.0, speedInfluence);              // K2Node_CallFunction_62
+double add1 = Add_DoubleDouble(prod1, sub1);                           // K2Node_CommutativeAssociativeBinaryOperator_2
+double option0_select4 = Multiply_DoubleDouble(add1, baseSpeedFactor); // K2Node_CommutativeAssociativeBinaryOperator_1
 
-    # 3. 获取组件缩放
-    scale = MyTraceMeshComponent.K2_GetComponentScale()
+// Select_0 和 Select_4 根据 HalfRes 标志选择
+bool halfRes = MyHalfResPressureAndDivergenceBuffers;
+double paramValue_TrueBranch = halfRes ? 1.0 : option0_select4;        // Select_4 输出
+double paramValue_FalseBranch = halfRes ? 1.0 : baseSpeedFactor;       // Select_0 输出
 
-    # 4. 根据 MyQuantizerStepSize 调整 delta
-    if MyQuantizerStepSize < -1:
-        adjusted_delta = delta  # 不缩放
-    else:
-        # 缩放: delta / (100 * scale)
-        adjusted_delta = delta / (100.0 * scale)  # 分量除法
+// ---------- 2. 执行流：ExecutionSequence_3 ----------
+// 进入复合图后，首先执行 Sequence 的 then_0 和 then_1（顺序执行）
 
-    # 5. 将调整后的向量从世界空间转换到组件局部空间（基于旋转）
-    #    构造 Transform（位置=0，旋转=组件的旋转，缩放=1）
-    transform = MakeTransform(Location=Vector(0,0,0), Rotation=MyTraceMeshComponent.K2_GetComponentRotation(), Scale=Vector(1,1,1))
-    local_delta = InverseTransformDirection(transform, adjusted_delta)
+// ---- then_0 分支 ----
+if (!MySimplePainterMode)  // IfThenElse_6，如果为 true 则什么都不做
+{
+    bool condSingleTarget = MySingleTargetMode_LEGACY && MySingleTargetModeSetSimSpeed_LEGACY; // K2Node_CommutativeAssociativeBinaryOperator_7
+    if (condSingleTarget)   // IfThenElse_3 的 true
+    {
+        // 调用 SetScalarParameterValue 对多个材质实例，参数名 "TexelSizeMult"，值为 paramValue_TrueBranch
+        // (self 引脚连接了多个变量，故分别调用)
+        SetScalarParameterValue(MyMICompositeAndGradient, "TexelSizeMult", paramValue_TrueBranch);
+        SetScalarParameterValue(MyMIAdvection, "TexelSizeMult", paramValue_TrueBranch);
+        SetScalarParameterValue(MyMIDivergence, "TexelSizeMult", paramValue_TrueBranch);
+        SetScalarParameterValue(MyMIPressureCycle1, "TexelSizeMult", paramValue_TrueBranch);
+        SetScalarParameterValue(MyMIPressureCycle2, "TexelSizeMult", paramValue_TrueBranch);
+    }
+    else                    // IfThenElse_3 的 false 分支，经过 Knot_22
+    {
+        Delay(SimSpeedAdjustmentLatency);  // K2Node_CallFunction_271, 延迟时间来自变量
+        // 延迟完成后，执行另一个 SetScalarParameterValue
+        SetScalarParameterValue(MyMICompositeAndGradient, "TexelSizeMult", paramValue_FalseBranch);
+        SetScalarParameterValue(MyMIAdvection, "TexelSizeMult", paramValue_FalseBranch);
+        SetScalarParameterValue(MyMIDivergence, "TexelSizeMult", paramValue_FalseBranch);
+        SetScalarParameterValue(MyMIPressureCycle1, "TexelSizeMult", paramValue_FalseBranch);
+        SetScalarParameterValue(MyMIPressureCycle2, "TexelSizeMult", paramValue_FalseBranch);
+    }
+}
 
-    # 6. 根据 MyQuantizerStepSize 确定乘数
-    if MyQuantizerStepSize == -3:
-        multiplier = 0.0
-    elif MyQuantizerStepSize == -2:
-        multiplier = MyOffsetFromSimAreaMotion * 0.001
-    else:
-        multiplier = 1.0
+// ---- then_1 分支：ExecutionSequence_7 ----
+// 子序列：then_0, then_1, then_2 顺序执行
 
-    # 7. 累加到 TraceMeshDeltaPos
-    TraceMeshDeltaPos = TraceMeshDeltaPos + local_delta * multiplier
+// ========== then_0：DoOnce 初始化 ==========
+{
+    static bool doOnceFlag = false;   // MacroInstance_0 (DoOnce)
+    if (!doOnceFlag)
+    {
+        doOnceFlag = true;
 
-    # 8. 分解 TraceMeshDeltaPos 为 x, y, z
-    x = TraceMeshDeltaPos.X
-    y = TraceMeshDeltaPos.Y
-    z = TraceMeshDeltaPos.Z
+        // ---- 计算 MyTraceMeshPosInitialWorld ----
+        Vector compLoc = GetComponentLocation(MyTraceMeshComponent);      // K2Node_CallFunction_43
+        float X = compLoc.X;
+        float Y = compLoc.Y;
+        float Z_orig = compLoc.Z;
+        // 根据 ForceTraceMeshToCustomVerticalPos 选择 Z
+        float Z_final = ForceTraceMeshToCustomVerticalPos ? ForceTraceMeshVerticalPosition : Z_orig; // CallFunction_56 (SelectFloat)
+        Vector initialWorld = MakeVector(X, Y, Z_final);                 // K2Node_CallFunction_42
+        MyTraceMeshPosInitialWorld = initialWorld;                       // VariableSet_0
 
-    # 9. 计算 BrushPuncture
-    brush_puncture = MyBrushPuncture + abs(z) * (SimAreaMotionEffectsBrushPuncture * -20000.0)
+        // ---- 计算 MyTraceMeshPosInitialLocal ----
+        Vector parentWorld = GetComponentLocation(GetAttachParent(MyTraceMeshComponent)); // CallFunction_27 (通过 CallFunction_8 获取父组件)
+        Vector initialLocal = Subtract_VectorVector(initialWorld, parentWorld); // K2Node_CallFunction_64
+        MyTraceMeshPosInitialLocal = initialLocal;                       // VariableSet_1
 
-    # 10. 根据 MySimplePainterMode 选择目标材质集合，并设置参数
-    if MySimplePainterMode:
-        # 目标材质: MyMICollisionPainterOffset, MyMIOutput, MyMICollisionPainterDot,
-        #           以及 MyMICollisionPainterLine 或 Dot（由 Select_1 决定，但最终会被设置）
-        target_materials = [
-            MyMICollisionPainterOffset,
-            MyMIOutput,
-            MyMICollisionPainterDot,
-            # MyMICollisionPainterLine 可能通过 Select_1 被包含
-        ]
-        # 注意：Select_1 根据 MyQuantizerStepSize < 1 选择 Line 或 Dot，但 Dot 已在列表中，
-        # 实际上蓝图中 Select_1 的输出连接到 CallFunction_1 的 self，所以 Line 或 Dot 也会被设置。
-        # 我们简化为包含所有可能涉及的材质。
-    else:
-        # 目标材质: MyMICompositeAndGradient, MyMIDivergence, MyMIPressureCycle1,
-        #           MyMIPressureCycle2, MyMICollisionPainterOffset, MyMICollisionPainterDot
-        target_materials = [
-            MyMICompositeAndGradient,
-            MyMIDivergence,
-            MyMIPressureCycle1,
-            MyMIPressureCycle2,
-            MyMICollisionPainterOffset,
-            MyMICollisionPainterDot,
-        ]
+        // ---- 计算 MyTraceMeshPosInitialFractionalPart ----
+        float fracX = Fraction(initialLocal.X);                          // CallFunction_30
+        float fracY = Fraction(initialLocal.Y);                          // CallFunction_32
+        float fracZ = Fraction(initialLocal.Z);                          // CallFunction_33
+        Vector fracVec = MakeVector(fracX, fracY, fracZ);                // CallFunction_48
+        // 该值暂存，稍后写入变量
 
-    # 对于所有目标材质，设置以下参数（实际蓝图通过多个 SetScalarParameterValue 节点分别设置）:
-    for mat in target_materials:
-        if IsValid(mat):
-            mat.SetScalarParameterValue("WorldOffsetDeltaX", x)
-            mat.SetScalarParameterValue("WorldOffsetDeltaY", y)
-            mat.SetScalarParameterValue("BrushPuncture", brush_puncture)
-            mat.SetScalarParameterValue("WorldOffsetX", x)
-            mat.SetScalarParameterValue("WorldOffsetY", y)
+        // ---- 条件判断：MyCheckComponentOwner ----
+        bool isValidOwner = MyCheckComponentOwner();                     // CallFunction_5
+        if (isValidOwner)  // IfThenElse_4 true
+        {
+            // 获取 AsNinjaLive 的 MyInteractionVolume
+            MyNinjaLiveActor* owner = /* 从输出获取 */;
+            MyInteractionVolume = owner->MyInteractionVolume;            // VariableSet_6
+            MyInteractionVolumeIsPresent = IsValid(MyInteractionVolume); // VariableSet_16 (CallFunction_45)
+        }
+        else  // false 分支
+        {
+            MyInteractionVolumeIsPresent = false;                        // VariableSet_10 (默认值)
+        }
+
+        // 无论真假，都执行 VariableSet_8 (设置 FractionalPart)
+        MyTraceMeshPosInitialFractionalPart = fracVec;                   // VariableSet_8
+
+        // ---- 条件 IfThenElse_1：根据量化步长和锁定轴决定是否设置 Absolute ----
+        bool condGreater = MyQuantizerStepSize > 0;                      // K2Node_CallFunction_4 (Greater_IntInt)
+        int lockedAxisInt = Conv_ByteToInt(MyMovementIsLockedOnThisAxis); // CallFunction_16
+        bool condNotEqual = (lockedAxisInt != 4);                        // CallFunction_22 (NotEqual_IntInt, B=4)
+        bool condOr = condGreater || condNotEqual;                       // K2Node_CommutativeAssociativeBinaryOperator_0 (BooleanOR)
+
+        if (condOr)  // IfThenElse_1 true
+        {
+            // 对 MyTraceMeshComponent 设置 Absolute 属性
+            SetAbsolute(MyTraceMeshComponent,
+                        true,                                       // bNewAbsoluteLocation
+                        MyTraceMeshComponent->bAbsoluteRotation,    // 来自 VariableGet_43
+                        MyTraceMeshComponent->bAbsoluteScale);      // 来自 VariableGet_50
+
+            // 调用 IsValid 宏检查 MyInteractionVolume
+            if (IsValid(MyInteractionVolume))   // MacroInstance_3
+            {
+                // 对 MyInteractionVolume 设置 Absolute
+                SetAbsolute(MyInteractionVolume,
+                            true,
+                            MyInteractionVolume->bAbsoluteRotation, // VariableGet_14
+                            MyInteractionVolume->bAbsoluteScale);   // VariableGet_23
+            }
+        }
+        // 否则不做任何事
+    }
+}
+
+// ========== then_1：双缓冲判断 ==========
+if (!MyEnablePainterDoubleBuffering)  // IfThenElse_0, true 分支为空
+{
+    bool posChanged = NotEqual_VectorVector(MyTraceMeshPos, MyTraceMeshLastPos); // CallFunction_40
+    bool notNull = NotEqual_VectorVector(MyTraceMeshLastPos, NullVector);        // CallFunction_19
+    if (posChanged && notNull)   // IfThenElse_5 条件 (BooleanAND)
+    {
+        MyInputFeedback = 0.0;  // VariableSet_4 (默认值 0.0)
+    }
+}
+
+// ========== then_2：位置更新 ==========
+{
+    // 1. 更新 MyTraceMeshParentLastPos = MyTraceMeshParentPos
+    MyTraceMeshParentLastPos = MyTraceMeshParentPos;   // VariableSet_9
+
+    // 2. 更新 MyTraceMeshParentPos = 当前父组件世界位置
+    Vector parentPos = GetComponentLocation(GetAttachParent(MyTraceMeshComponent)); // CallFunction_27
+    MyTraceMeshParentPos = parentPos;                    // VariableSet_11
+
+    // 3. 更新 MyTraceMeshLastPos = 当前 MyTraceMeshPos
+    MyTraceMeshLastPos = MyTraceMeshPos;                 // VariableSet_13
+
+    // 4. 计算新的 MyTraceMeshPos（通过 MyLockMovementOnGivenAxis）
+    // 先计算必要的中间量：
+    int stepSize = Max(MyQuantizerStepSize, 1);                    // K2Node_CommutativeAssociativeBinaryOperator_11
+    double stepSizeD = Conv_IntToDouble(stepSize);                 // K2Node_CallFunction_7
+    double divisor = Multiply_DoubleDouble(stepSizeD, 100.0);      // K2Node_CommutativeAssociativeBinaryOperator_4
+    double invDivisor = Divide_DoubleDouble(1.0, divisor);         // K2Node_CallFunction_9
+
+    // 获取初始位置和当前组件位置
+    Vector initLocal = MyTraceMeshPosInitialLocal;                 // VariableGet_45
+    Vector parentWorldPos = MyTraceMeshParentPos;                  // 刚刚更新
+    Vector addVec = Add_VectorVector(initLocal, parentWorldPos);   // K2Node_CommutativeAssociativeBinaryOperator_16
+    Vector scaledVec = Multiply_VectorFloat(addVec, invDivisor);   // K2Node_CallFunction_20
+
+    // 获取当前组件位置
+    Vector currentPos = GetComponentLocation(MyTraceMeshComponent); // K2Node_CallFunction_29
+
+    // 计算 B 选项：通过 MyKillFracOnGivenAxis 得到的位置偏移
+    // 注意：K2Node_CallFunction_6 输出 FracOut 和 FracInitOut，但这里用于后续计算，此处我们需要其输出。
+    // 实际上 CallFunction_6 是 MyKillFracOnGivenAxis，输入 Frac = fracVec (之前计算的), FracInit = MyTraceMeshPosInitialFractionalPart,
+    // QuantizerIgnoresThisAxis = MovementNotQuantizedToStepsOnAxis (变量)
+    // 输出 FracOut 和 FracInitOut
+    // 我们调用该函数：
+    Vector fracOut, fracInitOut;
+    MyKillFracOnGivenAxis(fracVec, MyTraceMeshPosInitialFractionalPart, MovementNotQuantizedToStepsOnAxis, fracOut, fracInitOut); // 伪代码，实际返回两个值
+    // 然后计算 B 选项：
+    Vector add2 = Add_VectorVector(currentPos, fracOut);              // K2Node_CommutativeAssociativeBinaryOperator_12 (A来自Subtract? 实际上看代码：K2Node_CommutativeAssociativeBinaryOperator_12的A来自CallFunction_44的输出，而CallFunction_44是 Subtract_VectorVector? 不，应该仔细追踪。
+    // 重新追踪：CallFunction_44 是 Subtract_VectorVector( scaledVec , ？) 实际上看其 A 来自 Knot_43（即 scaledVec），B 来自 CallFunction_6 的 FracOut? 让我们按实际：
+    // 从文本：K2Node_CommutativeAssociativeBinaryOperator_12 的 A 来自 K2Node_CallFunction_44 的 ReturnValue，而 CallFunction_44 是 Subtract_VectorVector(A=Knot_43(scaledVec), B=CallFunction_6的FracOut?)
+    // 实际上 CallFunction_44 的 A 是 Knot_43，即 scaledVec；B 是 CallFunction_6 的 FracOut 吗？查看 CallFunction_44 的 B 引脚连接了 K2Node_CallFunction_6 的 FracOut 引脚。所以：
+    Vector subVec = Subtract_VectorVector(scaledVec, fracOut);         // CallFunction_44
+    // 然后 K2Node_CommutativeAssociativeBinaryOperator_12 的 A = subVec，B = 来自 Knot_41（即 fracInitOut? 实际 Knot_41 来自 Knot_40，而 Knot_40 来自 CallFunction_6 的 FracInitOut）。所以：
+    Vector addVec2 = Add_VectorVector(subVec, fracInitOut);            // K2Node_CommutativeAssociativeBinaryOperator_12
+    // 然后 CallFunction_69: Multiply_VectorFloat(A=addVec2, B=invDivisor? 但 invDivisor 经过 Knot_45 和 Knot_44？实际 invDivisor 是 1/(stepSize*100)，但 CallFunction_69 的 B 来自 Knot_45，Knot_45 来自 Knot_44，Knot_44 来自 K2Node_CommutativeAssociativeBinaryOperator_4 的输出（即 divisor）? 实际上 Knot_44 输入来自 K2Node_CommutativeAssociativeBinaryOperator_4 的输出（divisor），但 Knot_44 输出到 Knot_45，而 Knot_45 输出到 CallFunction_69 的 B。但 CallFunction_69 是 Multiply_VectorFloat，B 应该是浮点数，而 divisor 是浮点数，但这里却是 divisor，不是 invDivisor。让我们检查：K2Node_CommutativeAssociativeBinaryOperator_4 的输出是 divisor = stepSizeD * 100.0，然后该值同时连接到 CallFunction_9 的 B（做 1/divisor）和 Knot_44。Knot_44 输出到 Knot_45 再到 CallFunction_69 的 B。所以 CallFunction_69 的 B 是 divisor，不是 invDivisor。同时 CallFunction_20 使用的是 invDivisor（CallFunction_9 输出）。所以这是正确的：CallFunction_69 乘以 divisor。
+    // 所以最终 B 选项 = Multiply_VectorFloat(addVec2, divisor);
+    Vector optionB = Multiply_VectorFloat(addVec2, divisor);           // K2Node_CallFunction_69
+
+    // SelectVector 选择 A=currentPos, B=optionB, bPickA = 条件 (来自 BooleanAND of Less_IntInt and EqualEqual_ByteByte)
+    bool condLess = MyQuantizerStepSize < 1;  // 但实际比较是 stepSize < 1? 看 CallFunction_3 (Less_IntInt A=MyQuantizerStepSize, B=1) 所以 condLess = MyQuantizerStepSize < 1
+    bool condEqualByte = EqualEqual_ByteByte(MyMovementIsLockedOnThisAxis, 4); // CallFunction_2 比较是否等于 4
+    bool pickA = condLess && condEqualByte;   // K2Node_CommutativeAssociativeBinaryOperator_8
+    Vector newPos = SelectVector(currentPos, optionB, pickA);          // K2Node_CallFunction_53
+
+    // 最后调用 MyLockMovementOnGivenAxis 对 newPos 进行轴锁定
+    Vector lockedPos = MyLockMovementOnGivenAxis(newPos, MyMovementIsLockedOnThisAxis); // K2Node_CallFunction_1
+    MyTraceMeshPos = lockedPos;                                        // VariableSet_3
+}
+
+// ---------- 3. 出口 ----------
+// 执行流最终到达 K2Node_CallFunction_58 (MyDynamicSimspeedAndWorldOffsetAdjustmentFinal)
+// 该函数调用后，执行到 Tunnel_1 的 ExecOut，结束复合图
+MyDynamicSimspeedAndWorldOffsetAdjustmentFinal();   // 自定义函数，无返回值
+// 然后出口

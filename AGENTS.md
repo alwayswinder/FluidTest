@@ -61,7 +61,8 @@
   `CoreFluidsimOPs（复合节点）→ MyCoreFluidsimOPs`、
   `Forward SCALAR params to Niagara（复合节点）→ MyForwardScalarParamsToNiagara`、
   `Draw Internal RenderTarget to External RT（复合节点）→ MyDrawInternalRenderTargetToExternal`、
-  `SetAdditionalFluidsimParams（复合节点）→ MySetAdditionalFluidsimParams`
+  `SetAdditionalFluidsimParams（复合节点）→ MySetAdditionalFluidsimParams`、
+  `DynamicSimspeedAndWorldOffsetAdjustment（复合节点）→ MyDynamicSimspeedAndWorldOffsetAdjustment`
 
 ## 常用操作
 

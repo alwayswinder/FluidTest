@@ -292,6 +292,150 @@ void UMyNinjaLiveComponent::MyDynamicSimspeedAndWorldOffsetAdjustmentFinal()
 	}
 }
 
+void UMyNinjaLiveComponent::MyDynamicSimspeedAndWorldOffsetAdjustment()
+{
+	if (!IsValid(MyTraceMeshComponent))
+	{
+		return;
+	}
+
+	const double BaseTexelSizeMultiplier = FMath::Max(
+		static_cast<double>(UKismetMathLibrary::Divide_IntInt(MyMaxSamplingFPS, MySamplingFPS)) * 0.5, 1.0) * MySpeed;
+	const double SingleTargetTexelSizeMultiplier =
+		(MySpeedTemp * MySingleTargetModeSpeedInfluenceFactor_LEGACY +
+			(1.0 - MySingleTargetModeSpeedInfluenceFactor_LEGACY)) * BaseTexelSizeMultiplier;
+	const double SingleTargetMultiplier = MyHalfResPressureAndDivergenceBuffers
+		? 1.0
+		: SingleTargetTexelSizeMultiplier;
+	auto SetTexelSizeMultiplier = [](UMaterialInstanceDynamic* Material, double Value)
+	{
+		if (IsValid(Material))
+		{
+			Material->SetScalarParameterValue(TEXT("TexelSizeMult"), static_cast<float>(Value));
+		}
+	};
+	auto SetTexelSizeMultiplierOnSolverMaterials = [SetTexelSizeMultiplier, this](double Value)
+	{
+		for (UMaterialInstanceDynamic* Material : {
+			MyMICompositeAndGradient.Get(), MyMIAdvection.Get(), MyMIDivergence.Get(),
+			MyMIPressureCycle1.Get(), MyMIPressureCycle2.Get() })
+		{
+			SetTexelSizeMultiplier(Material, Value);
+		}
+	};
+
+	if (!MySimplePainterMode)
+	{
+		if (MySingleTargetMode_LEGACY && MySingleTargetModeSetSimSpeed_LEGACY)
+		{
+			SetTexelSizeMultiplierOnSolverMaterials(SingleTargetMultiplier);
+		}
+		else if (!MySimSpeedAdjustmentPending)
+		{
+			MySimSpeedAdjustmentPending = true;
+			const FTimerDelegate ApplyDelayedTexelSizeMultiplier = FTimerDelegate::CreateWeakLambda(this,
+				[this, SetTexelSizeMultiplierOnSolverMaterials]()
+				{
+					MySimSpeedAdjustmentPending = false;
+					const double CurrentMultiplier = MyHalfResPressureAndDivergenceBuffers
+						? 1.0
+						: FMath::Max(static_cast<double>(UKismetMathLibrary::Divide_IntInt(
+							MyMaxSamplingFPS, MySamplingFPS)) * 0.5, 1.0) * MySpeed;
+					SetTexelSizeMultiplierOnSolverMaterials(CurrentMultiplier);
+				});
+
+			if (UWorld* World = GetWorld())
+			{
+				if (MySimSpeedAdjustmentLatency <= 0.0)
+				{
+					World->GetTimerManager().SetTimerForNextTick(ApplyDelayedTexelSizeMultiplier);
+				}
+				else
+				{
+					World->GetTimerManager().SetTimer(MyTimerSimSpeedAdjustment, ApplyDelayedTexelSizeMultiplier,
+						MySimSpeedAdjustmentLatency, false);
+				}
+			}
+			else
+			{
+				MySimSpeedAdjustmentPending = false;
+			}
+		}
+	}
+
+	USceneComponent* AttachParent = MyTraceMeshComponent->GetAttachParent();
+	const FVector CurrentParentPos = IsValid(AttachParent)
+		? AttachParent->GetComponentLocation()
+		: FVector::ZeroVector;
+	const FVector RawTraceMeshPos = MyTraceMeshComponent->GetComponentLocation();
+
+	if (!MyDynamicSimPositionInitialized)
+	{
+		MyDynamicSimPositionInitialized = true;
+		MyTraceMeshPosInitialWorld = FVector(RawTraceMeshPos.X, RawTraceMeshPos.Y,
+			MyForceTraceMeshToCustomVerticalPos ? MyForceTraceMeshVerticalPosition : RawTraceMeshPos.Z);
+		MyTraceMeshPosInitialLocal = MyTraceMeshPosInitialWorld - CurrentParentPos;
+		const double InitialQuantizerDivisor = static_cast<double>(FMath::Max(MyQuantizerStepSize, 1)) * 100.0;
+		const FVector InitialScaledPosition =
+			(MyTraceMeshPosInitialLocal + CurrentParentPos) / InitialQuantizerDivisor;
+		MyTraceMeshPosInitialFractionalPart = FVector(
+			FMath::Frac(InitialScaledPosition.X), FMath::Frac(InitialScaledPosition.Y),
+			FMath::Frac(InitialScaledPosition.Z));
+
+		AMyNinjaLiveActor* NinjaLive = nullptr;
+		if (MyCheckComponentOwner(NinjaLive) && IsValid(NinjaLive))
+		{
+			MyInteractionVolume = NinjaLive->MyInteractionVolume;
+			MyInteractionVolumeIsPresent = IsValid(MyInteractionVolume);
+		}
+		else
+		{
+			MyInteractionVolumeIsPresent = false;
+		}
+
+		if (MyQuantizerStepSize > 0 || MyMovementIsLockedOnThisAxis != EMyQuantizerAxisIgnore::None)
+		{
+			MyTraceMeshComponent->SetAbsolute(true, MyTraceMeshComponent->IsUsingAbsoluteRotation(),
+				MyTraceMeshComponent->IsUsingAbsoluteScale());
+			if (IsValid(MyInteractionVolume))
+			{
+				MyInteractionVolume->SetAbsolute(true, MyInteractionVolume->IsUsingAbsoluteRotation(),
+					MyInteractionVolume->IsUsingAbsoluteScale());
+			}
+		}
+	}
+
+	if (!MyEnablePainterDoubleBuffering &&
+		!MyTraceMeshPos.Equals(MyTraceMeshLastPos, 0.0001) &&
+		!MyTraceMeshLastPos.Equals(FVector::ZeroVector, 0.0001))
+	{
+		MyInputFeedback = 0.0;
+	}
+
+	MyTraceMeshParentLastPos = MyTraceMeshParentPos;
+	MyTraceMeshParentPos = CurrentParentPos;
+	MyTraceMeshLastPos = MyTraceMeshPos;
+
+	const int32 QuantizerStep = FMath::Max(MyQuantizerStepSize, 1);
+	const double QuantizerDivisor = static_cast<double>(QuantizerStep) * 100.0;
+	const FVector ScaledInitialPosition = (MyTraceMeshPosInitialLocal + MyTraceMeshParentPos) / QuantizerDivisor;
+	const FVector ScaledPositionFraction(
+		FMath::Frac(ScaledInitialPosition.X), FMath::Frac(ScaledInitialPosition.Y),
+		FMath::Frac(ScaledInitialPosition.Z));
+	FVector FractionToRemove;
+	FVector InitialFractionToRestore;
+	MyKillFracOnGivenAxis(ScaledPositionFraction, MyTraceMeshPosInitialFractionalPart,
+		MyMovementNotQuantizedToStepsOnAxis, FractionToRemove, InitialFractionToRestore);
+	const FVector QuantizedPosition =
+		(ScaledInitialPosition - FractionToRemove + InitialFractionToRestore) * QuantizerDivisor;
+	const bool bUseRawPosition = MyQuantizerStepSize < 1 &&
+		MyMovementIsLockedOnThisAxis == EMyQuantizerAxisIgnore::None;
+	MyTraceMeshPos = MyLockMovementOnGivenAxis(
+		bUseRawPosition ? RawTraceMeshPos : QuantizedPosition, MyMovementIsLockedOnThisAxis);
+
+	MyDynamicSimspeedAndWorldOffsetAdjustmentFinal();
+}
+
 FVector UMyNinjaLiveComponent::MyLockMovementOnGivenAxis(FVector Pos, EMyQuantizerAxisIgnore LockThisAxis) const
 {
 	switch (LockThisAxis)

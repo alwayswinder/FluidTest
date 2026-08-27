@@ -81,6 +81,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyDynamicSimspeedAndWorldOffsetAdjustmentFinal();
 
+	/** 采样 TraceMesh 与父级位置，处理锁轴后更新模拟区域运动。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
+	void MyDynamicSimspeedAndWorldOffsetAdjustment();
+
 	/** 将指定轴的位置还原为 TraceMesh 初始世界坐标。 */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Trace")
 	FVector MyLockMovementOnGivenAxis(FVector Pos, EMyQuantizerAxisIgnore LockThisAxis) const;
@@ -244,6 +248,34 @@ public:
 	/** 本帧 TraceMesh 的世界空间位移。 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
 	FVector MyTraceMeshDeltaPos = FVector::ZeroVector;
+
+	/** 首次采样的 TraceMesh 相对父级位置与小数部分。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	FVector MyTraceMeshPosInitialLocal = FVector::ZeroVector;
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	FVector MyTraceMeshPosInitialFractionalPart = FVector::ZeroVector;
+
+	/** 是否已经完成动态模拟区域位置的首次采样。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	bool MyDynamicSimPositionInitialized = false;
+
+	/** 量化时保持连续移动的小数分量所忽略的轴。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Quantizer")
+	EMyQuantizerAxisIgnore MyMovementNotQuantizedToStepsOnAxis = EMyQuantizerAxisIgnore::None;
+
+	/** 首次采样时可将 TraceMesh 固定到指定的世界 Z 坐标。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	bool MyForceTraceMeshToCustomVerticalPos = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace", meta = (EditCondition = "MyForceTraceMeshToCustomVerticalPos"))
+	double MyForceTraceMeshVerticalPosition = 0.0;
+
+	/** 非单目标模式下写入 TexelSizeMult 前的蓝图延迟。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	double MySimSpeedAdjustmentLatency = 0.0;
+
+	/** 旧版单目标模式对速度值的影响系数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
+	double MySingleTargetModeSpeedInfluenceFactor_LEGACY = 0.0;
 
 	// ------------------------------------------------------------------
 	// Enable OWNER Input 相关（用户输入方式）
@@ -437,6 +469,12 @@ public:
 	/** 量化步长（米），由 MyQuantizerValues 计算 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Quantizer")
 	int32 MyQuantizerStepSize = 0;
+
+	/** 延迟写入 TexelSizeMult 的定时器。 */
+	FTimerHandle MyTimerSimSpeedAdjustment;
+
+	/** 对应蓝图 Delay 的未完成 latent action 标记。 */
+	bool MySimSpeedAdjustmentPending = false;
 
 	/** 是否启用画笔双缓冲（PaintBuffer WorldSpace 偏移或 Painter v2 时需要） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Quantizer")
