@@ -70,7 +70,8 @@
   `SetBrushDensityParams3（复合节点）→ MySetBrushDensityParams3`、
   `DefineLineTracingSource（复合节点）→ MyDefineLineTracingSource`（+ `MyUseCustomTraceSource` / `MyCustomTraceSourcePosition`）、
   `BrushRnd3（复合节点）→ MyBrushRnd3`（参数 `in` → `InColor`）、
-  `OverlapArtifactWorkaround2（复合节点）→ MyOverlapArtifactWorkaround2`（+ `MyTracePositionTemp` / `MyLastTracePositionTemp` / `MyPosition1_3D` / `MyLastPosition1_3D`）
+  `OverlapArtifactWorkaround2（复合节点）→ MyOverlapArtifactWorkaround2`（+ `MyTracePositionTemp` / `MyLastTracePositionTemp` / `MyPosition1_3D` / `MyLastPosition1_3D`）、
+  `TraceObjects2（复合节点）→ MyTraceObjects2`、`NinjaLiveFunctions.TraceOverlap → MyTraceOverlap`（占位，待补全）
 
 ## 常用操作
 

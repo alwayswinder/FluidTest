@@ -744,6 +744,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyOverlapArtifactWorkaround2(FVector In);
 
+	/** 物体追踪：从 Start 追踪到物体位置，命中输出 UV 并重置画笔与碰撞计时；ThenExec/NoHitExec 对应两个执行分支。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	void MyTraceObjects2(FVector Start, FLinearColor& HitUV, bool& ThenExec, bool& NoHitExec);
+
+	/** 追踪器失败时临时关闭线条绘制：条件满足时 MyHitValid=false，冷却期后恢复为 true。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	void MyTemporarilySwitchOffLineDrawingIFTracerFails();
+
 	// ------------------------------------------------------------------
 	// FPS-PRECISION-RESOLUTION 复合节点
 	// ------------------------------------------------------------------
@@ -1321,8 +1329,14 @@ private:
 	FTimerHandle MyNiagaraPainterV2SafetyTimer;
 	FTimerHandle MyNiagaraPainterV2CooldownTimer;
 
+	/** 线条绘制失败冷却定时器（对应 RetriggerableDelay）。 */
+	FTimerHandle MyLineDrawingFailCooldownTimer;
+
 	/** 倒带并重播当前媒体输入。 */
 	void MyRestartInputMedia();
+
+	/** 线条绘制冷却结束，恢复 MyHitValid 为 true。 */
+	void MyRestoreLineDrawingAfterCooldown();
 
 protected:
 	/** 启动 TraceMesh 就绪检查。 */

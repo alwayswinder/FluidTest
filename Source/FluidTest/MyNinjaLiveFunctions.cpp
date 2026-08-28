@@ -8,6 +8,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetRenderingLibrary.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "UObject/UnrealType.h"
 
 UTextureRenderTarget2D* UMyNinjaLiveFunctions::MyCreateRenderTarget(
@@ -242,4 +243,51 @@ void UMyNinjaLiveFunctions::MyCameraFacing(
 	}
 
 	InMesh->SetWorldRotation(FacingRotation);
+}
+
+void UMyNinjaLiveFunctions::MyTraceOverlap(
+	UObject* WorldContextObject,
+	FVector Start,
+	FVector End,
+	double TracelineOvershoot,
+	TEnumAsByte<ETraceTypeQuery> TraceChannel,
+	TArray<AActor*>& FluidNinjaLIVEActors,
+	bool PainterV2,
+	FLinearColor& HitUV,
+	FVector& TracePosition,
+	bool& HitValid)
+{
+	// 输出默认值；无效命中分支会保持这些默认值。
+	HitUV = FLinearColor::Black;
+	TracePosition = FVector::ZeroVector;
+	HitValid = false;
+
+	// 追踪终点沿 Start→End 方向延长 TracelineOvershoot。
+	const FVector TraceEnd = End + (End - Start) * TracelineOvershoot;
+
+	// 单次线追踪：复杂碰撞、忽略传入的 Actor 列表、不忽略自身。
+	FHitResult Hit;
+	const bool bHit = UKismetSystemLibrary::LineTraceSingle(
+		WorldContextObject, Start, TraceEnd, TraceChannel,
+		true, FluidNinjaLIVEActors, EDrawDebugTrace::None, Hit, false);
+
+	// 命中且 HitActor 有效 → HitValidator=true，否则 false。
+	bool HitValidator = false;
+	if (bHit && IsValid(Hit.GetActor()))
+	{
+		HitValidator = true;
+	}
+
+	// HitValidator=false 时若 PainterV2=false，蓝图不走 Return 节点（输出保持默认）。
+	if (!HitValidator && !PainterV2)
+	{
+		return;
+	}
+
+	// 命中数据：碰撞 UV 转 LinearColor、命中位置、命中有效性。
+	FVector2D UV(0.0f, 0.0f);
+	UGameplayStatics::FindCollisionUV(Hit, 0, UV);
+	HitUV = FLinearColor(UV.X, UV.Y, 0.0f, 1.0f);
+	TracePosition = Hit.Location;
+	HitValid = HitValidator;
 }

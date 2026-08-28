@@ -1346,6 +1346,80 @@ void UMyNinjaLiveComponent::MyOverlapArtifactWorkaround2(FVector In)
 	MyBrushStrengthTemp1 = bMuteBrush ? 0.0 : MyBrushStrength;
 }
 
+void UMyNinjaLiveComponent::MyTraceObjects2(FVector Start, FLinearColor& HitUV, bool& ThenExec, bool& NoHitExec)
+{
+	ThenExec = false;
+	NoHitExec = false;
+
+	// 从 Start 到物体位置做追踪；命中输出 UV 并走 then 分支，否则走 NoHit 分支。
+	FVector TracePosition = FVector::ZeroVector;
+	bool HitValid = false;
+	TArray<AActor*> TraceExclude;
+	TraceExclude.Reserve(MyNinjaLiveTraceExclude.Num());
+	for (const TObjectPtr<AActor>& Excluded : MyNinjaLiveTraceExclude)
+	{
+		if (Excluded)
+		{
+			TraceExclude.Add(Excluded);
+		}
+	}
+	UMyNinjaLiveFunctions::MyTraceOverlap(
+		this, Start, MyPosition1_3D, 1.5, MyTraceChannel,
+		TraceExclude, MyUsePAINTER_V2_ToTrackObjects,
+		HitUV, TracePosition, HitValid);
+
+	if (!HitValid)
+	{
+		NoHitExec = true;
+		return;
+	}
+
+	// 命中：Painter v2 直接使用画笔强度；否则走越界修复（可能静音画笔）。
+	if (MyUsePAINTER_V2_ToTrackObjects)
+	{
+		MyBrushStrengthTemp1 = MyBrushStrength;
+	}
+	else
+	{
+		MyOverlapArtifactWorkaround2(TracePosition);
+	}
+
+	MyTimeSinceLastCollision = 0.0;
+	MyHitValid = true;
+	ThenExec = true;
+}
+
+void UMyNinjaLiveComponent::MyTemporarilySwitchOffLineDrawingIFTracerFails()
+{
+	// 仅 Painter v2 追踪、非旧版单目标且连接追踪点画线时，暂停线条绘制。
+	const bool bShouldSwitchOff = MyUsePAINTER_V2_ToTrackObjects
+		&& !MySingleTargetMode_LEGACY
+		&& MyPV2_Connect_TrackpointsWithLines;
+	if (!bShouldSwitchOff)
+	{
+		return;
+	}
+
+	MyHitValid = false;
+
+	// 冷却期后恢复线条绘制（对应蓝图 RetriggerableDelay：每次触发重置计时）。
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(MyLineDrawingFailCooldownTimer);
+		World->GetTimerManager().SetTimer(
+			MyLineDrawingFailCooldownTimer,
+			this,
+			&UMyNinjaLiveComponent::MyRestoreLineDrawingAfterCooldown,
+			static_cast<float>(MyPV2LineDrawingFailCooldownTime),
+			false);
+	}
+}
+
+void UMyNinjaLiveComponent::MyRestoreLineDrawingAfterCooldown()
+{
+	MyHitValid = true;
+}
+
 void UMyNinjaLiveComponent::MyFPSPrecisionResolution()
 {
 	// 分辨率过小会导致流体材质采样越界，蓝图用 256x256 兜底。

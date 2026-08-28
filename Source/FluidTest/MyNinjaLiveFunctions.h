@@ -4,12 +4,14 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
+#include "Engine/EngineTypes.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "MyNinjaLiveFunctions.generated.h"
 
 class AMyNinjaLiveMemoryPoolManager;
 class USceneComponent;
+class AActor;
 
 /** NinjaLiveFunctions 蓝图函数库的 C++ 迁移入口。 */
 UCLASS()
@@ -63,5 +65,19 @@ public:
 		bool UseLegacyFacing,
 		bool LockY,
 		FRotator TraceMeshInitRot);
+
+	/** 从 Start 追踪到 End 生成画笔命中信息（占位：内部实现待补全）。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace", meta = (WorldContext = "WorldContextObject"))
+	static void MyTraceOverlap(
+		UObject* WorldContextObject,
+		FVector Start,
+		FVector End,
+		double TracelineOvershoot,
+		TEnumAsByte<ETraceTypeQuery> TraceChannel,
+		UPARAM(ref) TArray<AActor*>& FluidNinjaLIVEActors,
+		bool PainterV2,
+		FLinearColor& HitUV,
+		FVector& TracePosition,
+		bool& HitValid);
 	
 };
