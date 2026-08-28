@@ -710,6 +710,24 @@ void UMyNinjaLiveComponent::MySetBrushDensityParams3(double Value)
 	}
 }
 
+FLinearColor UMyNinjaLiveComponent::MyBrushRnd3(const FLinearColor InColor) const
+{
+	if (MyPV2_GenerateVelocity)
+	{
+		return InColor;
+	}
+
+	// R/G 通道独立地加 [-0.5*MyBrushRnd, +0.5*MyBrushRnd] 内的随机抖动。
+	const double HalfRange = MyBrushRnd * 0.5;
+	const FLinearColor Randomized(
+		InColor.R + FMath::FRandRange(-HalfRange, HalfRange),
+		InColor.G + FMath::FRandRange(-HalfRange, HalfRange),
+		InColor.B,
+		InColor.A);
+
+	return Randomized;
+}
+
 void UMyNinjaLiveComponent::MyCameraFacing()
 {
 	if (!MyCameraFacingTraceMesh)
@@ -1284,6 +1302,48 @@ void UMyNinjaLiveComponent::MySetTraceMeshProperties()
 	MyTraceMeshSizeCoeff = MyBrushScaledInverselyByTraceMeshSize
 		? (SizeInMeters == 0.0 ? 0.0 : (1.0 / SizeInMeters))
 		: 1.0;
+}
+
+FVector UMyNinjaLiveComponent::MyDefineLineTracingSource() const
+{
+	// 默认描线源：玩家相机位置；不可用时回退到世界原点。
+	FVector TraceSource = FVector::ZeroVector;
+	if (const APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(this, 0))
+	{
+		TraceSource = CameraManager->K2_GetActorLocation();
+	}
+
+	if (MyUseCustomTraceSource)
+	{
+		// 自定义源：Owner 变换将 CustomTraceSourcePosition 转到世界空间；
+		// 任一轴为 0（未设置）时偏移 (100,100,100)，避免与世界原点重叠。
+		const AActor* OwnerActor = GetOwner();
+		const FTransform OwnerTransform = IsValid(OwnerActor) ? OwnerActor->GetTransform() : FTransform::Identity;
+		FVector CustomSourceWorld = OwnerTransform.TransformPosition(MyCustomTraceSourcePosition);
+		if (MyCustomTraceSourcePosition.X == 0.0 || MyCustomTraceSourcePosition.Y == 0.0 || MyCustomTraceSourcePosition.Z == 0.0)
+		{
+			CustomSourceWorld += FVector(100.0, 100.0, 100.0);
+		}
+		TraceSource = CustomSourceWorld;
+	}
+
+	return TraceSource;
+}
+
+void UMyNinjaLiveComponent::MyOverlapArtifactWorkaround2(FVector In)
+{
+	// 保存上一帧追踪位置（此时 TracePositionTemp 仍是旧值），再更新为本帧输入。
+	MyLastTracePositionTemp = MyTracePositionTemp;
+	MyTracePositionTemp = In;
+
+	// 越界判定：追踪位置未变（物体停在边缘）、物体自身在移动、且非持续交互模式时，
+	// FluidTrace 无法生成有效 UV，静音画笔避免伪影。
+	const bool bTraceNotMoving = MyTracePositionTemp.Equals(MyLastTracePositionTemp, 0.1f);
+	const bool bObjectMoving = !MyPosition1_3D.Equals(MyLastPosition1_3D, 0.1f);
+	const bool bNotContinuousInteraction = !MyContinuousInteractionWithOwnerActor;
+	const bool bMuteBrush = bTraceNotMoving && bObjectMoving && bNotContinuousInteraction;
+
+	MyBrushStrengthTemp1 = bMuteBrush ? 0.0 : MyBrushStrength;
 }
 
 void UMyNinjaLiveComponent::MyFPSPrecisionResolution()

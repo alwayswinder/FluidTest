@@ -67,7 +67,10 @@
   `Build brush-POSITION array（复合节点）→ MyBuildBrushPositionArray`、
   `BrushSizeCoEff（复合节点）→ MyBrushSizeCoEff`、
   `MultiObjectVelocity（复合节点）→ MyMultiObjectVelocity`、
-  `SetBrushDensityParams3（复合节点）→ MySetBrushDensityParams3`
+  `SetBrushDensityParams3（复合节点）→ MySetBrushDensityParams3`、
+  `DefineLineTracingSource（复合节点）→ MyDefineLineTracingSource`（+ `MyUseCustomTraceSource` / `MyCustomTraceSourcePosition`）、
+  `BrushRnd3（复合节点）→ MyBrushRnd3`（参数 `in` → `InColor`）、
+  `OverlapArtifactWorkaround2（复合节点）→ MyOverlapArtifactWorkaround2`（+ `MyTracePositionTemp` / `MyLastTracePositionTemp` / `MyPosition1_3D` / `MyLastPosition1_3D`）
 
 ## 常用操作
 

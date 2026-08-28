@@ -1,37 +1,15 @@
-void UMyNinjaLiveComponent::MyMultiObjectVelocity(FLinearColor& Velocity)
+void UMyNinjaLiveComponent::MyOverlapArtifactWorkaround2(FVector In)
 {
-	Velocity = FLinearColor::Black;
+	// 保存上一帧追踪位置（此时 TracePositionTemp 仍是旧值），再更新为本帧输入。
+	MyLastTracePositionTemp = MyTracePositionTemp;
+	MyTracePositionTemp = In;
 
-	UPrimitiveComponent* OverlappingPrimitive = MyPosDataType == 1
-		? MyOverlappingSkeletalMesh.Get()
-		: MyOverlappingComponent.Get();
-	if (!IsValid(OverlappingPrimitive) || !IsValid(MyTraceMeshComponent) || !IsValid(MyMICollisionPainterDot))
-	{
-		return;
-	}
+	// 越界判定：追踪位置未变（物体停在边缘）、物体自身在移动、且非持续交互模式时，
+	// FluidTrace 无法生成有效 UV，静音画笔避免伪影。
+	const bool bTraceNotMoving = MyTracePositionTemp.Equals(MyLastTracePositionTemp, 0.1f);
+	const bool bObjectMoving = !MyPosition1_3D.Equals(MyLastPosition1_3D, 0.1f);
+	const bool bNotContinuousInteraction = !MyContinuousInteractionWithOwnerActor;
+	const bool bMuteBrush = bTraceNotMoving && bObjectMoving && bNotContinuousInteraction;
 
-	const FVector PhysicsVelocity = OverlappingPrimitive->GetPhysicsLinearVelocity(MyOverlappingBone);
-	const bool bUseOwnerVelocity = PhysicsVelocity == FVector::ZeroVector && MyPosDataType == 1;
-	const AActor* OwnerActor = GetOwner();
-	const FVector SourceVelocity = bUseOwnerVelocity && IsValid(OwnerActor)
-		? OwnerActor->GetVelocity()
-		: PhysicsVelocity;
-
-	const FVector ScaledVelocity = SourceVelocity * 0.0005;
-	const FTransform TraceMeshTransform(MyTraceMeshComponent->GetComponentRotation());
-	const FVector LocalVelocity = TraceMeshTransform.InverseTransformVectorNoScale(ScaledVelocity);
-	const FVector ClampedVelocity = UKismetMathLibrary::ClampVectorSize(
-		LocalVelocity, -MyBrushVelocityClamp, MyBrushVelocityClamp);
-	const FLinearColor VelocityColor(ClampedVelocity);
-
-	const bool bIsStaticMesh = IsValid(MyOverlappingComponent) &&
-		MyOverlappingComponent->GetClass() == UStaticMeshComponent::StaticClass();
-	const float StaticMeshDampen = static_cast<float>(bIsStaticMesh ? 1 - MyPosDataType : 0) * 0.001f;
-	const FLinearColor StaticMeshOffset(StaticMeshDampen, StaticMeshDampen, StaticMeshDampen, 1.0f);
-	const FLinearColor FinalVelocity = MyDampenIgnoresStaticMeshes
-		? VelocityColor + StaticMeshOffset
-		: VelocityColor;
-
-	Velocity = FinalVelocity;
-	MyMICollisionPainterDot->SetVectorParameterValue(TEXT("Velocity"), FinalVelocity);
+	MyBrushStrengthTemp1 = bMuteBrush ? 0.0 : MyBrushStrength;
 }

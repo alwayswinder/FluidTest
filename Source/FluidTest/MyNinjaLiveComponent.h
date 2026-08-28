@@ -707,6 +707,44 @@ public:
 	void MySetTraceMeshProperties();
 
 	// ------------------------------------------------------------------
+	// DefineLineTracingSource 相关（描线追踪源位置）
+	// ------------------------------------------------------------------
+	/** 是否使用自定义描线源位置；false 时使用玩家相机位置。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	bool MyUseCustomTraceSource = false;
+
+	/** 自定义描线源位置（Owner 局部空间）；任一轴为 0 时视为未设置。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	FVector MyCustomTraceSourcePosition = FVector::ZeroVector;
+
+	/** 返回描线追踪源位置：自定义源（未设置时偏移 100）或玩家相机位置。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Trace")
+	FVector MyDefineLineTracingSource() const;
+
+	// ------------------------------------------------------------------
+	// OverlapArtifactWorkaround2 相关（重叠越界修复）
+	// ------------------------------------------------------------------
+	/** 当前追踪位置临时值；物体轴心跨出模拟平面时由其与历史值判断越界。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	FVector MyTracePositionTemp = FVector::ZeroVector;
+
+	/** 上一帧追踪位置临时值。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	FVector MyLastTracePositionTemp = FVector::ZeroVector;
+
+	/** 当前物体位置（3D）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	FVector MyPosition1_3D = FVector::ZeroVector;
+
+	/** 上一帧物体位置（3D）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	FVector MyLastPosition1_3D = FVector::ZeroVector;
+
+	/** 重叠越界时静音画笔（强度置 0）：追踪位置未动、物体在移动且非持续交互模式。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	void MyOverlapArtifactWorkaround2(FVector In);
+
+	// ------------------------------------------------------------------
 	// FPS-PRECISION-RESOLUTION 复合节点
 	// ------------------------------------------------------------------
 	/** 流体模拟横向分辨率，低于 8 时由初始化逻辑回退到 256。 */
@@ -1048,6 +1086,10 @@ public:
 	double MyDensityInputNoiseTile = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushRnd = 0.0;
+
+	/** 画笔随机颜色：MyPV2_GenerateVelocity 开启时返回原色，否则 R/G 通道加 ±MyBrushRnd*0.5 随机抖动。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
+	FLinearColor MyBrushRnd3(const FLinearColor InColor) const;
 
 	/** 速度场反馈系数。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
