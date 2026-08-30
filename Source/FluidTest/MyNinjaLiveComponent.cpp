@@ -1620,6 +1620,91 @@ double UMyNinjaLiveComponent::MyBrushSizeCoEff() const
 	return MyBrushSize * MyTraceMeshSizeCoeff * MyOverlappingMeshSizeCoeff * MyGlobalBrushScale * 0.5;
 }
 
+void UMyNinjaLiveComponent::MyCalculateBrushSizeCoEffFromBoneDistance(FVector In, double BrushScaleMult, double& Out)
+{
+	// 重叠骨骼网格无效时保持 Out 默认（对应蓝图 Cast Failed 无连接分支）。
+	Out = 0.0;
+	USkeletalMeshComponent* SkeletalMesh = Cast<USkeletalMeshComponent>(MyOverlappingSkeletalMesh.Get());
+	if (!IsValid(SkeletalMesh))
+	{
+		return;
+	}
+
+	// 距离 = |In - 父骨骼 Socket 位置|，×0.01 转米，×BrushScaleMult。
+	const FName ParentBone = SkeletalMesh->GetParentBone(MyOverlappingBone);
+	const FVector ParentBoneWorldPos = SkeletalMesh->GetSocketLocation(ParentBone);
+	const double BoneDistance = FMath::Abs((In - ParentBoneWorldPos).Size());
+	Out = BoneDistance * 0.01 * BrushScaleMult;
+}
+
+void UMyNinjaLiveComponent::MyCalcPos5()
+{
+	// 保存上一帧位置，再刷新为重叠骨骼的 Socket 位置。
+	MyLastPosition1_3D = MyPosition1_3D;
+	MyPosition1_3D = IsValid(MyOverlappingSkeletalMesh.Get())
+		? MyOverlappingSkeletalMesh->GetSocketLocation(MyOverlappingBone)
+		: FVector::ZeroVector;
+
+	// 按交互物体尺寸缩放画笔：开则按骨骼距离计算，关则直接用骨骼画笔缩放系数。
+	if (MyBrushScaledByInteractingObjSize)
+	{
+		double Out = 0.0;
+		MyCalculateBrushSizeCoEffFromBoneDistance(MyPosition1_3D, MySkeletalMeshBrushScale, Out);
+		MyOverlappingMeshSizeCoeff = Out;
+	}
+	else
+	{
+		MyOverlappingMeshSizeCoeff = MySkeletalMeshBrushScale;
+	}
+
+	MyPosDataType = 1;
+}
+
+void UMyNinjaLiveComponent::MyCalcPos3()
+{
+	// 保存上一帧位置，再刷新为重叠组件的世界位置。
+	MyLastPosition1_3D = MyPosition1_3D;
+	MyPosition1_3D = IsValid(MyOverlappingComponent.Get())
+		? MyOverlappingComponent->K2_GetComponentLocation()
+		: FVector::ZeroVector;
+
+	// 按重叠物体边界或缩放计算画笔尺寸系数。
+	MyOverlappingMeshSizeCoeff = MyCalculateBrushSizeCoFromBounds1(MyOverlappingComponent.Get());
+
+	MyPosDataType = 0;
+}
+
+double UMyNinjaLiveComponent::MyCalculateBrushSizeCoFromBounds1(USceneComponent* Component) const
+{
+	// 未按交互物体尺寸缩放时恒为 1.0（SelectFloat 的 B 分支）。
+	if (!MyBrushScaledByInteractingObjSize)
+	{
+		return 1.0;
+	}
+
+	// 数据源：用包围盒范围或组件缩放×50（SelectVector 的 B/A 分支）。
+	FVector DataSource = FVector::ZeroVector;
+	if (IsValid(Component))
+	{
+		if (MyUseObjBoundsInsteadOfSize)
+		{
+			FVector Origin = FVector::ZeroVector;
+			FVector BoxExtent = FVector::ZeroVector;
+			float SphereRadius = 0.0f;
+			UKismetSystemLibrary::GetComponentBounds(Component, Origin, BoxExtent, SphereRadius);
+			DataSource = BoxExtent;
+		}
+		else
+		{
+			DataSource = Component->K2_GetComponentScale() * 50.0;
+		}
+	}
+
+	// 最小分量 × PrimitiveObjBrushScale × 0.01。
+	const double MinElement = FMath::Min(DataSource.X, FMath::Min(DataSource.Y, DataSource.Z));
+	return MinElement * MyPrimitiveObjBrushScale * 0.01;
+}
+
 void UMyNinjaLiveComponent::MyDrawInternalRenderTargetToExternal()
 {
 	if (!MyDrawInternalRenderTargetToExternalEnabled)

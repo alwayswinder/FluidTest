@@ -1,47 +1,31 @@
 
-void UMyNinjaLiveFunctions::MyTraceOverlap(
-	UObject* WorldContextObject,
-	FVector Start,
-	FVector End,
-	double TracelineOvershoot,
-	TEnumAsByte<ETraceTypeQuery> TraceChannel,
-	TArray<AActor*>& FluidNinjaLIVEActors,
-	bool PainterV2,
-	FLinearColor& HitUV,
-	FVector& TracePosition,
-	bool& HitValid)
+double UMyNinjaLiveComponent::MyCalculateBrushSizeCoFromBounds1(USceneComponent* Component) const
 {
-	// 输出默认值；无效命中分支会保持这些默认值。
-	HitUV = FLinearColor::Black;
-	TracePosition = FVector::ZeroVector;
-	HitValid = false;
-
-	// 追踪终点沿 Start→End 方向延长 TracelineOvershoot。
-	const FVector TraceEnd = End + (End - Start) * TracelineOvershoot;
-
-	// 单次线追踪：复杂碰撞、忽略传入的 Actor 列表、不忽略自身。
-	FHitResult Hit;
-	const bool bHit = UKismetSystemLibrary::LineTraceSingle(
-		WorldContextObject, Start, TraceEnd, TraceChannel,
-		true, FluidNinjaLIVEActors, EDrawDebugTrace::None, Hit, false);
-
-	// 命中且 HitActor 有效 → HitValidator=true，否则 false。
-	bool HitValidator = false;
-	if (bHit && IsValid(Hit.GetActor()))
+	// 未按交互物体尺寸缩放时恒为 1.0（SelectFloat 的 B 分支）。
+	if (!MyBrushScaledByInteractingObjSize)
 	{
-		HitValidator = true;
+		return 1.0;
 	}
 
-	// HitValidator=false 时若 PainterV2=false，蓝图不走 Return 节点（输出保持默认）。
-	if (!HitValidator && !PainterV2)
+	// 数据源：用包围盒范围或组件缩放×50（SelectVector 的 B/A 分支）。
+	FVector DataSource = FVector::ZeroVector;
+	if (IsValid(Component))
 	{
-		return;
+		if (MyUseObjBoundsInsteadOfSize)
+		{
+			FVector Origin = FVector::ZeroVector;
+			FVector BoxExtent = FVector::ZeroVector;
+			float SphereRadius = 0.0f;
+			UKismetSystemLibrary::GetComponentBounds(Component, Origin, BoxExtent, SphereRadius);
+			DataSource = BoxExtent;
+		}
+		else
+		{
+			DataSource = Component->K2_GetComponentScale() * 50.0;
+		}
 	}
 
-	// 命中数据：碰撞 UV 转 LinearColor、命中位置、命中有效性。
-	FVector2D UV(0.0f, 0.0f);
-	UGameplayStatics::FindCollisionUV(Hit, 0, UV);
-	HitUV = FLinearColor(UV.X, UV.Y, 0.0f, 1.0f);
-	TracePosition = Hit.Location;
-	HitValid = HitValidator;
+	// 最小分量 × PrimitiveObjBrushScale × 0.01。
+	const double MinElement = FMath::Min(DataSource.X, FMath::Min(DataSource.Y, DataSource.Z));
+	return MinElement * MyPrimitiveObjBrushScale * 0.01;
 }

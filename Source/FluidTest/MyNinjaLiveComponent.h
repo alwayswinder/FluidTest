@@ -28,6 +28,7 @@ class UNiagaraComponent;
 class UNiagaraSystem;
 class UTexture2D;
 class UBoxComponent;
+class USceneComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FMyComponentRePlayEvent);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMyWorldSpaceOffsetEvent, FVector, TraceMeshPos);
@@ -1038,6 +1039,38 @@ public:
 	/** 计算画笔尺寸系数：BrushSize × TraceMeshSizeCoeff × OverlappingMeshSizeCoeff × GlobalBrushScale × 0.5。 */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
 	double MyBrushSizeCoEff() const;
+
+	/** 按骨骼距离计算画笔尺寸系数：Out=|In-父骨骼Socket位置|×0.01×BrushScaleMult；骨骼网格有效时执行。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
+	void MyCalculateBrushSizeCoEffFromBoneDistance(FVector In, double BrushScaleMult, double& Out);
+
+	/** 是否按交互物体尺寸缩放画笔（CalcPos5 分支条件）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	bool MyBrushScaledByInteractingObjSize = false;
+
+	/** 骨骼网格画笔缩放系数（CalcPos5 的缩放输入）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MySkeletalMeshBrushScale = 0.0;
+
+	/** 计算骨骼交互位置：刷新 Position1_3D、按分支更新重叠网格尺寸系数并置 PosDataType。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	void MyCalcPos5();
+
+	/** 计算 Primitive 交互位置：刷新 Position1_3D、更新重叠网格尺寸系数并置 PosDataType。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	void MyCalcPos3();
+
+	/** 是否用物体包围盒范围代替组件缩放计算画笔系数（CalculateBrushSizeCoFromBounds1 分支条件）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	bool MyUseObjBoundsInsteadOfSize = false;
+
+	/** 重叠 Primitive 物体的画笔缩放系数（米→厘米换算用 0.01）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyPrimitiveObjBrushScale = 0.0;
+
+	/** 按重叠物体边界或缩放计算画笔系数：启用时取包围盒/缩放数据最小值×PrimitiveObjBrushScale×0.01，否则恒为 1.0。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
+	double MyCalculateBrushSizeCoFromBounds1(USceneComponent* Component) const;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushStrength = 0.0;
 	/** 当前画笔是否与交互区域重叠。 */
