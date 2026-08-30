@@ -634,10 +634,42 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	bool MyForceManualSunPosition = false;
 
+	/** 双面着色的混合指数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	double MyTwoSideBlendPow = 0.0;
+
+	/** 是否启用双面着色。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	bool MyTwoSidedShading = false;
+
+	/** 是否基于距离做光照衰减。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	bool MyDistanceBasedLightAttenuation = false;
+
+	/** 距离光照衰减指数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	double MyAttenuationPower = 0.0;
+
+	/** 点光源位置移动倍数（与 TraceMesh 缩放归一后的比例）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	double MyPointLightMovementMultiplier = 0.0;
+
+	/** 光源位置的固定偏移向量。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	FVector MyOffsetLightVector = FVector::ZeroVector;
+
+	/** 相机朝向模拟平面的面朝度（Dot × −1），供双面着色混合使用。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
+	double MyFacing = 0.0;
+
 
 	/** 检查并初始化光线方向提供者（EnableRayMarching 开启时有效） */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Light")
 	void MyLightDirectionProviderCheck();
+
+	/** 计算 RayMarch 光照方向/位置并写入输出材质参数（LightingDirection、LightingPosition、LightSource、AttenuationExponent）。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Light")
+	void MyRaymarchBasedLightingOPs();
 
 	// ------------------------------------------------------------------
 	// TraceChannelAutoFind 相关（追踪通道自动查找）
@@ -861,6 +893,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exec);
 
+	/** 执行 FluidCoreStep 事件链：写入 Painter 数组后按条件依次处理动态偏移、核心求解、附加参数、光线追踪光照与外部 RT 导出。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
+	void MyFluidCoreStep();
+
 	/** 将补充的流体参数写入 Composite、Gradient 与 Divergence 动态材质。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Solver")
 	void MySetAdditionalFluidsimParams();
@@ -940,6 +976,10 @@ public:
 	TArray<TObjectPtr<UPrimitiveComponent>> MySKmeshesArray;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
 	TArray<TObjectPtr<UPrimitiveComponent>> MyLastSKmeshesArray;
+
+	/** 使用 Painter v2 追踪、非旧版单目标且连接追踪点时，将重叠组件加入 SK 网格数组。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
+	void MyBuildOverlapSKMArray(UPrimitiveComponent* In);
 
 	/** 当前帧是否存在有效追踪命中。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")

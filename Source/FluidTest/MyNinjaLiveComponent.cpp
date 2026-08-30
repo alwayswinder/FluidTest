@@ -682,6 +682,43 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 	}
 }
 
+void UMyNinjaLiveComponent::MyFluidCoreStep()
+{
+	MySetPosVelocityScaleArraysToPainterV2();
+
+	// IfThenElse_16：简单画笔模式且未启用双缓冲时 then 分支无连接，直接结束。
+	if (MySimplePainterMode && !MyEnablePainterDoubleBuffering)
+	{
+		return;
+	}
+
+	MyDynamicSimspeedAndWorldOffsetAdjustment();
+
+	bool ThenExec = false;
+	bool PainterV2Exec = false;
+	MyCoreFluidsimOPs(ThenExec, PainterV2Exec);
+
+	// ExecutionSequence_1 的 then_0：非简单画笔压力循环完成后补充附加流体参数。
+	if (ThenExec)
+	{
+		MySetAdditionalFluidsimParams();
+
+		// ExecutionSequence_25 的 then_0：光线追踪开启时执行光照处理。
+		if (MyEnableRayMarching)
+		{
+			MyRaymarchBasedLightingOPs();
+		}
+		// ExecutionSequence_25 的 then_1：无条件绘制内部 RT 到外部 RT。
+		MyDrawInternalRenderTargetToExternal();
+	}
+
+	// ExecutionSequence_1 的 then_1：Painter v2 模式下同步标量参数到 Niagara。
+	if (PainterV2Exec)
+	{
+		MyForwardScalarParamsToNiagara();
+	}
+}
+
 void UMyNinjaLiveComponent::MyMuteBrush()
 {
 	const double BrushActiveValue = (MyOverlap1 || MyMousePressed) ? 1.0 : 0.0;
@@ -1182,6 +1219,84 @@ void UMyNinjaLiveComponent::MyLightDirectionProviderCheck()
 
 }
 
+void UMyNinjaLiveComponent::MyRaymarchBasedLightingOPs()
+{
+	// RaymarchBasedLightingOPs 复合节点：计算面朝度、光照方向/位置并写入输出材质。
+	if (!IsValid(MyMIOutput) || !IsValid(MyTraceMeshComponent.Get()))
+	{
+		return;
+	}
+
+	// Facing = Dot(UpVector(TraceMesh), Normalize(TraceMeshPos - CameraPos)) * -1
+	FVector CameraPos = FVector::ZeroVector;
+	if (const APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(this, 0))
+	{
+		CameraPos = CameraManager->GetCameraLocation();
+	}
+	const FVector TraceMeshPos = MyTraceMeshComponent->GetComponentLocation();
+	const FVector ViewNormal = (TraceMeshPos - CameraPos).GetSafeNormal();
+
+	// 光照方向（SelectVector）：旋转模式取 -Forward(Provider) 转 TraceMesh 局部并归一化周期；位置模式取 ProviderLoc-TraceMeshLoc 转局部。
+	FVector LightDir = FVector::ZeroVector;
+	if (IsValid(MyLightDirectionProvider))
+	{
+		const FRotator TraceMeshRot = MyTraceMeshComponent->GetComponentRotation();
+		if (MyLightDirectionSourceIsRotation_NOT_Pos)
+		{
+			const FVector RevForward = -MyLightDirectionProvider->GetActorForwardVector();
+			FVector Periodic = UKismetMathLibrary::LessLess_VectorRotator(RevForward, TraceMeshRot) * 0.5 + 0.5;
+			Periodic.X = FMath::Fmod(Periodic.X + 1.0, 1.0);
+			Periodic.Y = FMath::Fmod(Periodic.Y + 1.0, 1.0);
+			Periodic.Z = FMath::Fmod(Periodic.Z + 1.0, 1.0);
+			Periodic = (Periodic - 0.5) * 2.0;
+			LightDir = Periodic;
+		}
+		else
+		{
+			const FVector DirToProvider = MyLightDirectionProvider->K2_GetActorLocation() - TraceMeshPos;
+			LightDir = UKismetMathLibrary::LessLess_VectorRotator(DirToProvider, TraceMeshRot);
+		}
+	}
+
+	// 双面遮罩：TwoSidedShading 时用 Lerp(-1,1, Max(Facing,0)^TwoSideBlendPow)，否则恒 1。
+	const double BlendAlpha = FMath::Pow(FMath::Max(MyFacing, 0.0), MyTwoSideBlendPow);
+	const double ZMask = MyTwoSidedShading
+		? FMath::Lerp(-1.0, 1.0, BlendAlpha)
+		: 1.0;
+	const FLinearColor LightDirectionColor(FVector(LightDir.X * 1.0, LightDir.Y * 1.0, LightDir.Z * ZMask));
+
+	// LightingPosition = ((ProviderLoc - TraceMeshLoc) * (PointLightMovementMultiplier*0.01/MaxScale) + OffsetLightVector) 转 TraceMesh 局部。
+	FLinearColor LightingPositionColor = FLinearColor::Black;
+	if (IsValid(MyLightDirectionProvider))
+	{
+		const FVector ProviderLoc = MyLightDirectionProvider->K2_GetActorLocation();
+		const FVector Scale = MyTraceMeshComponent->GetComponentScale();
+		const double MaxScale = FMath::Max(Scale.X, FMath::Max(Scale.Y, Scale.Z));
+		const double MoveScale = MaxScale != 0.0 ? (MyPointLightMovementMultiplier * 0.01) / MaxScale : 0.0;
+		const FVector OffsetPos = (ProviderLoc - TraceMeshPos) * MoveScale + MyOffsetLightVector;
+		const FVector LocalPos = UKismetMathLibrary::LessLess_VectorRotator(
+			OffsetPos, MyTraceMeshComponent->GetComponentRotation());
+		LightingPositionColor = FLinearColor(LocalPos);
+	}
+
+	// 写入材质：EnableRayMarching 时才写 LightingDirection；其余参数无条件写。
+	if (MyEnableRayMarching)
+	{
+		const FLinearColor ManualSunColor(FVector(MySunLatitude, MySunLongitude, MySunHeight));
+		MyMIOutput->SetVectorParameterValue(TEXT("LightingDirection"),
+			MyForceManualSunPosition ? ManualSunColor : LightDirectionColor);
+	}
+	MyMIOutput->SetVectorParameterValue(TEXT("LightingPosition"), LightingPositionColor);
+	MyMIOutput->SetScalarParameterValue(TEXT("LightSource"),
+		MyLightDirectionSourceIsRotation_NOT_Pos ? 1.0f : 0.0f);
+	MyMIOutput->SetScalarParameterValue(TEXT("AttenuationExponent"),
+		static_cast<float>(MyDistanceBasedLightAttenuation ? MyAttenuationPower : 0.0));
+
+	// 更新 Facing 供下一次执行的双面混合使用（蓝图 then_1 在 then_0 之后执行，本次混合读的是上一次的值）。
+	MyFacing = FVector::DotProduct(
+		FRotationMatrix(MyTraceMeshComponent->GetComponentRotation()).GetUnitAxis(EAxis::Z), ViewNormal) * -1.0;
+}
+
 
 void UMyNinjaLiveComponent::MyTraceChannelAutoFind()
 {
@@ -1612,6 +1727,15 @@ void UMyNinjaLiveComponent::MyBuildBrushPositionArray()
 	if (MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY)
 	{
 		MyPositionArray.Add(FVector2D(MyPosition1_2D.R, MyPosition1_2D.G));
+	}
+}
+
+void UMyNinjaLiveComponent::MyBuildOverlapSKMArray(UPrimitiveComponent* In)
+{
+	// 仅 Painter v2 追踪、非旧版单目标且连接追踪点画线时，把重叠组件加入 SK 网格数组。
+	if (MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY && MyPV2_Connect_TrackpointsWithLines)
+	{
+		MySKmeshesArray.Add(In);
 	}
 }
 
