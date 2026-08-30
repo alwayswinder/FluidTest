@@ -933,6 +933,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
 	void MyBuildBrushPositionArray();
 
+	/** 最终处理画笔与 RT：条件不满足时先把点画笔绘制到 RT_Painter，再设置 Multitarget 参数并构建画笔位置数组。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
+	void MyFinalDealRTAndBrush();
+
 	/** 是否将选定的内部模拟阶段绘制到外部 RenderTarget。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RenderTarget|Export")
 	bool MyDrawInternalRenderTargetToExternalEnabled = false;

@@ -1730,6 +1730,26 @@ void UMyNinjaLiveComponent::MyBuildBrushPositionArray()
 	}
 }
 
+void UMyNinjaLiveComponent::MyFinalDealRTAndBrush()
+{
+	// 条件为 false（非 Painter v2 追踪或旧版单目标模式）：先把点画笔材质绘制到 RT_Painter。
+	if (!(MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY))
+	{
+		const TObjectPtr<UTextureRenderTarget2D>* PainterRT = MyRenderTargetsMap.Find(TEXT("RT_Painter"));
+		if (PainterRT && IsValid(PainterRT->Get()) && IsValid(MyMICollisionPainterDot))
+		{
+			UKismetRenderingLibrary::DrawMaterialToRenderTarget(this, PainterRT->Get(), MyMICollisionPainterDot);
+		}
+	}
+
+	// 两条分支汇合：设置 Multitarget 参数为 1，再构建画笔位置数组。
+	if (IsValid(MyMICollisionPainterDot))
+	{
+		MyMICollisionPainterDot->SetScalarParameterValue(TEXT("Multitarget"), 1.0f);
+	}
+	MyBuildBrushPositionArray();
+}
+
 void UMyNinjaLiveComponent::MyBuildOverlapSKMArray(UPrimitiveComponent* In)
 {
 	// 仅 Painter v2 追踪、非旧版单目标且连接追踪点画线时，把重叠组件加入 SK 网格数组。
