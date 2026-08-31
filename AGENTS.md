@@ -45,6 +45,7 @@
   `LoadTextures（复合节点）→ MyLoadTextures`、
   `CreateDynamicMaterialInstances（复合节点）→ MyCreateDynamicMaterialInstances`、
   `ManageContinuousInteractions（复合节点）→ MyManageContinuousInteractions`、
+  `BrushFadeOutTimer（复合节点）→ MyBrushFadeOutTimer`（+ `MyStopUsingPainterCanvasWhenIdle`）、
   `INIT PAINTER V2（复合节点）→ MyInitPainterV2`、
   `CreateOuputMaterialAndSetItOnTargets_Step01 → MyCreateOutputMaterialAndSetItOnTargetsStep01`、
   `CreateOuputMaterialAndSetItOnTargets_Step02 → MyCreateOutputMaterialAndSetItOnTargetsStep02`、
@@ -64,6 +65,7 @@
   `SetAdditionalFluidsimParams（复合节点）→ MySetAdditionalFluidsimParams`、
   `DynamicSimspeedAndWorldOffsetAdjustment（复合节点）→ MyDynamicSimspeedAndWorldOffsetAdjustment`、
   `Set Pos,Velocity, Scale arrays to Painter v2（复合节点）→ MySetPosVelocityScaleArraysToPainterV2`、
+  `Clear Pos, Velocity, Scale arrays - Painter v2（复合节点）→ MyClearPosVelocityScaleArraysPainterV2`、
   `Build brush-POSITION array（复合节点）→ MyBuildBrushPositionArray`、
   `BrushSizeCoEff（复合节点）→ MyBrushSizeCoEff`、
   `MultiObjectVelocity（复合节点）→ MyMultiObjectVelocity`、
@@ -73,6 +75,9 @@
   `OverlapArtifactWorkaround2（复合节点）→ MyOverlapArtifactWorkaround2`（+ `MyTracePositionTemp` / `MyLastTracePositionTemp` / `MyPosition1_3D` / `MyLastPosition1_3D`）、
   `TraceObjects2（复合节点）→ MyTraceObjects2`、`NinjaLiveFunctions.TraceOverlap → MyTraceOverlap`（占位，待补全）、
   `TraceObj2（事件图）→ MyTraceObj2`、
+  `MultiObjectProcessorCycle_3（事件图）→ MyMultiObjectProcessorCycle3`、
+  `ForLoopOverlapping（事件图）→ MyForLoopOverlapping`、
+  `NoInteraction（事件图）→ MyNoInteraction`、
   `FluidCoreStep（事件图）→ MyFluidCoreStep`、
   `FinalDealRTAndBrush（事件图）→ MyFinalDealRTAndBrush`
 

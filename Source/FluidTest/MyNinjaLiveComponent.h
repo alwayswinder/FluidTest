@@ -74,6 +74,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
 	void MyMuteBrush();
 
+	/** 空闲时达到画笔衰减阈值后，是否停止使用 Painter Canvas。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	bool MyStopUsingPainterCanvasWhenIdle = false;
+
+	/** 判断画笔是否已衰减至应停用 Painter Canvas 的时间阈值。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
+	bool MyBrushFadeOutTimer() const;
+
 	/** 根据模拟区域尺寸限制世界位移引起的纹理偏移。 */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Simulation")
 	FVector MyCorrectExtremes(FVector DeltaPos, FVector Scale, FVector Composite) const;
@@ -785,6 +793,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTraceObj2();
 
+	/** 执行 MultiObjectProcessorCycle_3：依次处理每个重叠骨骼的追踪和画笔，再推进流体核心步骤。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	void MyMultiObjectProcessorCycle3();
+
+	/** 执行 ForLoopOverlapping 事件图：依次追踪普通重叠组件，再处理骨骼组件。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	void MyForLoopOverlapping();
+
+	/** 执行 NoInteraction 事件图：清零画笔强度，按空闲状态收尾画笔并推进流体模拟。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	void MyNoInteraction();
+
 	/** 追踪器失败时临时关闭线条绘制：条件满足时 MyHitValid=false，冷却期后恢复为 true。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTemporarilySwitchOffLineDrawingIFTracerFails();
@@ -932,6 +952,10 @@ public:
 	/** 将 Painter v2 的位置、历史位置、速度和画笔尺寸数组写入 Niagara。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
 	void MySetPosVelocityScaleArraysToPainterV2();
+
+	/** 保存上一帧 Painter v2 追踪数据并清空当前帧数组。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
+	void MyClearPosVelocityScaleArraysPainterV2();
 
 	/** Painter v2 启用时把当前画笔位置追加到位置数组。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")

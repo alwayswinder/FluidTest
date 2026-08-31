@@ -725,6 +725,18 @@ void UMyNinjaLiveComponent::MyMuteBrush()
 	MyBrushStrengthTemp1 = (BrushActiveValue * MyBrushStrength) + 0.001;
 }
 
+bool UMyNinjaLiveComponent::MyBrushFadeOutTimer() const
+{
+	// Clamp(Feedback + Max(Feedback - 0.68, 0), 0, 1) 控制空闲衰减时间。
+	const double FeedbackAboveThreshold = FMath::Max(MyInputFeedback - 0.68, 0.0);
+	const double ClampedFeedback = FMath::Clamp(MyInputFeedback + FeedbackAboveThreshold, 0.0, 1.0);
+	const double FadeTime = 1.0 - ClampedFeedback;
+	const double IdleTime = FMath::Min(MyTimeSinceLastClick, MyTimeSinceLastCollision);
+	const double MinimumWaitTime = FMath::Max(MyInputFeedback, 0.05);
+
+	return MyStopUsingPainterCanvasWhenIdle && FadeTime * IdleTime > MinimumWaitTime;
+}
+
 void UMyNinjaLiveComponent::MySetBrushDensityParams3(double Value)
 {
 	if (!IsValid(MyMICollisionPainterDot))
@@ -1542,6 +1554,70 @@ void UMyNinjaLiveComponent::MyTraceObj2()
 	}
 }
 
+void UMyNinjaLiveComponent::MyMultiObjectProcessorCycle3()
+{
+	// 蓝图分别取 Map 的 Keys/Values 并以相同索引配对；直接遍历 TMap 可保留每个临时数组索引与组件的对应关系。
+	for (const TPair<int32, TObjectPtr<UPrimitiveComponent>>& SkeletalMeshTempArrayPair : MySkeletalMeshTempArrayPairs)
+	{
+		const TArray<FName>& Bones = MyGetTempArray(SkeletalMeshTempArrayPair.Key);
+		for (const FName Bone : Bones)
+		{
+			MyOverlappingBone = Bone;
+			MyOverlappingSkeletalMesh = SkeletalMeshTempArrayPair.Value;
+			MyBuildOverlapSKMArray(MyOverlappingSkeletalMesh.Get());
+			MyCalcPos5();
+			MyTraceObj2();
+		}
+	}
+
+	// 外层 ForEachLoop Completed：每轮多物体追踪结束后仅推进一次流体模拟。
+	MyFluidCoreStep();
+}
+
+void UMyNinjaLiveComponent::MyForLoopOverlapping()
+{
+	const bool bBuildPrimitiveArray = MyUsePAINTER_V2_ToTrackObjects
+		&& !MySingleTargetMode_LEGACY
+		&& MyPV2_Connect_TrackpointsWithLines;
+
+	for (const TObjectPtr<UPrimitiveComponent>& OverlappingComponent : MyOverlappingComponents)
+	{
+		MyOverlappingComponent = OverlappingComponent;
+		if (bBuildPrimitiveArray)
+		{
+			MyPrimitivesArray.Add(MyOverlappingComponent);
+		}
+
+		// 条件的 true/false 分支均在此汇合，始终继续位置计算和追踪。
+		MyCalcPos3();
+		MyTraceObj2();
+	}
+
+	// 外层 ForEachLoop Completed：继续处理骨骼重叠组件，后者负责推进流体核心步骤。
+	MyMultiObjectProcessorCycle3();
+}
+
+void UMyNinjaLiveComponent::MyNoInteraction()
+{
+	// ExecutionSequence 的 then_0：清零两种画笔材质的强度。
+	for (UMaterialInstanceDynamic* PainterMaterial : { MyMICollisionPainterLine.Get(), MyMICollisionPainterDot.Get() })
+	{
+		if (IsValid(PainterMaterial))
+		{
+			PainterMaterial->SetScalarParameterValue(TEXT("BrushStrength"), 0.0f);
+		}
+	}
+
+	// 未达到空闲 Canvas 停用阈值时，仍需完成本帧画笔收尾。
+	if (!MyBrushFadeOutTimer())
+	{
+		MyFinalDealRTAndBrush();
+	}
+
+	// ExecutionSequence 的 then_1：无论画笔是否收尾，均推进流体核心步骤。
+	MyFluidCoreStep();
+}
+
 void UMyNinjaLiveComponent::MyTemporarilySwitchOffLineDrawingIFTracerFails()
 {
 	// 仅 Painter v2 追踪、非旧版单目标且连接追踪点画线时，暂停线条绘制。
@@ -1757,6 +1833,35 @@ void UMyNinjaLiveComponent::MySetPosVelocityScaleArraysToPainterV2()
 
 	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayFloat(
 		MyNiagaraBasedPainter, TEXT("User.BrushSizeArray"), MyBrushSizeArray);
+}
+
+void UMyNinjaLiveComponent::MyClearPosVelocityScaleArraysPainterV2()
+{
+	if (!MyUsePAINTER_V2_ToTrackObjects || MySingleTargetMode_LEGACY)
+	{
+		return;
+	}
+
+	if (MyPositionArray.IsEmpty())
+	{
+		MyLastPositionArray.Reset();
+	}
+	else
+	{
+		MyLastPositionArray = MyPositionArray;
+	}
+
+	MyPositionArray.Reset();
+	MyVelocityArray.Reset();
+	MyBrushSizeArray.Reset();
+
+	if (MyPV2_Connect_TrackpointsWithLines)
+	{
+		MyLastPrimitivesArray = MyPrimitivesArray;
+		MyPrimitivesArray.Reset();
+		MyLastSKmeshesArray = MySKmeshesArray;
+		MySKmeshesArray.Reset();
+	}
 }
 
 void UMyNinjaLiveComponent::MyBuildBrushPositionArray()
