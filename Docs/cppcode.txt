@@ -1,33 +1,18 @@
 
-void UMyNinjaLiveComponent::MySetBrushDensityParams1(double Value)
+void UMyNinjaLiveComponent::MyCalcPos2(UObject* In)
 {
-	FLinearColor Position = MyPosition2_2D;
-	FLinearColor LastPosition = MyLastPosition2_2D;
-	if (MyMousePass)
+	// 输入对象无效时不更新任何数据（IsValid 的 Is Not Valid 分支在蓝图中未连线）。
+	if (!IsValid(In))
 	{
-		Position = MyPosition3_2D.IsValidIndex(MyTouchLookupIndex)
-			? MyPosition3_2D[MyTouchLookupIndex]
-			: FLinearColor::Black;
-		LastPosition = MyLastPosition3_2D.IsValidIndex(MyTouchLookupIndex)
-			? MyLastPosition3_2D[MyTouchLookupIndex]
-			: FLinearColor::Black;
+		return;
 	}
 
-	if (IsValid(MyMICollisionPainterLine))
-	{
-		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushSize"), static_cast<float>(Value));
-		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushStrength"),
-			static_cast<float>(FMath::Min(MyBrushStrengthTemp2, MyBrushStrengthTemp1)));
-		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushHardness"),
-			static_cast<float>(FMath::Min(MyBrushHardness, 1.0)));
-		MyMICollisionPainterLine->SetVectorParameterValue(TEXT("Position"), Position);
-		MyMICollisionPainterLine->SetVectorParameterValue(TEXT("LastPosition"), LastPosition);
-		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushPuncture"), static_cast<float>(MyBrushPuncture));
-		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushNoise"), static_cast<float>(MyBrushNoise));
-	}
+	// 保存上一帧位置，再刷新为重叠组件的世界位置。
+	MyLastPosition1_3D = MyPosition1_3D;
+	MyPosition1_3D = IsValid(MyOverlappingComponent.Get())
+		? MyOverlappingComponent->K2_GetComponentLocation()
+		: FVector::ZeroVector;
 
-	if (!MySimplePainterMode && IsValid(MyMICompositeAndGradient))
-	{
-		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("EraserSwitch"), MyEraserMode ? 1.0f : 0.0f);
-	}
+	// 更新按重叠物体边界/缩放计算的画笔尺寸系数（与 CalcPos3 共用计算）。
+	MyOverlappingMeshSizeCoeff = MyCalculateBrushSizeCoFromBounds1(MyOverlappingComponent.Get());
 }

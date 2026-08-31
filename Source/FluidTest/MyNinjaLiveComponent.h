@@ -376,6 +376,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MyManageContinuousInteractions();
 
+	/** 检查重叠组件有效性（CheckValidity2）：无精确名称筛选时取第一个重叠组件，否则取对象名匹配的首个组件；ThenExec 表示是否找到有效目标。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	void MyCheckValidity2(UPrimitiveComponent*& SingleTarget, bool& ThenExec);
+
 	/** 解析预设参数映射并写入模拟与画笔参数。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Preset")
 	void MyParsePresetMapAndSetVariables(const TMap<FString, double>& PresetMap);
@@ -796,6 +800,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	FVector MyLastPosition1_3D = FVector::ZeroVector;
 
+	/** 追踪 3D 位置是否静止（BrushSwitch2 画笔切换的判定条件之一）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	bool MyPosition1_3D_Static = false;
+
 	/** 重叠越界时静音画笔（强度置 0）：追踪位置未动、物体在移动且非持续交互模式。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyOverlapArtifactWorkaround2(FVector In);
@@ -803,6 +811,10 @@ public:
 	/** 物体追踪：从 Start 追踪到物体位置，命中输出 UV 并重置画笔与碰撞计时；ThenExec/NoHitExec 对应两个执行分支。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTraceObjects2(FVector Start, FLinearColor& HitUV, bool& ThenExec, bool& NoHitExec);
+
+	/** 物体追踪（TraceObjects1）：按持续交互/重叠条件调用 MyTraceOverlap，更新追踪临时位置并在边缘越界时静音画笔。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	void MyTraceObjects1(FVector Start, FLinearColor& HitUV);
 
 	/** 执行 TraceObj2 事件图：追踪命中后更新画笔、Painter v2 数组并完成本帧 RT/画笔收尾。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
@@ -1147,6 +1159,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyCalcPos3();
 
+	/** 计算交互位置（CalcPos2）：输入对象有效时保存上一帧位置、刷新为重叠组件世界位置并更新画笔尺寸系数。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	void MyCalcPos2(UObject* In);
+
 	/** 是否用物体包围盒范围代替组件缩放计算画笔系数（CalculateBrushSizeCoFromBounds1 分支条件）。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	bool MyUseObjBoundsInsteadOfSize = false;
@@ -1207,6 +1223,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
 	void MyPaintLine();
 
+	/** 判断是否切换画笔路径：追踪位置静止、非持续交互且未重叠，或当前/上一帧画笔 2D 位置位于画布边缘（R/G <0.05 或 >0.95）。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
+	bool MyBrushSwitch2(FLinearColor InLinearColor) const;
+
 	/** 将点画笔的密度相关参数写入 Painter 与 Composite 动态材质。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
 	void MySetBrushDensityParams3(double Value);
@@ -1226,6 +1246,10 @@ public:
 	/** 画笔随机颜色：MyPV2_GenerateVelocity 开启时返回原色，否则 R/G 通道加 ±MyBrushRnd*0.5 随机抖动。 */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
 	FLinearColor MyBrushRnd3(const FLinearColor InColor) const;
+
+	/** 画笔随机颜色（对应 BrushRnd2）：逻辑同 MyBrushRnd3，MyPV2_GenerateVelocity 开启时返回原色，否则 R/G 通道加 ±MyBrushRnd*0.5 随机抖动。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
+	FLinearColor MyBrushRnd2(const FLinearColor InColor) const;
 
 	/** 速度场反馈系数。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")

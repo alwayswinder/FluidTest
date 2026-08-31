@@ -813,6 +813,20 @@ void UMyNinjaLiveComponent::MySetBrushDensityParams3(double Value)
 	}
 }
 
+bool UMyNinjaLiveComponent::MyBrushSwitch2(FLinearColor InLinearColor) const
+{
+	// 画笔位置是否落在画布边缘（R/G 通道接近 0 或 1）。
+	const auto IsAtCanvasEdge = [](const FLinearColor& Color)
+	{
+		return Color.R < 0.05 || Color.R > 0.95 || Color.G < 0.05 || Color.G > 0.95;
+	};
+
+	return MyPosition1_3D_Static
+		|| !(MyContinuousInteractionWithOwnerActor || MyOverlap1)
+		|| IsAtCanvasEdge(InLinearColor)
+		|| IsAtCanvasEdge(MyLastPosition2_2D);
+}
+
 FLinearColor UMyNinjaLiveComponent::MyBrushRnd3(const FLinearColor InColor) const
 {
 	if (MyPV2_GenerateVelocity)
@@ -821,6 +835,24 @@ FLinearColor UMyNinjaLiveComponent::MyBrushRnd3(const FLinearColor InColor) cons
 	}
 
 	// R/G 通道独立地加 [-0.5*MyBrushRnd, +0.5*MyBrushRnd] 内的随机抖动。
+	const double HalfRange = MyBrushRnd * 0.5;
+	const FLinearColor Randomized(
+		InColor.R + FMath::FRandRange(-HalfRange, HalfRange),
+		InColor.G + FMath::FRandRange(-HalfRange, HalfRange),
+		InColor.B,
+		InColor.A);
+
+	return Randomized;
+}
+
+FLinearColor UMyNinjaLiveComponent::MyBrushRnd2(const FLinearColor InColor) const
+{
+	if (MyPV2_GenerateVelocity)
+	{
+		return InColor;
+	}
+
+	// 对应 BrushRnd2：R/G 通道独立地加 [-0.5*MyBrushRnd, +0.5*MyBrushRnd] 内的随机抖动，B/A 保持不变。
 	const double HalfRange = MyBrushRnd * 0.5;
 	const FLinearColor Randomized(
 		InColor.R + FMath::FRandRange(-HalfRange, HalfRange),
@@ -1585,6 +1617,48 @@ void UMyNinjaLiveComponent::MyTraceObjects2(FVector Start, FLinearColor& HitUV, 
 	ThenExec = true;
 }
 
+void UMyNinjaLiveComponent::MyTraceObjects1(FVector Start, FLinearColor& HitUV)
+{
+	HitUV = FLinearColor::Black;
+
+	// 3D 位置是否静止：与上一帧相同，或上一帧为零（初始帧）。
+	MyPosition1_3D_Static =
+		MyPosition1_3D.Equals(MyLastPosition1_3D, 0.001f)
+		|| MyLastPosition1_3D.Equals(FVector::ZeroVector, 0.001f);
+
+	MyTimeSinceLastCollision = 0.0;
+
+	// 持续交互时不做重叠检查但仍须追踪物体位置；两种交互方式任一成立才执行追踪。
+	if (MyContinuousInteractionWithOwnerActor || MyOverlap1)
+	{
+		FVector TracePosition = FVector::ZeroVector;
+		bool HitValid = false;
+		TArray<AActor*> TraceExclude;
+		TraceExclude.Reserve(MyNinjaLiveTraceExclude.Num());
+		for (const TObjectPtr<AActor>& Excluded : MyNinjaLiveTraceExclude)
+		{
+			if (Excluded)
+			{
+				TraceExclude.Add(Excluded);
+			}
+		}
+		UMyNinjaLiveFunctions::MyTraceOverlap(
+			this, Start, MyPosition1_3D, 1.5, MyTraceChannel,
+			TraceExclude, false,
+			HitUV, TracePosition, HitValid);
+
+		// 保存上一帧追踪位置（此时 MyTracePositionTemp 仍是旧值），再更新为本帧追踪位置。
+		MyLastTracePositionTemp = MyTracePositionTemp;
+		MyTracePositionTemp = TracePosition;
+
+		// 物体跨出模拟平面边缘仍保持重叠时 FluidTrace 失效、无法生成有效 UV，静音画笔避免伪影。
+		const bool bTraceNotMoving = MyTracePositionTemp.Equals(MyLastTracePositionTemp, 0.1f);
+		const bool bObjectMoving = !MyPosition1_3D.Equals(MyLastPosition1_3D, 0.001f);
+		const bool bNotContinuousInteraction = !MyContinuousInteractionWithOwnerActor;
+		MyBrushStrengthTemp1 = (bTraceNotMoving && bObjectMoving && bNotContinuousInteraction) ? 0.0 : MyBrushStrength;
+	}
+}
+
 void UMyNinjaLiveComponent::MyTraceObj2()
 {
 	FLinearColor HitUV = FLinearColor::Black;
@@ -2030,6 +2104,24 @@ void UMyNinjaLiveComponent::MyCalcPos3()
 	MyPosDataType = 0;
 }
 
+void UMyNinjaLiveComponent::MyCalcPos2(UObject* In)
+{
+	// 输入对象无效时不更新任何数据（IsValid 的 Is Not Valid 分支在蓝图中未连线）。
+	if (!IsValid(In))
+	{
+		return;
+	}
+
+	// 保存上一帧位置，再刷新为重叠组件的世界位置。
+	MyLastPosition1_3D = MyPosition1_3D;
+	MyPosition1_3D = IsValid(MyOverlappingComponent.Get())
+		? MyOverlappingComponent->K2_GetComponentLocation()
+		: FVector::ZeroVector;
+
+	// 更新按重叠物体边界/缩放计算的画笔尺寸系数（与 CalcPos3 共用计算）。
+	MyOverlappingMeshSizeCoeff = MyCalculateBrushSizeCoFromBounds1(MyOverlappingComponent.Get());
+}
+
 double UMyNinjaLiveComponent::MyCalculateBrushSizeCoFromBounds1(USceneComponent* Component) const
 {
 	// 未按交互物体尺寸缩放时恒为 1.0（SelectFloat 的 B 分支）。
@@ -2278,6 +2370,37 @@ void UMyNinjaLiveComponent::MyManageContinuousInteractions()
 	}
 
 	MyContinuousInteractionBoneNamesExactTemp2 = MyContinuousInteractionBoneNamesExactTemp;
+}
+
+void UMyNinjaLiveComponent::MyCheckValidity2(UPrimitiveComponent*& SingleTarget, bool& ThenExec)
+{
+	ThenExec = false;
+	SingleTarget = nullptr;
+
+	// 无重叠组件时没有有效目标（蓝图 IfThenElse 的 else 分支未连线）。
+	if (MyOverlappingComponents.Num() == 0)
+	{
+		return;
+	}
+
+	// 未启用精确组件名筛选时，直接取第一个重叠组件。
+	if (MyContinuousInteractionComponentNamesExact.Num() == 0)
+	{
+		SingleTarget = MyOverlappingComponents[0].Get();
+		ThenExec = true;
+		return;
+	}
+
+	// 遍历重叠组件，取对象名匹配第一个精确名称的组件；与蓝图 ForEachLoop 一致，每个匹配都会输出。
+	const FName FirstExactName = MyContinuousInteractionComponentNamesExact[0];
+	for (const TObjectPtr<UPrimitiveComponent>& Component : MyOverlappingComponents)
+	{
+		if (Component && Component->GetFName() == FirstExactName)
+		{
+			SingleTarget = Component.Get();
+			ThenExec = true;
+		}
+	}
 }
 
 void UMyNinjaLiveComponent::MyCreateOrAcquireRenderTargets()

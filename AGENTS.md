@@ -82,7 +82,12 @@
   `NoInteraction（事件图）→ MyNoInteraction`、
   `FluidCoreStep（事件图）→ MyFluidCoreStep`、
   `FinalDealRTAndBrush（事件图）→ MyFinalDealRTAndBrush`、
-  `PaintLine（事件图）→ MyPaintLine`
+  `PaintLine（事件图）→ MyPaintLine`、
+  `BrushSwitch2（复合节点）→ MyBrushSwitch2`（+ `MyPosition1_3D_Static`）、
+  `BrushRnd2（复合节点）→ MyBrushRnd2`（逻辑同 `MyBrushRnd3`，参数 `in` → `InColor`）、
+  `TraceObjects1（复合节点）→ MyTraceObjects1`、
+  `CalcPos2（复合节点）→ MyCalcPos2`、
+  `CheckValidity2（复合节点）→ MyCheckValidity2`
 
 ## 常用操作
 
