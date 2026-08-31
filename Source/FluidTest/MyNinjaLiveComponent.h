@@ -781,6 +781,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTraceObjects2(FVector Start, FLinearColor& HitUV, bool& ThenExec, bool& NoHitExec);
 
+	/** 执行 TraceObj2 事件图：追踪命中后更新画笔、Painter v2 数组并完成本帧 RT/画笔收尾。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	void MyTraceObj2();
+
 	/** 追踪器失败时临时关闭线条绘制：条件满足时 MyHitValid=false，冷却期后恢复为 true。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTemporarilySwitchOffLineDrawingIFTracerFails();

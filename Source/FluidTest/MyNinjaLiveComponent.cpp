@@ -1504,6 +1504,44 @@ void UMyNinjaLiveComponent::MyTraceObjects2(FVector Start, FLinearColor& HitUV, 
 	ThenExec = true;
 }
 
+void UMyNinjaLiveComponent::MyTraceObj2()
+{
+	FLinearColor HitUV = FLinearColor::Black;
+	bool bHit = false;
+	bool bNoHit = false;
+	MyTraceObjects2(MyDefineLineTracingSource(), HitUV, bHit, bNoHit);
+
+	// ExecutionSequence 的 then_0：仅命中时更新点画笔和本帧 Painter v2 数据。
+	if (bHit)
+	{
+		MyPosition1_2D = MyBrushRnd3(HitUV);
+		MySetBrushDensityParams3(MyBrushSizeCoEff());
+
+		// 条件为真时先写入画笔尺寸；两条分支随后汇合到速度计算。
+		const bool bUsePainterV2Arrays = MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY;
+		if (bUsePainterV2Arrays)
+		{
+			MyBrushSizeArray.Add(static_cast<float>(MyBrushSizeCoEff()));
+		}
+
+		FLinearColor Velocity = FLinearColor::Black;
+		MyMultiObjectVelocity(Velocity);
+
+		if (bUsePainterV2Arrays)
+		{
+			MyVelocityArray.Add(Velocity);
+		}
+
+		MyFinalDealRTAndBrush();
+	}
+
+	// ExecutionSequence 的 then_1：追踪失败时进入线条绘制冷却，不继续画笔收尾流程。
+	if (bNoHit)
+	{
+		MyTemporarilySwitchOffLineDrawingIFTracerFails();
+	}
+}
+
 void UMyNinjaLiveComponent::MyTemporarilySwitchOffLineDrawingIFTracerFails()
 {
 	// 仅 Painter v2 追踪、非旧版单目标且连接追踪点画线时，暂停线条绘制。

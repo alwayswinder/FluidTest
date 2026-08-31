@@ -72,6 +72,7 @@
   `BrushRnd3（复合节点）→ MyBrushRnd3`（参数 `in` → `InColor`）、
   `OverlapArtifactWorkaround2（复合节点）→ MyOverlapArtifactWorkaround2`（+ `MyTracePositionTemp` / `MyLastTracePositionTemp` / `MyPosition1_3D` / `MyLastPosition1_3D`）、
   `TraceObjects2（复合节点）→ MyTraceObjects2`、`NinjaLiveFunctions.TraceOverlap → MyTraceOverlap`（占位，待补全）、
+  `TraceObj2（事件图）→ MyTraceObj2`、
   `FluidCoreStep（事件图）→ MyFluidCoreStep`、
   `FinalDealRTAndBrush（事件图）→ MyFinalDealRTAndBrush`
 
