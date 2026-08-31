@@ -737,6 +737,60 @@ bool UMyNinjaLiveComponent::MyBrushFadeOutTimer() const
 	return MyStopUsingPainterCanvasWhenIdle && FadeTime * IdleTime > MinimumWaitTime;
 }
 
+void UMyNinjaLiveComponent::MySetBrushDensityParams1(double Value)
+{
+	FLinearColor Position = MyPosition2_2D;
+	FLinearColor LastPosition = MyLastPosition2_2D;
+	if (MyMousePass)
+	{
+		Position = MyPosition3_2D.IsValidIndex(MyTouchLookupIndex)
+			? MyPosition3_2D[MyTouchLookupIndex]
+			: FLinearColor::Black;
+		LastPosition = MyLastPosition3_2D.IsValidIndex(MyTouchLookupIndex)
+			? MyLastPosition3_2D[MyTouchLookupIndex]
+			: FLinearColor::Black;
+	}
+
+	if (IsValid(MyMICollisionPainterLine))
+	{
+		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushSize"), static_cast<float>(Value));
+		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushStrength"),
+			static_cast<float>(FMath::Min(MyBrushStrengthTemp2, MyBrushStrengthTemp1)));
+		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushHardness"),
+			static_cast<float>(FMath::Min(MyBrushHardness, 1.0)));
+		MyMICollisionPainterLine->SetVectorParameterValue(TEXT("Position"), Position);
+		MyMICollisionPainterLine->SetVectorParameterValue(TEXT("LastPosition"), LastPosition);
+		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushPuncture"), static_cast<float>(MyBrushPuncture));
+		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushNoise"), static_cast<float>(MyBrushNoise));
+	}
+
+	if (!MySimplePainterMode && IsValid(MyMICompositeAndGradient))
+	{
+		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("EraserSwitch"), MyEraserMode ? 1.0f : 0.0f);
+	}
+}
+
+void UMyNinjaLiveComponent::MyPaintLine()
+{
+	MySetBrushDensityParams1(MyBrushSizeCoEff());
+	MySingleTargetVelocity();
+
+	const TObjectPtr<UTextureRenderTarget2D>* PainterRT = MyRenderTargetsMap.Find(TEXT("RT_Painter"));
+	if (PainterRT && IsValid(PainterRT->Get()) && IsValid(MyMICollisionPainterLine))
+	{
+		UKismetRenderingLibrary::DrawMaterialToRenderTarget(this, PainterRT->Get(), MyMICollisionPainterLine);
+	}
+
+	for (UMaterialInstanceDynamic* PainterMaterial : {
+		MyMICollisionPainterLine.Get(), MyMICollisionPainterDot.Get() })
+	{
+		if (IsValid(PainterMaterial))
+		{
+			PainterMaterial->SetScalarParameterValue(TEXT("Multitarget"), 1.0f);
+		}
+	}
+}
+
 void UMyNinjaLiveComponent::MySetBrushDensityParams3(double Value)
 {
 	if (!IsValid(MyMICollisionPainterDot))
@@ -1039,6 +1093,21 @@ void UMyNinjaLiveComponent::MyEnableOwnerInput()
 	{
 		PC->bShowMouseCursor = true;
 	}
+}
+
+void UMyNinjaLiveComponent::MyCheckTouchOptions()
+{
+	if (MyCheckTouchOptionsDoOnceClosed)
+	{
+		return;
+	}
+
+	MyCheckTouchOptionsDoOnceClosed = true;
+	MySingleInput = MyUserInputBasedInteraction == EMyUserInput::MouseSingle ||
+		MyUserInputBasedInteraction == EMyUserInput::TouchSingle;
+	MyTouch = MyUserInputBasedInteraction == EMyUserInput::TouchSingle ||
+		MyUserInputBasedInteraction == EMyUserInput::TouchMultiple;
+	MyTouchLookupIndex = 0;
 }
 
 int32 UMyNinjaLiveComponent::MyQuantizerValues(EMyQuantizerMode InQuantizerMode) const

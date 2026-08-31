@@ -19,7 +19,7 @@ enum class EMyUserInput : uint8
 	/** 触摸单点 */
 	TouchSingle = 2 UMETA(DisplayName = "Touch single"),
 	/** 触摸多点 */
-	TouchMultiple = 4 UMETA(DisplayName = "Touch multiple")
+	TouchMultiple = 3 UMETA(DisplayName = "Touch multiple")
 };
 
 /**

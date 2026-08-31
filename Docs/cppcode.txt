@@ -1,32 +1,33 @@
 
-void UMyNinjaLiveComponent::MyTraceObj2()
+void UMyNinjaLiveComponent::MySetBrushDensityParams1(double Value)
 {
-	FLinearColor HitUV = FLinearColor::Black;
-	bool bHit = false;
-	bool bNoHit = false;
-	MyTraceObjects2(MyDefineLineTracingSource(), HitUV, bHit, bNoHit);
-
-	// ExecutionSequence 的 then_0：仅命中时更新点画笔和本帧 Painter v2 数据。
-	if (bHit)
+	FLinearColor Position = MyPosition2_2D;
+	FLinearColor LastPosition = MyLastPosition2_2D;
+	if (MyMousePass)
 	{
-		MyPosition1_2D = MyBrushRnd3(HitUV);
-		MySetBrushDensityParams3(MyBrushSizeCoEff());
-
-		if (MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY)
-		{
-			MyBrushSizeArray.Add(static_cast<float>(MyBrushSizeCoEff()));
-
-			FLinearColor Velocity = FLinearColor::Black;
-			MyMultiObjectVelocity(Velocity);
-			MyVelocityArray.Add(Velocity);
-		}
-
-		MyFinalDealRTAndBrush();
+		Position = MyPosition3_2D.IsValidIndex(MyTouchLookupIndex)
+			? MyPosition3_2D[MyTouchLookupIndex]
+			: FLinearColor::Black;
+		LastPosition = MyLastPosition3_2D.IsValidIndex(MyTouchLookupIndex)
+			? MyLastPosition3_2D[MyTouchLookupIndex]
+			: FLinearColor::Black;
 	}
 
-	// ExecutionSequence 的 then_1：追踪失败时进入线条绘制冷却，不继续画笔收尾流程。
-	if (bNoHit)
+	if (IsValid(MyMICollisionPainterLine))
 	{
-		MyTemporarilySwitchOffLineDrawingIFTracerFails();
+		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushSize"), static_cast<float>(Value));
+		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushStrength"),
+			static_cast<float>(FMath::Min(MyBrushStrengthTemp2, MyBrushStrengthTemp1)));
+		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushHardness"),
+			static_cast<float>(FMath::Min(MyBrushHardness, 1.0)));
+		MyMICollisionPainterLine->SetVectorParameterValue(TEXT("Position"), Position);
+		MyMICollisionPainterLine->SetVectorParameterValue(TEXT("LastPosition"), LastPosition);
+		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushPuncture"), static_cast<float>(MyBrushPuncture));
+		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushNoise"), static_cast<float>(MyBrushNoise));
+	}
+
+	if (!MySimplePainterMode && IsValid(MyMICompositeAndGradient))
+	{
+		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("EraserSwitch"), MyEraserMode ? 1.0f : 0.0f);
 	}
 }

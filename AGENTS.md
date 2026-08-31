@@ -37,6 +37,7 @@
   `CompareMapLength → MyCompareMapLength`、`VelocityHandlerForSimArea → MyVelocityHandlerForSimArea`、
   `ParsePresetMapAndSetVariables（复合节点）→ MyParsePresetMapAndSetVariables`、
   `CheckComponentOwner（复合节点）→ MyCheckComponentOwner`、`Enable OWNER Input → MyEnableOwnerInput`、
+  `CheckTouchOptions（复合节点）→ MyCheckTouchOptions`（+ `MySingleInput` / `MyTouch`）、
   `ProximityActivation-MasterVars-Quantizer-OutMat（复合节点）→ MyProximityActivationMasterVarsQuantizerOutMat*`、
   `EMyQuantizerMode` 枚举 + `MyQuantizerValues`、
   `CreateOrAcquireRenderTargets（复合节点）→ MyCreateOrAcquireRenderTargets`、
@@ -69,6 +70,7 @@
   `Build brush-POSITION array（复合节点）→ MyBuildBrushPositionArray`、
   `BrushSizeCoEff（复合节点）→ MyBrushSizeCoEff`、
   `MultiObjectVelocity（复合节点）→ MyMultiObjectVelocity`、
+  `SetBrushDensityParams1（复合节点）→ MySetBrushDensityParams1`、
   `SetBrushDensityParams3（复合节点）→ MySetBrushDensityParams3`、
   `DefineLineTracingSource（复合节点）→ MyDefineLineTracingSource`（+ `MyUseCustomTraceSource` / `MyCustomTraceSourcePosition`）、
   `BrushRnd3（复合节点）→ MyBrushRnd3`（参数 `in` → `InColor`）、
@@ -79,7 +81,8 @@
   `ForLoopOverlapping（事件图）→ MyForLoopOverlapping`、
   `NoInteraction（事件图）→ MyNoInteraction`、
   `FluidCoreStep（事件图）→ MyFluidCoreStep`、
-  `FinalDealRTAndBrush（事件图）→ MyFinalDealRTAndBrush`
+  `FinalDealRTAndBrush（事件图）→ MyFinalDealRTAndBrush`、
+  `PaintLine（事件图）→ MyPaintLine`
 
 ## 常用操作
 

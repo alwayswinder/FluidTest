@@ -293,6 +293,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Input")
 	EMyUserInput MyUserInputBasedInteraction = EMyUserInput::None;
 
+	/** 当前输入方式是否支持单点输入。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Input")
+	bool MySingleInput = false;
+
+	/** 当前输入方式是否支持触摸输入。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Input")
+	bool MyTouch = false;
+
+	/** 初始化用户输入类型对应的单点与触摸标记。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Input")
+	void MyCheckTouchOptions();
+
 	/** 是否显示鼠标光标 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Input")
 	bool MyShowMouseCursor = true;
@@ -554,6 +566,9 @@ public:
 	/** 多触点位置数组的当前读取索引。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
 	int32 MyTouchLookupIndex = 0;
+
+	/** CheckTouchOptions 的 DoOnce 状态，未重置时只执行一次。 */
+	bool MyCheckTouchOptionsDoOnceClosed = false;
 
 	/** Painter v2 位置数组使用的当前画笔位置。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
@@ -1184,7 +1199,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushNoise = 0.0;
 
-	/** 将画笔密度相关参数写入 Painter 与 Composite 动态材质。 */
+	/** 将线画笔的密度相关参数写入 Painter 与 Composite 动态材质。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
+	void MySetBrushDensityParams1(double Value);
+
+	/** 处理线状画笔的速度、渲染目标绘制及多目标标记。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
+	void MyPaintLine();
+
+	/** 将点画笔的密度相关参数写入 Painter 与 Composite 动态材质。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
 	void MySetBrushDensityParams3(double Value);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
