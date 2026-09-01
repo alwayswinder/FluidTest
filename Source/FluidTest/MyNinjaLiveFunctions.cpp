@@ -274,29 +274,22 @@ void UMyNinjaLiveFunctions::MyTraceMouse(
 		return;
 	}
 
-	float ScreenX = 0.0f;
-	float ScreenY = 0.0f;
-	if (TouchSensitive)
+	// 原蓝图库始终查询鼠标与指定手指的命中，再按 TouchSensitive 选择其中一项。
+	FHitResult MouseHit;
+	FHitResult TouchHit;
+	MouseClickValid = PlayerController->GetHitResultUnderCursorByChannel(TraceChannel, true, MouseHit);
+	TouchValid = PlayerController->GetHitResultUnderFingerByChannel(
+		static_cast<ETouchIndex::Type>(FingerIndex), TraceChannel, true, TouchHit);
+	const FHitResult& SelectedHit = TouchSensitive ? TouchHit : MouseHit;
+
+	// 仅在所选命中组件就是目标模拟平面时进入原蓝图的追踪分支。
+	if (SelectedHit.GetComponent() != HitComponent)
 	{
-		PlayerController->GetInputTouchState(
-			static_cast<ETouchIndex::Type>(FingerIndex), ScreenX, ScreenY, TouchValid);
-		if (!TouchValid)
-		{
-			return;
-		}
-	}
-	else
-	{
-		MouseClickValid = PlayerController->IsInputKeyDown(EKeys::LeftMouseButton);
-		if (!MouseClickValid || !PlayerController->GetMousePosition(ScreenX, ScreenY))
-		{
-			return;
-		}
+		return;
 	}
 
-	FVector TraceStart = FVector::ZeroVector;
-	FVector TraceDirection = FVector::ZeroVector;
-	if (!PlayerController->DeprojectScreenPositionToWorld(ScreenX, ScreenY, TraceStart, TraceDirection))
+	APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(WorldContextObject, 0);
+	if (!IsValid(CameraManager))
 	{
 		return;
 	}
@@ -304,15 +297,15 @@ void UMyNinjaLiveFunctions::MyTraceMouse(
 	FHitResult Hit;
 	const bool bHit = UKismetSystemLibrary::LineTraceSingle(
 		WorldContextObject,
-		TraceStart,
-		TraceStart + TraceDirection * 1000000.0,
+		CameraManager->K2_GetActorLocation(),
+		SelectedHit.TraceEnd,
 		TraceChannel,
 		true,
 		FluidNinjaLIVEActors,
 		EDrawDebugTrace::None,
 		Hit,
-		true);
-	if (!bHit || Hit.GetComponent() != HitComponent)
+		false);
+	if (!bHit || !IsValid(Hit.GetActor()))
 	{
 		return;
 	}
@@ -320,6 +313,7 @@ void UMyNinjaLiveFunctions::MyTraceMouse(
 	FVector2D UV = FVector2D::ZeroVector;
 	UGameplayStatics::FindCollisionUV(Hit, 0, UV);
 	HitUV = FLinearColor(UV.X, UV.Y, 0.0f, 1.0f);
+	// 到达蓝图库函数返回节点时，原节点输出此比较结果（此处必为 true）。
 	SimHitByMouse = true;
 }
 
