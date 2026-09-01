@@ -54,9 +54,12 @@
   `PresetLoader → MyPresetLoader`、
   `AfterCreateRT → MyAfterCreateRT`、
   `LOD-DistaceStepsPrecalc（复合节点）→ MyLODDistaceStepsPrecalc`、
+  `LOD（复合节点）→ MyLOD`（+ `MyLODCheckFrequency` / `MyMinSamplingFPS`，对应蓝图变量 `LOD-CheckFrequency` / `MinSamplingFPS`；周期检查体为私有 `MyCheckLODLevel`）、
   `AfterBind 初始化流程 → MyAfterBind`、
   `BeginPlay / CheckReady / RePlay 初始化流程 → BeginPlay / MyCheckReady / MyRePlay`、
+  `AfterReadyCheck（自定义事件）→ MyAfterReadyCheck`（+ `MyInputFeedbackInterface`，对应蓝图变量 `InputFeedbackInterface`）、
   `AfterTickDelay（事件图）→ MyAfterTickDelay`、
+  `ReceiveTick（Tick 事件）→ TickComponent`（+ `MyUseUnrealNativeEventTick` / `MyLimitUnrealNativeEventTick` / `MyDeltaSeconds`，对应蓝图变量同名项；非原生分支循环回调为私有 `MyCustomTick`）、
   `MuteBrush（复合节点）→ MyMuteBrush`、
   `CameraFacing（复合节点）→ MyCameraFacing`、
   `SingleTargetVelocity（复合节点）→ MySingleTargetVelocity`、

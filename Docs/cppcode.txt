@@ -1,22 +1,74 @@
 
-bool UMyNinjaLiveComponent::MyBrushSwitch1(FLinearColor InLinearColor) const
+void UMyNinjaLiveComponent::MyLOD()
 {
-	// 位置是否落在画布边缘（X/Y 接近 0 或 1）。
-	const auto IsAtEdge = [](const FVector& Pos)
+	// 两个 LOD 降级选项都关闭时不做任何事（蓝图 if 的 else 未连接）。
+	if (!MyLOD1ReduceSimQuality && !MyLOD2ReduceSamplingFPS)
 	{
-		return Pos.X < 0.05 || Pos.X > 0.95 || Pos.Y < 0.05 || Pos.Y > 0.95;
-	};
+		return;
+	}
 
-	// LinearColor 按 R/G/B 转 Vector（与蓝图 Conv_LinearColorToVector 一致）；索引越界时按零点处理。
-	const FVector CurrentPos1(InLinearColor.R, InLinearColor.G, InLinearColor.B);
-	const FLinearColor LastColor = MyLastPosition3_2D.IsValidIndex(MyTouchLookupIndex)
-		? MyLastPosition3_2D[MyTouchLookupIndex]
-		: FLinearColor::Black;
-	const FVector LastPos1(LastColor.R, LastColor.G, LastColor.B);
+	// DoOnce：首次进入立即检查一次，之后由定时器按 LOD-CheckFrequency 周期检查。
+	if (!MyLODDoOnceClosed)
+	{
+		MyLODDoOnceClosed = true;
+		MyCheckLODLevel();
+	}
 
-	return IsAtEdge(CurrentPos1)
-		|| IsAtEdge(LastPos1)
-		|| CurrentPos1.Equals(LastPos1, 0.001)
-		|| LastPos1.Equals(FVector::ZeroVector, 0.001)
-		|| MyTimeSinceLastClick < (1.0 / static_cast<double>(MySamplingFPS)) * 1.5;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(MyLODCheckTimer, this,
+			&UMyNinjaLiveComponent::MyCheckLODLevel,
+			static_cast<float>(MyLODCheckFrequency), false);
+	}
+}
+
+void UMyNinjaLiveComponent::MyCheckLODLevel()
+{
+	AActor* Owner = GetOwner();
+	if (!IsValid(Owner))
+	{
+		return;
+	}
+
+	// 与玩家摄像机的距离（蓝图 GetDistanceTo；相机无效时按 0 处理）。
+	const double Distance = Owner->GetDistanceTo(UGameplayStatics::GetPlayerCameraManager(this, 0));
+	const double LODStepsD = static_cast<double>(MyLODSteps);
+
+	if (Distance < MyLODNearBound)
+	{
+		// 近距离：取最高等级与压力求解器迭代上限。
+		MyLODLevel = MyLODSteps;
+		MyFluidSolver1Iterations = MyPressureSolver1MaxIterations;
+	}
+	else if (Distance > MyLODFarBound)
+	{
+		// 远距离：等级 1、单次迭代。
+		MyLODLevel = 1;
+		MyFluidSolver1Iterations = 1;
+	}
+	else
+	{
+		// 中间区间：遍历阈值数组，命中分段（距离 ∈ [Step, Step+StepRange]）时更新，最后命中者生效。
+		for (int32 Index = 0; Index < MyLODStepsArray.Num(); ++Index)
+		{
+			const double Step = MyLODStepsArray[Index];
+			if (Distance >= Step && Distance <= Step + MyLODStepRange)
+			{
+				MyLODLevel = MyLODSteps - (Index + 1);
+				MyFluidSolver1Iterations = FMath::Max(
+					FMath::RoundToInt(MyPressureSolver1MaxIterations * (MyLODLevel / LODStepsD)), 1);
+			}
+		}
+	}
+
+	if (MyLOD2ReduceSamplingFPS)
+	{
+		// 采样帧率 = Max(MinSamplingFPS, MaxSamplingFPS × LODLevel/LODSteps) 截断，Tick 间隔取倒数。
+		const double SamplingBase = FMath::Max(
+			static_cast<double>(MyMinSamplingFPS),
+			MyMaxSamplingFPS * (MyLODLevel / LODStepsD));
+		MySamplingFPS = FMath::TruncToInt(SamplingBase);
+		MyTickRateCustom = 1.0 / SamplingBase;
+		Owner->SetActorTickInterval(MyTickRateCustom);
+	}
 }

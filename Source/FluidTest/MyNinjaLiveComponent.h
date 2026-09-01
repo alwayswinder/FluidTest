@@ -62,6 +62,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
 	void MyCheckReady();
 
+	/** 执行 AfterReadyCheck 事件：刷新 LOD/画笔朝向与材质反馈参数，并按鼠标按下状态进入 MousePass 分支。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
+	void MyAfterReadyCheck();
+
 	/** 重置临时数据并按 Owner 设置重新初始化模拟。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
 	void MyRePlay();
@@ -418,6 +422,18 @@ public:
 	/** 组件是否被禁用（运行时从 Owner 同步，蓝图 Live Activation） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
 	bool MyDisableComponent = false;
+
+	/** 对应蓝图变量 UseUnrealNativeEventTick：使用 Unreal 原生 Tick 事件还是自定义循环 Tick。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	bool MyUseUnrealNativeEventTick = true;
+
+	/** 对应蓝图变量 LimitUnrealNativeEventTick：原生 Tick 模式的帧率上限（1/TickInterval，0 不限频）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	double MyLimitUnrealNativeEventTick = 0.0;
+
+	/** 对应蓝图变量 DeltaSeconds：最近一次 tick 的时间增量（非原生模式为 MyTickRateCustom）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	double MyDeltaSeconds = 0.0;
 
 	/** 是否抑制 BeginPlay 初始化 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|System")
@@ -883,6 +899,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	int32 MySamplingFPS = 60;
 
+	/** 对应蓝图变量 MinSamplingFPS：LOD 降采样时允许的最低采样帧率。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	int32 MyMinSamplingFPS = 60;
+
 	// ------------------------------------------------------------------
 	// LOD-DistaceStepsPrecalc 复合节点
 	// ------------------------------------------------------------------
@@ -910,9 +930,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
 	TArray<double> MyLODStepsArray;
 
+	/** 对应蓝图变量 LOD-CheckFrequency：LOD 周期检查的间隔秒数。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
+	double MyLODCheckFrequency = 0.2;
+
 	/** 预计算 LOD 距离阈值；仅在任一 LOD 降级选项启用时刷新阈值数组。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|LOD")
 	void MyLODDistaceStepsPrecalc();
+
+	/** 执行 LOD 复合：周期性按与玩家摄像机的距离切换 LOD 等级，并调节模拟质量/采样帧率与 Actor Tick 间隔。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|LOD")
+	void MyLOD();
 
 	/** 执行 AfterBind 初始化流程。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
@@ -1152,6 +1180,9 @@ public:
 	double MyVeloDirNoise = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyInputFeedback = 0.0;
+	/** 对应蓝图变量 InputFeedbackInterface：输入反馈材质参数的上限。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
+	double MyInputFeedbackInterface = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushSize = 0.0;
 
@@ -1528,6 +1559,26 @@ private:
 	/** 线条绘制失败冷却定时器（对应 RetriggerableDelay）。 */
 	FTimerHandle MyLineDrawingFailCooldownTimer;
 
+	/** LOD 周期检查定时器（对应蓝图 Delay），以及 DoOnce 首次检查已执行的状态（内部状态，不暴露给蓝图）。 */
+	FTimerHandle MyLODCheckTimer;
+	UPROPERTY(Transient)
+	bool MyLODDoOnceClosed = false;
+
+	/** 按与玩家摄像机的距离刷新 LOD 等级与模拟/采样参数（LOD 复合的周期检查体）。 */
+	void MyCheckLODLevel();
+
+	/** ReceiveTick 中"限制原生 tick 频率"的 DoOnce 关闭状态（内部状态，不暴露给蓝图）。 */
+	UPROPERTY(Transient)
+	bool MyNativeTickLimiterDoOnceClosed = false;
+
+	/** 非原生 tick 分支的自定义循环定时器与启动状态（对应蓝图 Delay 自循环）。 */
+	FTimerHandle MyCustomTickLoopTimer;
+	UPROPERTY(Transient)
+	bool MyCustomTickLoopStarted = false;
+
+	/** 非原生 tick 分支每周期回调：更新 DeltaSeconds 并执行 AfterTickDelay/AfterReadyCheck。 */
+	void MyCustomTick();
+
 	/** 倒带并重播当前媒体输入。 */
 	void MyRestartInputMedia();
 
@@ -1537,6 +1588,10 @@ private:
 protected:
 	/** 启动 TraceMesh 就绪检查。 */
 	virtual void BeginPlay() override;
+
+	/** 执行 Unreal 原生 Tick 事件：先按 UseUnrealNativeEventTick 选择原生/循环 tick 分支，再驱动 AfterTickDelay 与 AfterReadyCheck。 */
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
+		FActorComponentTickFunction* ThisTickFunction) override;
 
 	/** 在安全延迟后写入 Painter v2 的输入缓冲。 */
 	void MySetPainterV2PaintbufferInput();

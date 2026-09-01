@@ -34,8 +34,8 @@
 
 UMyNinjaLiveComponent::UMyNinjaLiveComponent()
 {
-	// 不启用 Tick（蓝图侧若需要可在蓝图里自行开启）
-	PrimaryComponentTick.bCanEverTick = false;
+	// 启用 Tick（对应蓝图 ReceiveTick 事件，逻辑见 TickComponent）
+	PrimaryComponentTick.bCanEverTick = true;
 	MyRenderTargetsList = {
 		TEXT("RT_Composite"),
 		TEXT("RT_Advection"),
@@ -74,6 +74,40 @@ void UMyNinjaLiveComponent::MyCheckReady()
 	MyComponentRePlayEvent.AddDynamic(this, &UMyNinjaLiveComponent::MyRePlay);
 	MyProximityActivationMasterVarsQuantizerOutMat();
 	MyAfterBind();
+}
+
+void UMyNinjaLiveComponent::MyAfterReadyCheck()
+{
+	MyLOD();
+	MyMuteBrush();
+	MyCameraFacing();
+
+	// 蓝图中 SetScalarParameterValue 同时连到线/点两个 Painter 材质（双 target），C++ 分别设置。
+	const double InputFeedback = FMath::Min(MyInputFeedback, MyInputFeedbackInterface);
+	if (IsValid(MyMICollisionPainterLine))
+	{
+		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("InputFeedback"), InputFeedback);
+		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("Multitarget"), 0.0f);
+	}
+	if (IsValid(MyMICollisionPainterDot))
+	{
+		MyMICollisionPainterDot->SetScalarParameterValue(TEXT("InputFeedback"), InputFeedback);
+		MyMICollisionPainterDot->SetScalarParameterValue(TEXT("Multitarget"), 0.0f);
+	}
+
+	MyClearPosVelocityScaleArraysPainterV2();
+	MyCheckTouchOptions();
+
+	if (MyMousePressed)
+	{
+		// Sequence 的两路输出：先 MousePassTrue 再 MousePassFalse（保留蓝图原连接）。
+		MyMousePassTrue();
+		MyMousePassFalse();
+	}
+	else
+	{
+		MyMousePassFalse();
+	}
 }
 
 void UMyNinjaLiveComponent::MyRePlay()
@@ -126,6 +160,56 @@ bool UMyNinjaLiveComponent::MyAfterTickDelay(double DeltaSeconds)
 	}
 
 	return false;
+}
+
+void UMyNinjaLiveComponent::TickComponent(float DeltaTime, ELevelTick TickType,
+	FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (MyDisableComponent)
+	{
+		return;
+	}
+
+	if (MyUseUnrealNativeEventTick)
+	{
+		// 原生分支的 DoOnce：首次 tick 时按 LimitUnrealNativeEventTick 限制组件 Tick 频率。
+		if (!MyNativeTickLimiterDoOnceClosed)
+		{
+			MyNativeTickLimiterDoOnceClosed = true;
+			SetComponentTickInterval(MyLimitUnrealNativeEventTick > 0.0
+				? static_cast<float>(1.0 / MyLimitUnrealNativeEventTick)
+				: 0.0f);
+		}
+		MyDeltaSeconds = static_cast<double>(DeltaTime);
+		if (MyAfterTickDelay(MyDeltaSeconds))
+		{
+			MyAfterReadyCheck();
+		}
+		return;
+	}
+
+	// 非原生分支：首次 tick 启动自定义循环（间隔 MyTickRateCustom），之后由 MyCustomTick 回调驱动。
+	if (!MyCustomTickLoopStarted)
+	{
+		MyCustomTickLoopStarted = true;
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(MyCustomTickLoopTimer, this,
+				&UMyNinjaLiveComponent::MyCustomTick,
+				static_cast<float>(MyTickRateCustom), true);
+		}
+	}
+}
+
+void UMyNinjaLiveComponent::MyCustomTick()
+{
+	MyDeltaSeconds = MyTickRateCustom;
+	if (MyAfterTickDelay(MyDeltaSeconds))
+	{
+		MyAfterReadyCheck();
+	}
 }
 
 void UMyNinjaLiveComponent::MySetAdditionalFluidsimParams()
@@ -3521,6 +3605,80 @@ void UMyNinjaLiveComponent::MyLODDistaceStepsPrecalc()
 	{
 		const double Distance = MyLODNearBound + static_cast<double>(Index) * MyLODStepRange;
 		MyLODStepsArray.Add(static_cast<double>(FMath::TruncToInt(Distance)));
+	}
+}
+
+void UMyNinjaLiveComponent::MyLOD()
+{
+	// 两个 LOD 降级选项都关闭时不做任何事（蓝图 if 的 else 未连接）。
+	if (!MyLOD1ReduceSimQuality && !MyLOD2ReduceSamplingFPS)
+	{
+		return;
+	}
+
+	// DoOnce：首次进入立即检查一次，之后由定时器按 LOD-CheckFrequency 周期检查。
+	if (!MyLODDoOnceClosed)
+	{
+		MyLODDoOnceClosed = true;
+		MyCheckLODLevel();
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(MyLODCheckTimer, this,
+			&UMyNinjaLiveComponent::MyCheckLODLevel,
+			static_cast<float>(MyLODCheckFrequency), false);
+	}
+}
+
+void UMyNinjaLiveComponent::MyCheckLODLevel()
+{
+	AActor* Owner = GetOwner();
+	if (!IsValid(Owner))
+	{
+		return;
+	}
+
+	// 与玩家摄像机的距离（蓝图 GetDistanceTo；相机无效时按 0 处理）。
+	const double Distance = Owner->GetDistanceTo(UGameplayStatics::GetPlayerCameraManager(this, 0));
+	const double LODStepsD = static_cast<double>(MyLODSteps);
+
+	if (Distance < MyLODNearBound)
+	{
+		// 近距离：取最高等级与压力求解器迭代上限。
+		MyLODLevel = MyLODSteps;
+		MyFluidSolver1Iterations = MyPressureSolver1MaxIterations;
+	}
+	else if (Distance > MyLODFarBound)
+	{
+		// 远距离：等级 1、单次迭代。
+		MyLODLevel = 1;
+		MyFluidSolver1Iterations = 1;
+	}
+	else
+	{
+		// 中间区间：遍历阈值数组，命中分段（距离 ∈ [Step, Step+StepRange]）时更新，最后命中者生效。
+		for (int32 Index = 0; Index < MyLODStepsArray.Num(); ++Index)
+		{
+			const double Step = MyLODStepsArray[Index];
+			if (Distance >= Step && Distance <= Step + MyLODStepRange)
+			{
+				MyLODLevel = MyLODSteps - (Index + 1);
+				MyFluidSolver1Iterations = FMath::Max(
+					FMath::RoundToInt(MyPressureSolver1MaxIterations * (MyLODLevel / LODStepsD)), 1);
+			}
+		}
+	}
+
+	if (MyLOD2ReduceSamplingFPS)
+	{
+		// 采样帧率 = Max(MinSamplingFPS, MaxSamplingFPS × LODLevel/LODSteps) 截断，Tick 间隔取倒数。
+		const double SamplingBase = FMath::Max(
+			static_cast<double>(MyMinSamplingFPS),
+			MyMaxSamplingFPS * (MyLODLevel / LODStepsD));
+		MySamplingFPS = FMath::TruncToInt(SamplingBase);
+		MyTickRateCustom = 1.0 / SamplingBase;
+		Owner->SetActorTickInterval(MyTickRateCustom);
 	}
 }
 
