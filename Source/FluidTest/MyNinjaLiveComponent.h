@@ -824,6 +824,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTraceObjects1(FVector Start, FLinearColor& HitUV);
 
+	/** 追踪单点或启用的多触点；返回 true 表示至少一次追踪走到原蓝图的 out 执行出口。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	bool MyTraceGestures(FLinearColor& HitUV);
+
 	/** 执行 TraceObj2 事件图：追踪命中后更新画笔、Painter v2 数组并完成本帧 RT/画笔收尾。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTraceObj2();

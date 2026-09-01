@@ -31,6 +31,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Input")
 	EMyUserInput MyUserInputBasedInteraction = EMyUserInput::MouseSingle;
 
+	/** 多触点输入中允许参与追踪的手指索引。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Input")
+	TArray<bool> MyMultipleTouchLookup;
+
 	/** 是否在 Pawn 靠近时激活模拟（性能优化，关闭则始终运行） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
 	bool MySimActivatedByPawnProximity = false;

@@ -11,6 +11,7 @@
 
 class AMyNinjaLiveMemoryPoolManager;
 class USceneComponent;
+class UPrimitiveComponent;
 class AActor;
 
 /** NinjaLiveFunctions 蓝图函数库的 C++ 迁移入口。 */
@@ -65,6 +66,20 @@ public:
 		bool UseLegacyFacing,
 		bool LockY,
 		FRotator TraceMeshInitRot);
+
+	/** 从鼠标或指定触摸点向屏幕投射射线，命中指定组件时输出其碰撞 UV。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace", meta = (WorldContext = "WorldContextObject"))
+	static void MyTraceMouse(
+		UObject* WorldContextObject,
+		UPrimitiveComponent* HitComponent,
+		bool TouchSensitive,
+		uint8 FingerIndex,
+		TEnumAsByte<ETraceTypeQuery> TraceChannel,
+		const TArray<AActor*>& FluidNinjaLIVEActors,
+		FLinearColor& HitUV,
+		bool& SimHitByMouse,
+		bool& MouseClickValid,
+		bool& TouchValid);
 
 	/** 从 Start 追踪到 End 生成画笔命中信息（占位：内部实现待补全）。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace", meta = (WorldContext = "WorldContextObject"))

@@ -4,7 +4,9 @@
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetRenderingLibrary.h"
@@ -243,6 +245,82 @@ void UMyNinjaLiveFunctions::MyCameraFacing(
 	}
 
 	InMesh->SetWorldRotation(FacingRotation);
+}
+
+void UMyNinjaLiveFunctions::MyTraceMouse(
+	UObject* WorldContextObject,
+	UPrimitiveComponent* HitComponent,
+	bool TouchSensitive,
+	uint8 FingerIndex,
+	TEnumAsByte<ETraceTypeQuery> TraceChannel,
+	const TArray<AActor*>& FluidNinjaLIVEActors,
+	FLinearColor& HitUV,
+	bool& SimHitByMouse,
+	bool& MouseClickValid,
+	bool& TouchValid)
+{
+	HitUV = FLinearColor::Black;
+	SimHitByMouse = false;
+	MouseClickValid = false;
+	TouchValid = false;
+	if (!IsValid(WorldContextObject) || !IsValid(HitComponent))
+	{
+		return;
+	}
+
+	APlayerController* PlayerController = UGameplayStatics::GetPlayerController(WorldContextObject, 0);
+	if (!IsValid(PlayerController))
+	{
+		return;
+	}
+
+	float ScreenX = 0.0f;
+	float ScreenY = 0.0f;
+	if (TouchSensitive)
+	{
+		PlayerController->GetInputTouchState(
+			static_cast<ETouchIndex::Type>(FingerIndex), ScreenX, ScreenY, TouchValid);
+		if (!TouchValid)
+		{
+			return;
+		}
+	}
+	else
+	{
+		MouseClickValid = PlayerController->IsInputKeyDown(EKeys::LeftMouseButton);
+		if (!MouseClickValid || !PlayerController->GetMousePosition(ScreenX, ScreenY))
+		{
+			return;
+		}
+	}
+
+	FVector TraceStart = FVector::ZeroVector;
+	FVector TraceDirection = FVector::ZeroVector;
+	if (!PlayerController->DeprojectScreenPositionToWorld(ScreenX, ScreenY, TraceStart, TraceDirection))
+	{
+		return;
+	}
+
+	FHitResult Hit;
+	const bool bHit = UKismetSystemLibrary::LineTraceSingle(
+		WorldContextObject,
+		TraceStart,
+		TraceStart + TraceDirection * 1000000.0,
+		TraceChannel,
+		true,
+		FluidNinjaLIVEActors,
+		EDrawDebugTrace::None,
+		Hit,
+		true);
+	if (!bHit || Hit.GetComponent() != HitComponent)
+	{
+		return;
+	}
+
+	FVector2D UV = FVector2D::ZeroVector;
+	UGameplayStatics::FindCollisionUV(Hit, 0, UV);
+	HitUV = FLinearColor(UV.X, UV.Y, 0.0f, 1.0f);
+	SimHitByMouse = true;
 }
 
 void UMyNinjaLiveFunctions::MyTraceOverlap(

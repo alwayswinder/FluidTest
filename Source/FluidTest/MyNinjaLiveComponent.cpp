@@ -1659,6 +1659,67 @@ void UMyNinjaLiveComponent::MyTraceObjects1(FVector Start, FLinearColor& HitUV)
 	}
 }
 
+bool UMyNinjaLiveComponent::MyTraceGestures(FLinearColor& HitUV)
+{
+	HitUV = FLinearColor::Black;
+	TArray<AActor*> TraceExclude;
+	TraceExclude.Reserve(MyNinjaLiveTraceExclude.Num());
+	for (const TObjectPtr<AActor>& ExcludedActor : MyNinjaLiveTraceExclude)
+	{
+		if (IsValid(ExcludedActor))
+		{
+			TraceExclude.Add(ExcludedActor.Get());
+		}
+	}
+
+	auto TraceInput = [this, &HitUV, &TraceExclude](uint8 FingerIndex)
+	{
+		FLinearColor TraceHitUV = FLinearColor::Black;
+		bool bSimHitByMouse = false;
+		bool bMouseClickValid = false;
+		bool bTouchValid = false;
+		UMyNinjaLiveFunctions::MyTraceMouse(
+			this,
+			MyTraceMeshComponent.Get(),
+			MyTouch,
+			FingerIndex,
+			MyTraceChannel,
+			TraceExclude,
+			TraceHitUV,
+			bSimHitByMouse,
+			bMouseClickValid,
+			bTouchValid);
+		if (bSimHitByMouse)
+		{
+			HitUV = TraceHitUV;
+		}
+		return bSimHitByMouse;
+	};
+
+	if (MySingleInput)
+	{
+		return TraceInput(0);
+	}
+
+	AMyNinjaLiveActor* NinjaLive = nullptr;
+	if (!MyCheckComponentOwner(NinjaLive) || !IsValid(NinjaLive))
+	{
+		return false;
+	}
+
+	bool bReachedOut = false;
+	for (int32 Index = 0; Index < NinjaLive->MyMultipleTouchLookup.Num(); ++Index)
+	{
+		MyTouchLookupIndex = Index;
+		if (NinjaLive->MyMultipleTouchLookup[Index])
+		{
+			bReachedOut |= TraceInput(static_cast<uint8>(Index));
+		}
+	}
+
+	return bReachedOut;
+}
+
 void UMyNinjaLiveComponent::MySingleTargetMode()
 {
 	auto TraceSingleTarget = [this]()
