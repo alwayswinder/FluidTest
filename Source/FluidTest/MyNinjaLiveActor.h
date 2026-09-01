@@ -43,6 +43,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
 	bool MyUseTraceMeshAsInteractionVolume = false;
 
+	/** 非持续交互时用于定位交互骨骼的包含列表。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TArray<FName> MyOverlapFilterInclusiveBoneNameExact;
+
 	/** 根 SceneComponent */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Activation")
 	TObjectPtr<USceneComponent> MyRoot = nullptr;

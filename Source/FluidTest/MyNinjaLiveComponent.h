@@ -555,6 +555,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MySingleTargetMode_LEGACY = false;
 
+	/** 旧版单目标模式的目标类型。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
+	EMySingleObjectType MySingleTargetType_LEGACY = EMySingleObjectType::SkeletalMeshBone;
+
+	/** 旧版单目标骨骼组件在临时映射值数组中的索引。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
+	int32 MySingleTargetModeSkeletalMeshIndex_LEGACY = 0;
+
 	/** 旧版单目标模式是否以画笔速度更新模拟速度。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MySingleTargetModeSetSimSpeed_LEGACY = false;
@@ -819,6 +827,10 @@ public:
 	/** 执行 TraceObj2 事件图：追踪命中后更新画笔、Painter v2 数组并完成本帧 RT/画笔收尾。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTraceObj2();
+
+	/** 执行旧版 SingleTargetMode：按目标类型追踪单个骨骼或 Primitive，并推进流体核心步骤。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	void MySingleTargetMode();
 
 	/** 执行 MultiObjectProcessorCycle_3：依次处理每个重叠骨骼的追踪和画笔，再推进流体核心步骤。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
@@ -1162,6 +1174,10 @@ public:
 	/** 计算交互位置（CalcPos2）：输入对象有效时保存上一帧位置、刷新为重叠组件世界位置并更新画笔尺寸系数。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyCalcPos2(UObject* In);
+
+	/** 计算骨骼交互位置（CalcPos1）：按交互模式选取骨骼 Socket，并基于父骨骼距离更新画笔缩放。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	void MyCalcPos1(USceneComponent* Component);
 
 	/** 是否用物体包围盒范围代替组件缩放计算画笔系数（CalculateBrushSizeCoFromBounds1 分支条件）。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")

@@ -1,18 +1,74 @@
 
-void UMyNinjaLiveComponent::MyCalcPos2(UObject* In)
+void UMyNinjaLiveComponent::MySingleTargetMode()
 {
-	// 输入对象无效时不更新任何数据（IsValid 的 Is Not Valid 分支在蓝图中未连线）。
-	if (!IsValid(In))
+	auto TraceSingleTarget = [this]()
 	{
-		return;
+		FLinearColor HitUV = FLinearColor::Black;
+		MyTraceObjects1(MyDefineLineTracingSource(), HitUV);
+
+		// 保留蓝图中两个独立 BrushRnd2 节点的随机采样。
+		const FLinearColor LastPositionCandidate = MyBrushRnd2(HitUV);
+		MyLastPosition2_2D = FMath::Lerp(
+			MyPosition2_2D,
+			LastPositionCandidate,
+			MyBrushSwitch2(HitUV) ? 1.0f : 0.0f);
+		MyPosition2_2D = MyBrushRnd2(HitUV);
+		MyPaintLine();
+	};
+	const auto DidCalcPos1ReachOutput = [this]()
+	{
+		if (!MyContinuousInteractionWithOwnerActor)
+		{
+			AMyNinjaLiveActor* NinjaLive = nullptr;
+			if (!MyCheckComponentOwner(NinjaLive) || !IsValid(NinjaLive))
+			{
+				return false;
+			}
+		}
+
+		if (!MyBrushScaledByInteractingObjSize)
+		{
+			return true;
+		}
+
+		TArray<TObjectPtr<UPrimitiveComponent>> SkeletalMeshValues;
+		MySkeletalMeshTempArrayPairs.GenerateValueArray(SkeletalMeshValues);
+		return SkeletalMeshValues.IsValidIndex(0) &&
+			IsValid(Cast<USkeletalMeshComponent>(SkeletalMeshValues[0]));
+	};
+
+	if (MySingleTargetType_LEGACY == EMySingleObjectType::SkeletalMeshBone)
+	{
+		// Map_Length != 0 后才读取 Map_Values[Index]；越界索引和无效对象均不进入追踪分支。
+		if (!MySkeletalMeshTempArrayPairs.IsEmpty())
+		{
+			TArray<TObjectPtr<UPrimitiveComponent>> SkeletalMeshValues;
+			MySkeletalMeshTempArrayPairs.GenerateValueArray(SkeletalMeshValues);
+			if (SkeletalMeshValues.IsValidIndex(MySingleTargetModeSkeletalMeshIndex_LEGACY) &&
+				IsValid(SkeletalMeshValues[MySingleTargetModeSkeletalMeshIndex_LEGACY]))
+			{
+				MyCalcPos1(SkeletalMeshValues[MySingleTargetModeSkeletalMeshIndex_LEGACY]);
+				// CalcPos1 的 Owner/Cast Failed 分支没有连接输出执行引脚。
+				if (DidCalcPos1ReachOutput())
+				{
+					TraceSingleTarget();
+				}
+			}
+		}
+	}
+	else
+	{
+		UPrimitiveComponent* SingleTarget = nullptr;
+		bool bTargetValid = false;
+		MyCheckValidity2(SingleTarget, bTargetValid);
+		if (bTargetValid)
+		{
+			MyOverlappingComponent = SingleTarget;
+			MyCalcPos2(MyOverlappingComponent.Get());
+			TraceSingleTarget();
+		}
 	}
 
-	// 保存上一帧位置，再刷新为重叠组件的世界位置。
-	MyLastPosition1_3D = MyPosition1_3D;
-	MyPosition1_3D = IsValid(MyOverlappingComponent.Get())
-		? MyOverlappingComponent->K2_GetComponentLocation()
-		: FVector::ZeroVector;
-
-	// 更新按重叠物体边界/缩放计算的画笔尺寸系数（与 CalcPos3 共用计算）。
-	MyOverlappingMeshSizeCoeff = MyCalculateBrushSizeCoFromBounds1(MyOverlappingComponent.Get());
+	// ExecutionSequence 的 then_1：无论单目标分支是否得到有效对象，都推进一次流体模拟。
+	MyFluidCoreStep();
 }

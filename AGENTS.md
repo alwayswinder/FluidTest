@@ -86,6 +86,8 @@
   `BrushSwitch2（复合节点）→ MyBrushSwitch2`（+ `MyPosition1_3D_Static`）、
   `BrushRnd2（复合节点）→ MyBrushRnd2`（逻辑同 `MyBrushRnd3`，参数 `in` → `InColor`）、
   `TraceObjects1（复合节点）→ MyTraceObjects1`、
+  `CalcPos1（复合节点）→ MyCalcPos1`（+ `MyOverlapFilterInclusiveBoneNameExact`）、
+  `SingleTargetMode（事件图）→ MySingleTargetMode`（+ `EMySingleObjectType` / `MySingleTargetType_LEGACY` / `MySingleTargetModeSkeletalMeshIndex_LEGACY`）、
   `CalcPos2（复合节点）→ MyCalcPos2`、
   `CheckValidity2（复合节点）→ MyCheckValidity2`
 

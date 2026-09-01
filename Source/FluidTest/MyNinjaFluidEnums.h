@@ -83,6 +83,14 @@ enum class EMySimPrecision : uint8
 	Bit32 = 1 UMETA(DisplayName = "32 bit")
 };
 
+/** 旧版单目标模式的目标类型（对齐 SingleObjectType_Enum）。 */
+UENUM(BlueprintType)
+enum class EMySingleObjectType : uint8
+{
+	SkeletalMeshBone = 0 UMETA(DisplayName = "Skeletal Mesh Bone"),
+	PrimitiveComponent = 1 UMETA(DisplayName = "Primitive Component")
+};
+
 /** 可导出到外部 RenderTarget 的内部模拟阶段（对齐 RenderTargetList）。 */
 UENUM(BlueprintType)
 enum class EMyRenderTargetList : uint8

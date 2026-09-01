@@ -1659,6 +1659,80 @@ void UMyNinjaLiveComponent::MyTraceObjects1(FVector Start, FLinearColor& HitUV)
 	}
 }
 
+void UMyNinjaLiveComponent::MySingleTargetMode()
+{
+	auto TraceSingleTarget = [this]()
+	{
+		FLinearColor HitUV = FLinearColor::Black;
+		MyTraceObjects1(MyDefineLineTracingSource(), HitUV);
+
+		// 保留蓝图中两个独立 BrushRnd2 节点的随机采样。
+		const FLinearColor LastPositionCandidate = MyBrushRnd2(HitUV);
+		MyLastPosition2_2D = FMath::Lerp(
+			MyPosition2_2D,
+			LastPositionCandidate,
+			MyBrushSwitch2(HitUV) ? 1.0f : 0.0f);
+		MyPosition2_2D = MyBrushRnd2(HitUV);
+		MyPaintLine();
+	};
+	const auto DidCalcPos1ReachOutput = [this]()
+	{
+		if (!MyContinuousInteractionWithOwnerActor)
+		{
+			AMyNinjaLiveActor* NinjaLive = nullptr;
+			if (!MyCheckComponentOwner(NinjaLive) || !IsValid(NinjaLive))
+			{
+				return false;
+			}
+		}
+
+		if (!MyBrushScaledByInteractingObjSize)
+		{
+			return true;
+		}
+
+		TArray<TObjectPtr<UPrimitiveComponent>> SkeletalMeshValues;
+		MySkeletalMeshTempArrayPairs.GenerateValueArray(SkeletalMeshValues);
+		return SkeletalMeshValues.IsValidIndex(0) &&
+			IsValid(Cast<USkeletalMeshComponent>(SkeletalMeshValues[0]));
+	};
+
+	if (MySingleTargetType_LEGACY == EMySingleObjectType::SkeletalMeshBone)
+	{
+		// Map_Length != 0 后才读取 Map_Values[Index]；越界索引和无效对象均不进入追踪分支。
+		if (!MySkeletalMeshTempArrayPairs.IsEmpty())
+		{
+			TArray<TObjectPtr<UPrimitiveComponent>> SkeletalMeshValues;
+			MySkeletalMeshTempArrayPairs.GenerateValueArray(SkeletalMeshValues);
+			if (SkeletalMeshValues.IsValidIndex(MySingleTargetModeSkeletalMeshIndex_LEGACY) &&
+				IsValid(SkeletalMeshValues[MySingleTargetModeSkeletalMeshIndex_LEGACY]))
+			{
+				MyCalcPos1(SkeletalMeshValues[MySingleTargetModeSkeletalMeshIndex_LEGACY]);
+				// CalcPos1 的 Owner/Cast Failed 分支没有连接输出执行引脚。
+				if (DidCalcPos1ReachOutput())
+				{
+					TraceSingleTarget();
+				}
+			}
+		}
+	}
+	else
+	{
+		UPrimitiveComponent* SingleTarget = nullptr;
+		bool bTargetValid = false;
+		MyCheckValidity2(SingleTarget, bTargetValid);
+		if (bTargetValid)
+		{
+			MyOverlappingComponent = SingleTarget;
+			MyCalcPos2(MyOverlappingComponent.Get());
+			TraceSingleTarget();
+		}
+	}
+
+	// ExecutionSequence 的 then_1：无论单目标分支是否得到有效对象，都推进一次流体模拟。
+	MyFluidCoreStep();
+}
+
 void UMyNinjaLiveComponent::MyTraceObj2()
 {
 	FLinearColor HitUV = FLinearColor::Black;
@@ -2120,6 +2194,53 @@ void UMyNinjaLiveComponent::MyCalcPos2(UObject* In)
 
 	// 更新按重叠物体边界/缩放计算的画笔尺寸系数（与 CalcPos3 共用计算）。
 	MyOverlappingMeshSizeCoeff = MyCalculateBrushSizeCoFromBounds1(MyOverlappingComponent.Get());
+}
+
+void UMyNinjaLiveComponent::MyCalcPos1(USceneComponent* Component)
+{
+	if (!IsValid(Component))
+	{
+		return;
+	}
+
+	const TArray<FName>* BoneNames = &MyContinuousInteractionBoneNamesExact;
+	if (!MyContinuousInteractionWithOwnerActor)
+	{
+		AMyNinjaLiveActor* NinjaLive = nullptr;
+		if (!MyCheckComponentOwner(NinjaLive) || !IsValid(NinjaLive))
+		{
+			return;
+		}
+
+		BoneNames = &NinjaLive->MyOverlapFilterInclusiveBoneNameExact;
+	}
+
+	// 蓝图 Get(Array Item 0) 在数组为空时返回 None，SocketLocation 随之回退到组件位置。
+	const FName BoneName = BoneNames->IsValidIndex(0) ? (*BoneNames)[0] : NAME_None;
+	MyLastPosition1_3D = MyPosition1_3D;
+	MyPosition1_3D = Component->GetSocketLocation(BoneName);
+
+	if (!MyBrushScaledByInteractingObjSize)
+	{
+		MyOverlappingMeshSizeCoeff = 1.0;
+		return;
+	}
+
+	// Map Values[0] 与蓝图 Map_Values 接入 Get(Array Item 0) 保持一致。
+	TArray<TObjectPtr<UPrimitiveComponent>> SkeletalMeshValues;
+	MySkeletalMeshTempArrayPairs.GenerateValueArray(SkeletalMeshValues);
+	USkeletalMeshComponent* SkeletalMesh = SkeletalMeshValues.IsValidIndex(0)
+		? Cast<USkeletalMeshComponent>(SkeletalMeshValues[0])
+		: nullptr;
+	if (!IsValid(SkeletalMesh))
+	{
+		return;
+	}
+
+	const FVector BoneLocation = SkeletalMesh->GetSocketLocation(BoneName);
+	const FVector ParentBoneLocation = SkeletalMesh->GetSocketLocation(SkeletalMesh->GetParentBone(BoneName));
+	MyOverlappingMeshSizeCoeff = FVector::Distance(BoneLocation, ParentBoneLocation) * 0.01 *
+		MySkeletalMeshBrushScale;
 }
 
 double UMyNinjaLiveComponent::MyCalculateBrushSizeCoFromBounds1(USceneComponent* Component) const
