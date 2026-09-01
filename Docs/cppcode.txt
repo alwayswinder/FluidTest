@@ -1,74 +1,70 @@
 
-void UMyNinjaLiveComponent::MySingleTargetMode()
+void UMyNinjaLiveFunctions::MyTraceMouse(
+	UObject* WorldContextObject,
+	UPrimitiveComponent* HitComponent,
+	bool TouchSensitive,
+	uint8 FingerIndex,
+	TEnumAsByte<ETraceTypeQuery> TraceChannel,
+	const TArray<AActor*>& FluidNinjaLIVEActors,
+	FLinearColor& HitUV,
+	bool& SimHitByMouse,
+	bool& MouseClickValid,
+	bool& TouchValid)
 {
-	auto TraceSingleTarget = [this]()
+	HitUV = FLinearColor::Black;
+	SimHitByMouse = false;
+	MouseClickValid = false;
+	TouchValid = false;
+	if (!IsValid(WorldContextObject) || !IsValid(HitComponent))
 	{
-		FLinearColor HitUV = FLinearColor::Black;
-		MyTraceObjects1(MyDefineLineTracingSource(), HitUV);
-
-		// 保留蓝图中两个独立 BrushRnd2 节点的随机采样。
-		const FLinearColor LastPositionCandidate = MyBrushRnd2(HitUV);
-		MyLastPosition2_2D = FMath::Lerp(
-			MyPosition2_2D,
-			LastPositionCandidate,
-			MyBrushSwitch2(HitUV) ? 1.0f : 0.0f);
-		MyPosition2_2D = MyBrushRnd2(HitUV);
-		MyPaintLine();
-	};
-	const auto DidCalcPos1ReachOutput = [this]()
-	{
-		if (!MyContinuousInteractionWithOwnerActor)
-		{
-			AMyNinjaLiveActor* NinjaLive = nullptr;
-			if (!MyCheckComponentOwner(NinjaLive) || !IsValid(NinjaLive))
-			{
-				return false;
-			}
-		}
-
-		if (!MyBrushScaledByInteractingObjSize)
-		{
-			return true;
-		}
-
-		TArray<TObjectPtr<UPrimitiveComponent>> SkeletalMeshValues;
-		MySkeletalMeshTempArrayPairs.GenerateValueArray(SkeletalMeshValues);
-		return SkeletalMeshValues.IsValidIndex(0) &&
-			IsValid(Cast<USkeletalMeshComponent>(SkeletalMeshValues[0]));
-	};
-
-	if (MySingleTargetType_LEGACY == EMySingleObjectType::SkeletalMeshBone)
-	{
-		// Map_Length != 0 后才读取 Map_Values[Index]；越界索引和无效对象均不进入追踪分支。
-		if (!MySkeletalMeshTempArrayPairs.IsEmpty())
-		{
-			TArray<TObjectPtr<UPrimitiveComponent>> SkeletalMeshValues;
-			MySkeletalMeshTempArrayPairs.GenerateValueArray(SkeletalMeshValues);
-			if (SkeletalMeshValues.IsValidIndex(MySingleTargetModeSkeletalMeshIndex_LEGACY) &&
-				IsValid(SkeletalMeshValues[MySingleTargetModeSkeletalMeshIndex_LEGACY]))
-			{
-				MyCalcPos1(SkeletalMeshValues[MySingleTargetModeSkeletalMeshIndex_LEGACY]);
-				// CalcPos1 的 Owner/Cast Failed 分支没有连接输出执行引脚。
-				if (DidCalcPos1ReachOutput())
-				{
-					TraceSingleTarget();
-				}
-			}
-		}
-	}
-	else
-	{
-		UPrimitiveComponent* SingleTarget = nullptr;
-		bool bTargetValid = false;
-		MyCheckValidity2(SingleTarget, bTargetValid);
-		if (bTargetValid)
-		{
-			MyOverlappingComponent = SingleTarget;
-			MyCalcPos2(MyOverlappingComponent.Get());
-			TraceSingleTarget();
-		}
+		return;
 	}
 
-	// ExecutionSequence 的 then_1：无论单目标分支是否得到有效对象，都推进一次流体模拟。
-	MyFluidCoreStep();
+	APlayerController* PlayerController = UGameplayStatics::GetPlayerController(WorldContextObject, 0);
+	if (!IsValid(PlayerController))
+	{
+		return;
+	}
+
+	// 原蓝图库始终查询鼠标与指定手指的命中，再按 TouchSensitive 选择其中一项。
+	FHitResult MouseHit;
+	FHitResult TouchHit;
+	MouseClickValid = PlayerController->GetHitResultUnderCursorByChannel(TraceChannel, true, MouseHit);
+	TouchValid = PlayerController->GetHitResultUnderFingerByChannel(
+		static_cast<ETouchIndex::Type>(FingerIndex), TraceChannel, true, TouchHit);
+	const FHitResult& SelectedHit = TouchSensitive ? TouchHit : MouseHit;
+
+	// 仅在所选命中组件就是目标模拟平面时进入原蓝图的追踪分支。
+	if (SelectedHit.GetComponent() != HitComponent)
+	{
+		return;
+	}
+
+	APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(WorldContextObject, 0);
+	if (!IsValid(CameraManager))
+	{
+		return;
+	}
+
+	FHitResult Hit;
+	const bool bHit = UKismetSystemLibrary::LineTraceSingle(
+		WorldContextObject,
+		CameraManager->K2_GetActorLocation(),
+		SelectedHit.TraceEnd,
+		TraceChannel,
+		true,
+		FluidNinjaLIVEActors,
+		EDrawDebugTrace::None,
+		Hit,
+		false);
+	if (!bHit || !IsValid(Hit.GetActor()))
+	{
+		return;
+	}
+
+	FVector2D UV = FVector2D::ZeroVector;
+	UGameplayStatics::FindCollisionUV(Hit, 0, UV);
+	HitUV = FLinearColor(UV.X, UV.Y, 0.0f, 1.0f);
+	// 到达蓝图库函数返回节点时，原节点输出此比较结果（此处必为 true）。
+	SimHitByMouse = true;
 }
