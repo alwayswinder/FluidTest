@@ -77,6 +77,8 @@
   `OverlapArtifactWorkaround2（复合节点）→ MyOverlapArtifactWorkaround2`（+ `MyTracePositionTemp` / `MyLastTracePositionTemp` / `MyPosition1_3D` / `MyLastPosition1_3D`）、
   `TraceObjects2（复合节点）→ MyTraceObjects2`、`NinjaLiveFunctions.TraceOverlap → MyTraceOverlap`（占位，待补全）、
   `TraceObj2（事件图）→ MyTraceObj2`、
+  `MousePassTrue（自定义事件）→ MyMousePassTrue`（+ `MyUserInputBrushScale`，对应蓝图变量 `UserInputBrushScale`）、
+  `MousePassFalse（自定义事件）→ MyMousePassFalse`（+ `MyOverlapBasedInteraction`，对应蓝图变量 `OverlapBasedInteraction`）、
   `MultiObjectProcessorCycle_3（事件图）→ MyMultiObjectProcessorCycle3`、
   `ForLoopOverlapping（事件图）→ MyForLoopOverlapping`、
   `NoInteraction（事件图）→ MyNoInteraction`、

@@ -1760,6 +1760,61 @@ bool UMyNinjaLiveComponent::MyTraceGestures(FLinearColor& HitUV)
 	return bReachedOut;
 }
 
+void UMyNinjaLiveComponent::MyMousePassTrue()
+{
+	MyMousePass = true;
+
+	FLinearColor HitUV;
+	if (!MyTraceGestures(HitUV))
+	{
+		return;
+	}
+
+	MyOverlappingMeshSizeCoeff = MyUserInputBrushScale;
+
+	if (!MyPosition3_2D.IsValidIndex(MyTouchLookupIndex) || !MyLastPosition3_2D.IsValidIndex(MyTouchLookupIndex))
+	{
+		return;
+	}
+
+	// 随机化色只求值一次（蓝图 MyBrushRnd1 单节点输出同时用于 Lerp.B 与 Position3_2D 写回）。
+	const FLinearColor RandomColor = MyBrushRnd1(HitUV);
+	MyLastPosition3_2D[MyTouchLookupIndex] = FMath::Lerp(
+		MyPosition3_2D[MyTouchLookupIndex],
+		RandomColor,
+		MyBrushSwitch1(HitUV) ? 1.0f : 0.0f);
+	MyPosition3_2D[MyTouchLookupIndex] = RandomColor;
+
+	MyPaintLine();
+}
+
+void UMyNinjaLiveComponent::MyMousePassFalse()
+{
+	MyMousePass = false;
+
+	if (!MyOverlapBasedInteraction && !MyContinuousInteractionWithOwnerActor)
+	{
+		MyNoInteraction();
+		return;
+	}
+
+	const int32 OverlapCount = MyOverlappingComponents.Num() + MySkeletalMeshTempArrayPairs.Num();
+	if (OverlapCount == 0)
+	{
+		MyNoInteraction();
+		return;
+	}
+
+	if (MySingleTargetMode_LEGACY)
+	{
+		MySingleTargetMode();
+	}
+	else
+	{
+		MyForLoopOverlapping();
+	}
+}
+
 void UMyNinjaLiveComponent::MySingleTargetMode()
 {
 	auto TraceSingleTarget = [this]()

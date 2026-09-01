@@ -352,6 +352,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Interaction")
 	TMap<int32, TObjectPtr<UPrimitiveComponent>> MySkeletalMeshTempArrayPairs;
 
+	/** 对应蓝图变量 OverlapBasedInteraction：是否启用基于重叠的交互。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	bool MyOverlapBasedInteraction = false;
+
 	/** 清空全部临时数组 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Temp")
 	void MyResetTempArrays();
@@ -832,6 +836,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTraceObj2();
 
+	/** 执行 MousePassTrue 自定义事件：鼠标穿透时置 MyMousePass 并更新多触点 3D 位置数组（Lerp 写入上一帧位置），随后画线。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	void MyMousePassTrue();
+
+	/** 执行 MousePassFalse 自定义事件：退出鼠标穿透状态时按重叠数量选择单目标/循环重叠处理，无重叠则进入无交互分支。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	void MyMousePassFalse();
+
 	/** 执行旧版 SingleTargetMode：按目标类型追踪单个骨骼或 Primitive，并推进流体核心步骤。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MySingleTargetMode();
@@ -1150,6 +1162,10 @@ public:
 	/** 重叠网格尺寸系数。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyOverlappingMeshSizeCoeff = 0.0;
+
+	/** 对应蓝图自定义变量 UserInputBrushScale：鼠标穿透时覆盖画笔缩放的用户输入值。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
+	double MyUserInputBrushScale = 0.0;
 
 	/** 计算画笔尺寸系数：BrushSize × TraceMeshSizeCoeff × OverlappingMeshSizeCoeff × GlobalBrushScale × 0.5。 */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
