@@ -98,7 +98,8 @@
   `SingleTargetMode（事件图）→ MySingleTargetMode`（+ `EMySingleObjectType` / `MySingleTargetType_LEGACY` / `MySingleTargetModeSkeletalMeshIndex_LEGACY`）、
   `CalcPos2（复合节点）→ MyCalcPos2`、
   `CheckValidity2（复合节点）→ MyCheckValidity2`、
-  `SetInitialVisibility_2（复合节点，NinjaLive Actor）→ MySetInitialVisibility2`（+ `EMyInactiveBehaviour` 枚举 + `MyTraceMeshInactiveBehaviour` / `MyInactiveGrayMaterial`，对应蓝图变量同名项）
+  `SetInitialVisibility_2（复合节点，NinjaLive Actor）→ MySetInitialVisibility2`（+ `EMyInactiveBehaviour` 枚举 + `MyTraceMeshInactiveBehaviour` / `MyInactiveGrayMaterial`，对应蓝图变量同名项）、
+  `EndOverlapDetection（复合节点，NinjaLive Actor）→ MyEndOverlapDetection`（+ `MyInteractionVolumeTemplate` / `MyOverlappingActors` / `MyForceTrackObjectsWithNocollisionFlag`，对应蓝图变量同名项；委托回调为 `MyEndOverlapComponent`）
 
 ## 常用操作
 

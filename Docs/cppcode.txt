@@ -1,74 +1,80 @@
 
-void UMyNinjaLiveComponent::MyLOD()
+void AMyNinjaLiveActor::MyEndOverlapDetection()
 {
-	// 两个 LOD 降级选项都关闭时不做任何事（蓝图 if 的 else 未连接）。
-	if (!MyLOD1ReduceSimQuality && !MyLOD2ReduceSamplingFPS)
+	if (IsValid(MyInteractionVolumeTemplate))
 	{
-		return;
-	}
-
-	// DoOnce：首次进入立即检查一次，之后由定时器按 LOD-CheckFrequency 周期检查。
-	if (!MyLODDoOnceClosed)
-	{
-		MyLODDoOnceClosed = true;
-		MyCheckLODLevel();
-	}
-
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(MyLODCheckTimer, this,
-			&UMyNinjaLiveComponent::MyCheckLODLevel,
-			static_cast<float>(MyLODCheckFrequency), false);
+		MyInteractionVolumeTemplate->OnComponentEndOverlap.AddDynamic(
+			this, &AMyNinjaLiveActor::MyEndOverlapComponent);
 	}
 }
 
-void UMyNinjaLiveComponent::MyCheckLODLevel()
+void AMyNinjaLiveActor::MyEndOverlapComponent(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	AActor* Owner = GetOwner();
-	if (!IsValid(Owner))
+	if (!IsValid(OtherComp))
+	{
+		// 事件体没有前导 IsValid 检查；但 C++ 侧防御空指针。
+		return;
+	}
+
+	// 无碰撞对象且未开启强制追踪标志时不做任何事（蓝图 if 的 then 未连接）。
+	if (OtherComp->GetCollisionEnabled() == ECollisionEnabled::NoCollision && MyForceTrackObjectsWithNocollisionFlag)
 	{
 		return;
 	}
 
-	// 与玩家摄像机的距离（蓝图 GetDistanceTo；相机无效时按 0 处理）。
-	const double Distance = Owner->GetDistanceTo(UGameplayStatics::GetPlayerCameraManager(this, 0));
-	const double LODStepsD = static_cast<double>(MyLODSteps);
+	UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
+	if (!IsValid(NinjaLive))
+	{
+		return;
+	}
 
-	if (Distance < MyLODNearBound)
+	if (OtherComp->GetCollisionObjectType() == ECollisionChannel::ECC_Pawn)
 	{
-		// 近距离：取最高等级与压力求解器迭代上限。
-		MyLODLevel = MyLODSteps;
-		MyFluidSolver1Iterations = MyPressureSolver1MaxIterations;
-	}
-	else if (Distance > MyLODFarBound)
-	{
-		// 远距离：等级 1、单次迭代。
-		MyLODLevel = 1;
-		MyFluidSolver1Iterations = 1;
-	}
-	else
-	{
-		// 中间区间：遍历阈值数组，命中分段（距离 ∈ [Step, Step+StepRange]）时更新，最后命中者生效。
-		for (int32 Index = 0; Index < MyLODStepsArray.Num(); ++Index)
+		if (MyOverlappingActors.Contains(OtherActor))
 		{
-			const double Step = MyLODStepsArray[Index];
-			if (Distance >= Step && Distance <= Step + MyLODStepRange)
+			MyOverlappingActors.Remove(OtherActor);
+
+			// 遍历该 Actor 的 SkeletalMesh，清理对应的临时数组槽位与映射。
+			TArray<USkeletalMeshComponent*> SkeletalMeshes;
+			if (IsValid(OtherActor))
 			{
-				MyLODLevel = MyLODSteps - (Index + 1);
-				MyFluidSolver1Iterations = FMath::Max(
-					FMath::RoundToInt(MyPressureSolver1MaxIterations * (MyLODLevel / LODStepsD)), 1);
+				OtherActor->GetComponents<USkeletalMeshComponent>(SkeletalMeshes);
+			}
+			bool bFoundMatch = false;
+			for (USkeletalMeshComponent* SkeletalMesh : SkeletalMeshes)
+			{
+				int32 FoundKey = INDEX_NONE;
+				for (const TPair<int32, TObjectPtr<UPrimitiveComponent>>& Pair : NinjaLive->MySkeletalMeshTempArrayPairs)
+				{
+					if (Pair.Value == SkeletalMesh)
+					{
+						FoundKey = Pair.Key;
+						break;
+					}
+				}
+				if (FoundKey != INDEX_NONE)
+				{
+					NinjaLive->MyListOfAvailableTempArrays[FoundKey] = true;
+					NinjaLive->MyGetTempArray(FoundKey).Reset();
+					NinjaLive->MySkeletalMeshTempArrayPairs.Remove(FoundKey);
+					bFoundMatch = true;
+				}
+			}
+			// 只在至少命中一个 Map 匹配（执行 Map_Remove 的 then）时更新 MyOverlap1，与蓝图一致；
+			// 无匹配 SkeletalMesh 或 NotContains 分支的 else 均为空，不更新。
+			if (bFoundMatch)
+			{
+				NinjaLive->MyOverlap1 = NinjaLive->MySkeletalMeshTempArrayPairs.Num() != 0
+					|| NinjaLive->MyOverlappingComponents.Num() != 0;
 			}
 		}
 	}
-
-	if (MyLOD2ReduceSamplingFPS)
+	else
 	{
-		// 采样帧率 = Max(MinSamplingFPS, MaxSamplingFPS × LODLevel/LODSteps) 截断，Tick 间隔取倒数。
-		const double SamplingBase = FMath::Max(
-			static_cast<double>(MyMinSamplingFPS),
-			MyMaxSamplingFPS * (MyLODLevel / LODStepsD));
-		MySamplingFPS = FMath::TruncToInt(SamplingBase);
-		MyTickRateCustom = 1.0 / SamplingBase;
-		Owner->SetActorTickInterval(MyTickRateCustom);
+		// 非 Pawn 分支：两条路径（Find==-1 直接跳过移除，或 Find!=-1 移除）最终都会更新 MyOverlap1。
+		NinjaLive->MyOverlappingComponents.Remove(OtherComp);
+		NinjaLive->MyOverlap1 = NinjaLive->MySkeletalMeshTempArrayPairs.Num() != 0
+			|| NinjaLive->MyOverlappingComponents.Num() != 0;
 	}
 }

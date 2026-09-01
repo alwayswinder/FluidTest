@@ -7,6 +7,8 @@
 #include "GameFramework/Actor.h"
 #include "MyNinjaFluidEnums.h"
 #include "Components/BoxComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstance.h"
 #include "MyNinjaLiveActor.generated.h"
@@ -74,7 +76,28 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	TObjectPtr<UMaterialInstance> MyInactiveGrayMaterial = nullptr;
 
+	/** 对应蓝图变量 InteractionVolumeTemplate：绑定结束重叠委托的交互体积组件。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TObjectPtr<UPrimitiveComponent> MyInteractionVolumeTemplate = nullptr;
+
+	/** 对应蓝图变量 OverlappingActors：当前与交互体积重叠的 Actor 列表。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TArray<TObjectPtr<AActor>> MyOverlappingActors;
+
+	/** 对应蓝图变量 ForceTrackObjectsWithNocollisionFlag：是否强制追踪无碰撞对象。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	bool MyForceTrackObjectsWithNocollisionFlag = false;
+
 	/** 执行 SetInitialVisibility_2 复合：按 TraceMeshInactiveBehaviour 设置初始材质（灰色）或隐藏。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MySetInitialVisibility2();
+
+	/** 执行 EndOverlapDetection 复合：把 InteractionVolumeTemplate 的结束重叠委托绑定到 MyEndOverlapComponent。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	void MyEndOverlapDetection();
+
+	/** 结束重叠回调：清理重叠组件/骨骼映射与临时数组槽位，并刷新 MyOverlap1。 */
+	UFUNCTION()
+	void MyEndOverlapComponent(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 };
