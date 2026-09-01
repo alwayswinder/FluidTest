@@ -827,6 +827,28 @@ bool UMyNinjaLiveComponent::MyBrushSwitch2(FLinearColor InLinearColor) const
 		|| IsAtCanvasEdge(MyLastPosition2_2D);
 }
 
+bool UMyNinjaLiveComponent::MyBrushSwitch1(FLinearColor InLinearColor) const
+{
+	// 位置是否落在画布边缘（X/Y 接近 0 或 1）。
+	const auto IsAtEdge = [](const FVector& Pos)
+	{
+		return Pos.X < 0.05 || Pos.X > 0.95 || Pos.Y < 0.05 || Pos.Y > 0.95;
+	};
+
+	// LinearColor 按 R/G/B 转 Vector（与蓝图 Conv_LinearColorToVector 一致）；索引越界时按零点处理。
+	const FVector CurrentPos1(InLinearColor.R, InLinearColor.G, InLinearColor.B);
+	const FLinearColor LastColor = MyLastPosition3_2D.IsValidIndex(MyTouchLookupIndex)
+		? MyLastPosition3_2D[MyTouchLookupIndex]
+		: FLinearColor::Black;
+	const FVector LastPos1(LastColor.R, LastColor.G, LastColor.B);
+
+	return IsAtEdge(CurrentPos1)
+		|| IsAtEdge(LastPos1)
+		|| CurrentPos1.Equals(LastPos1, 0.001)
+		|| LastPos1.Equals(FVector::ZeroVector, 0.001)
+		|| MyTimeSinceLastClick < (1.0 / static_cast<double>(MySamplingFPS)) * 1.5;
+}
+
 FLinearColor UMyNinjaLiveComponent::MyBrushRnd3(const FLinearColor InColor) const
 {
 	if (MyPV2_GenerateVelocity)
@@ -853,6 +875,24 @@ FLinearColor UMyNinjaLiveComponent::MyBrushRnd2(const FLinearColor InColor) cons
 	}
 
 	// 对应 BrushRnd2：R/G 通道独立地加 [-0.5*MyBrushRnd, +0.5*MyBrushRnd] 内的随机抖动，B/A 保持不变。
+	const double HalfRange = MyBrushRnd * 0.5;
+	const FLinearColor Randomized(
+		InColor.R + FMath::FRandRange(-HalfRange, HalfRange),
+		InColor.G + FMath::FRandRange(-HalfRange, HalfRange),
+		InColor.B,
+		InColor.A);
+
+	return Randomized;
+}
+
+FLinearColor UMyNinjaLiveComponent::MyBrushRnd1(const FLinearColor InColor) const
+{
+	if (MyPV2_GenerateVelocity)
+	{
+		return InColor;
+	}
+
+	// 对应 BrushRnd1：R/G 通道独立地加 [-0.5*MyBrushRnd, +0.5*MyBrushRnd] 内的随机抖动，B/A 保持不变。
 	const double HalfRange = MyBrushRnd * 0.5;
 	const FLinearColor Randomized(
 		InColor.R + FMath::FRandRange(-HalfRange, HalfRange),

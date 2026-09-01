@@ -1247,6 +1247,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
 	bool MyBrushSwitch2(FLinearColor InLinearColor) const;
 
+	/** BrushSwitch1 画笔切换判定：当前/上次采样位置落在画布边缘（X/Y=R/G 接近 0 或 1）、当前位置与上次相同、上次位置为零点，或距上次点击不足 1.5 个采样间隔（1/MySamplingFPS）时返回 true。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
+	bool MyBrushSwitch1(FLinearColor InLinearColor) const;
+
 	/** 将点画笔的密度相关参数写入 Painter 与 Composite 动态材质。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
 	void MySetBrushDensityParams3(double Value);
@@ -1270,6 +1274,10 @@ public:
 	/** 画笔随机颜色（对应 BrushRnd2）：逻辑同 MyBrushRnd3，MyPV2_GenerateVelocity 开启时返回原色，否则 R/G 通道加 ±MyBrushRnd*0.5 随机抖动。 */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
 	FLinearColor MyBrushRnd2(const FLinearColor InColor) const;
+
+	/** 画笔随机颜色（对应 BrushRnd1）：逻辑同 MyBrushRnd3，MyPV2_GenerateVelocity 开启时返回原色，否则 R/G 通道加 ±MyBrushRnd*0.5 随机抖动。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
+	FLinearColor MyBrushRnd1(const FLinearColor InColor) const;
 
 	/** 速度场反馈系数。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")

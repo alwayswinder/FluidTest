@@ -1,70 +1,22 @@
 
-void UMyNinjaLiveFunctions::MyTraceMouse(
-	UObject* WorldContextObject,
-	UPrimitiveComponent* HitComponent,
-	bool TouchSensitive,
-	uint8 FingerIndex,
-	TEnumAsByte<ETraceTypeQuery> TraceChannel,
-	const TArray<AActor*>& FluidNinjaLIVEActors,
-	FLinearColor& HitUV,
-	bool& SimHitByMouse,
-	bool& MouseClickValid,
-	bool& TouchValid)
+bool UMyNinjaLiveComponent::MyBrushSwitch1(FLinearColor InLinearColor) const
 {
-	HitUV = FLinearColor::Black;
-	SimHitByMouse = false;
-	MouseClickValid = false;
-	TouchValid = false;
-	if (!IsValid(WorldContextObject) || !IsValid(HitComponent))
+	// 位置是否落在画布边缘（X/Y 接近 0 或 1）。
+	const auto IsAtEdge = [](const FVector& Pos)
 	{
-		return;
-	}
+		return Pos.X < 0.05 || Pos.X > 0.95 || Pos.Y < 0.05 || Pos.Y > 0.95;
+	};
 
-	APlayerController* PlayerController = UGameplayStatics::GetPlayerController(WorldContextObject, 0);
-	if (!IsValid(PlayerController))
-	{
-		return;
-	}
+	// LinearColor 按 R/G/B 转 Vector（与蓝图 Conv_LinearColorToVector 一致）；索引越界时按零点处理。
+	const FVector CurrentPos1(InLinearColor.R, InLinearColor.G, InLinearColor.B);
+	const FLinearColor LastColor = MyLastPosition3_2D.IsValidIndex(MyTouchLookupIndex)
+		? MyLastPosition3_2D[MyTouchLookupIndex]
+		: FLinearColor::Black;
+	const FVector LastPos1(LastColor.R, LastColor.G, LastColor.B);
 
-	// 原蓝图库始终查询鼠标与指定手指的命中，再按 TouchSensitive 选择其中一项。
-	FHitResult MouseHit;
-	FHitResult TouchHit;
-	MouseClickValid = PlayerController->GetHitResultUnderCursorByChannel(TraceChannel, true, MouseHit);
-	TouchValid = PlayerController->GetHitResultUnderFingerByChannel(
-		static_cast<ETouchIndex::Type>(FingerIndex), TraceChannel, true, TouchHit);
-	const FHitResult& SelectedHit = TouchSensitive ? TouchHit : MouseHit;
-
-	// 仅在所选命中组件就是目标模拟平面时进入原蓝图的追踪分支。
-	if (SelectedHit.GetComponent() != HitComponent)
-	{
-		return;
-	}
-
-	APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(WorldContextObject, 0);
-	if (!IsValid(CameraManager))
-	{
-		return;
-	}
-
-	FHitResult Hit;
-	const bool bHit = UKismetSystemLibrary::LineTraceSingle(
-		WorldContextObject,
-		CameraManager->K2_GetActorLocation(),
-		SelectedHit.TraceEnd,
-		TraceChannel,
-		true,
-		FluidNinjaLIVEActors,
-		EDrawDebugTrace::None,
-		Hit,
-		false);
-	if (!bHit || !IsValid(Hit.GetActor()))
-	{
-		return;
-	}
-
-	FVector2D UV = FVector2D::ZeroVector;
-	UGameplayStatics::FindCollisionUV(Hit, 0, UV);
-	HitUV = FLinearColor(UV.X, UV.Y, 0.0f, 1.0f);
-	// 到达蓝图库函数返回节点时，原节点输出此比较结果（此处必为 true）。
-	SimHitByMouse = true;
+	return IsAtEdge(CurrentPos1)
+		|| IsAtEdge(LastPos1)
+		|| CurrentPos1.Equals(LastPos1, 0.001)
+		|| LastPos1.Equals(FVector::ZeroVector, 0.001)
+		|| MyTimeSinceLastClick < (1.0 / static_cast<double>(MySamplingFPS)) * 1.5;
 }

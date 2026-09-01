@@ -84,7 +84,9 @@
   `FinalDealRTAndBrush（事件图）→ MyFinalDealRTAndBrush`、
   `PaintLine（事件图）→ MyPaintLine`、
   `BrushSwitch2（复合节点）→ MyBrushSwitch2`（+ `MyPosition1_3D_Static`）、
+  `BrushSwitch1（复合节点）→ MyBrushSwitch1`、
   `BrushRnd2（复合节点）→ MyBrushRnd2`（逻辑同 `MyBrushRnd3`，参数 `in` → `InColor`）、
+  `BrushRnd1（复合节点）→ MyBrushRnd1`（逻辑同 `MyBrushRnd3`，参数 `in` → `InColor`）、
   `TraceObjects1（复合节点）→ MyTraceObjects1`、
   `TraceGestures（复合节点）→ MyTraceGestures`（返回 `bool` 表示是否走到 out；+ `MyTraceMouse`）、
   `CalcPos1（复合节点）→ MyCalcPos1`（+ `MyOverlapFilterInclusiveBoneNameExact`）、
