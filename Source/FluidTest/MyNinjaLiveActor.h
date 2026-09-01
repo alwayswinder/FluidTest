@@ -8,6 +8,7 @@
 #include "MyNinjaFluidEnums.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstance.h"
 #include "MyNinjaLiveActor.generated.h"
 
 class UMyNinjaLiveComponent;
@@ -64,4 +65,16 @@ public:
 	/** 追踪网格（StaticMesh，用于射线检测交互） */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Trace")
 	TObjectPtr<UStaticMeshComponent> MyTraceMesh = nullptr;
+
+	/** 对应蓝图变量 TraceMeshInactiveBehaviour：TraceMesh 不活动时的呈现行为。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	EMyInactiveBehaviour MyTraceMeshInactiveBehaviour = EMyInactiveBehaviour::HoldLastFrameWhenInactive;
+
+	/** 对应蓝图变量 InactiveGrayMaterial：不活动时替换 TraceMesh 的灰色材质。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	TObjectPtr<UMaterialInstance> MyInactiveGrayMaterial = nullptr;
+
+	/** 执行 SetInitialVisibility_2 复合：按 TraceMeshInactiveBehaviour 设置初始材质（灰色）或隐藏。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
+	void MySetInitialVisibility2();
 };

@@ -47,3 +47,24 @@ UMyNinjaLiveComponent* AMyNinjaLiveActor::GetNinjaLiveComponent() const
 {
 	return FindComponentByClass<UMyNinjaLiveComponent>();
 }
+
+void AMyNinjaLiveActor::MySetInitialVisibility2()
+{
+	switch (MyTraceMeshInactiveBehaviour)
+	{
+	case EMyInactiveBehaviour::HoldLastFrameWhenInactive:
+	case EMyInactiveBehaviour::GrayWhenInactive:
+		// 蓝图 0/1 两个分支共用：把 TraceMesh 材质替换为 InactiveGrayMaterial。
+		if (IsValid(MyTraceMesh) && IsValid(MyInactiveGrayMaterial))
+		{
+			MyTraceMesh->SetMaterial(0, MyInactiveGrayMaterial);
+		}
+		break;
+	case EMyInactiveBehaviour::HiddenWhenInactive:
+		if (IsValid(MyTraceMesh))
+		{
+			MyTraceMesh->SetVisibility(false, false);
+		}
+		break;
+	}
+}

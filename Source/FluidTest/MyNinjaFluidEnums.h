@@ -101,3 +101,15 @@ enum class EMyRenderTargetList : uint8
 	Painter = 4 UMETA(DisplayName = "RT_Painter"),
 	Output = 13 UMETA(DisplayName = "RT_Output")
 };
+
+/** TraceMesh 不活动时的呈现行为（对齐蓝图 InactiveBehaviour_Enum）。 */
+UENUM(BlueprintType)
+enum class EMyInactiveBehaviour : uint8
+{
+	/** 保留最后一帧画面 */
+	HoldLastFrameWhenInactive = 0 UMETA(DisplayName = "Hold last frame when inactive"),
+	/** 显示为灰色 */
+	GrayWhenInactive = 1 UMETA(DisplayName = "Gray when inactive"),
+	/** 隐藏 */
+	HiddenWhenInactive = 2 UMETA(DisplayName = "Hidden when inactive")
+};
