@@ -3,6 +3,7 @@
 #include "MyNinjaLiveActor.h"
 
 #include "MyNinjaLiveComponent.h"
+#include "Kismet/KismetSystemLibrary.h"
 
 AMyNinjaLiveActor::AMyNinjaLiveActor()
 {
@@ -76,6 +77,67 @@ void AMyNinjaLiveActor::MyEndOverlapDetection()
 		MyInteractionVolumeTemplate->OnComponentEndOverlap.AddDynamic(
 			this, &AMyNinjaLiveActor::MyEndOverlapComponent);
 	}
+}
+
+bool AMyNinjaLiveActor::MyExcludeLargeObjects(const USceneComponent* OverlapComponent) const
+{
+	if (!MyAutoExcludeLargeOverlappingObjects)
+	{
+		return true;
+	}
+
+	FVector InteractionOrigin = FVector::ZeroVector;
+	FVector InteractionBoxExtent = FVector::ZeroVector;
+	float InteractionSphereRadius = 0.0f;
+	UKismetSystemLibrary::GetComponentBounds(
+		MyInteractionVolumeTemplate, InteractionOrigin, InteractionBoxExtent, InteractionSphereRadius);
+
+	FVector OverlapOrigin = FVector::ZeroVector;
+	FVector OverlapBoxExtent = FVector::ZeroVector;
+	float OverlapSphereRadius = 0.0f;
+	UKismetSystemLibrary::GetComponentBounds(
+		OverlapComponent, OverlapOrigin, OverlapBoxExtent, OverlapSphereRadius);
+
+	return InteractionBoxExtent.GetMax() < OverlapBoxExtent.GetMax();
+}
+
+bool AMyNinjaLiveActor::MyCollisionTypeFilter1(const TArray<TEnumAsByte<EObjectTypeQuery>>& ObjectTypes,
+	const UPrimitiveComponent* OverlapComponent, FString& ObjType,
+	TEnumAsByte<ECollisionChannel>& CollisionType) const
+{
+	ObjType.Reset();
+	CollisionType = ECC_WorldStatic;
+
+	const UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
+	if (!IsValid(OverlapComponent) || !IsValid(NinjaLive)
+		|| OverlapComponent->GetCollisionResponseToChannel(NinjaLive->MyCollisionChannel) == ECR_Block)
+	{
+		return false;
+	}
+
+	const ECollisionChannel ComponentCollisionType = OverlapComponent->GetCollisionObjectType();
+	const TEnumAsByte<EObjectTypeQuery>* MappedObjectType =
+		MyOverlapFilterInclusiveCollisionType.Find(TEnumAsByte<ECollisionChannel>(ComponentCollisionType));
+	const TEnumAsByte<EObjectTypeQuery> FilterObjectType = MappedObjectType != nullptr
+		? *MappedObjectType
+		: TEnumAsByte<EObjectTypeQuery>(EObjectTypeQuery::ObjectTypeQuery1);
+
+	const UEnum* ObjectTypeEnum = StaticEnum<EObjectTypeQuery>();
+	for (const TEnumAsByte<EObjectTypeQuery> ObjectType : ObjectTypes)
+	{
+		if (ObjectType != FilterObjectType)
+		{
+			continue;
+		}
+
+		ObjType = ObjectTypeEnum != nullptr
+			? ObjectTypeEnum->GetNameStringByValue(ObjectType.GetValue())
+			: FString();
+		CollisionType = ComponentCollisionType;
+		return true;
+	}
+
+	return false;
 }
 
 void AMyNinjaLiveActor::MyEndOverlapComponent(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,

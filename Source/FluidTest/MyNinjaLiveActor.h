@@ -54,6 +54,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
 	TArray<FName> MyOverlapFilterInclusiveBoneNameExact;
 
+	/** 对应蓝图变量 OverlapFilterInclusiveCollisionType：碰撞通道到对象类型查询的包含映射。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TMap<TEnumAsByte<ECollisionChannel>, TEnumAsByte<EObjectTypeQuery>> MyOverlapFilterInclusiveCollisionType;
+
 	/** 根 SceneComponent */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Activation")
 	TObjectPtr<USceneComponent> MyRoot = nullptr;
@@ -88,6 +92,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
 	bool MyForceTrackObjectsWithNocollisionFlag = false;
 
+	/** 对应蓝图变量 AutoExcludeLargeOverlappingObjects：是否排除大于交互体积的重叠组件。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	bool MyAutoExcludeLargeOverlappingObjects = false;
+
 	/** 执行 SetInitialVisibility_2 复合：按 TraceMeshInactiveBehaviour 设置初始材质（灰色）或隐藏。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MySetInitialVisibility2();
@@ -95,6 +103,16 @@ public:
 	/** 执行 EndOverlapDetection 复合：把 InteractionVolumeTemplate 的结束重叠委托绑定到 MyEndOverlapComponent。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MyEndOverlapDetection();
+
+	/** 执行 ExcludeLargeObjects 复合：返回原复合节点的 true 分支条件。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Interaction")
+	bool MyExcludeLargeObjects(const USceneComponent* OverlapComponent) const;
+
+	/** 执行 CollisionTypeFilter1 复合：筛选可处理的初始重叠对象类型。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	bool MyCollisionTypeFilter1(const TArray<TEnumAsByte<EObjectTypeQuery>>& ObjectTypes,
+		const UPrimitiveComponent* OverlapComponent, FString& ObjType,
+		TEnumAsByte<ECollisionChannel>& CollisionType) const;
 
 	/** 结束重叠回调：清理重叠组件/骨骼映射与临时数组槽位，并刷新 MyOverlap1。 */
 	UFUNCTION()
