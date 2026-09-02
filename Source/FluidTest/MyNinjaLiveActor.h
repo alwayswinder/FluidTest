@@ -54,6 +54,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
 	TArray<FName> MyOverlapFilterInclusiveBoneNameExact;
 
+	/** 对应蓝图变量 OverlapFilterInclusiveObjType：初始重叠查询包含的对象类型。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TArray<TEnumAsByte<EObjectTypeQuery>> MyOverlapFilterInclusiveObjType = {
+		EObjectTypeQuery::ObjectTypeQuery1 };
+
+	/** 对应蓝图变量 ExcludeSpecificActorsFromOverlap：初始重叠查询要忽略的 Actor。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TArray<TObjectPtr<AActor>> MyExcludeSpecificActorsFromOverlap;
+
+	/** 对应蓝图变量 TrackActorPrimitiveComponentsWithTag：允许加入 Primitive 重叠列表的组件标签。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	FName MyTrackActorPrimitiveComponentsWithTag = NAME_None;
+
+	/** 对应蓝图变量 TrackActorSkeletalMeshComponentsWithTag：允许加入初始 Actor 列表的组件标签。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	FName MyTrackActorSkeletalMeshComponentsWithTag = NAME_None;
+
+	/** 对应蓝图变量 OverlappingActorsInitial：初始化时识别出的重叠 Actor。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Interaction")
+	TArray<TObjectPtr<AActor>> MyOverlappingActorsInitial;
+
 	/** 对应蓝图变量 OverlapFilterInclusiveCollisionType：碰撞通道到对象类型查询的包含映射。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
 	TMap<TEnumAsByte<ECollisionChannel>, TEnumAsByte<EObjectTypeQuery>> MyOverlapFilterInclusiveCollisionType;
@@ -114,8 +135,16 @@ public:
 		const UPrimitiveComponent* OverlapComponent, FString& ObjType,
 		TEnumAsByte<ECollisionChannel>& CollisionType) const;
 
+	/** 执行 InitialOverlapCheck 复合：等待碰撞通道就绪后建立初始重叠对象列表。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	void MyInitialOverlapCheck();
+
 	/** 结束重叠回调：清理重叠组件/骨骼映射与临时数组槽位，并刷新 MyOverlap1。 */
 	UFUNCTION()
 	void MyEndOverlapComponent(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+
+private:
+	/** InitialOverlapCheck 等待追踪通道就绪的定时器。 */
+	FTimerHandle MyInitialOverlapCheckTimer;
 };

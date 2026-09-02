@@ -101,7 +101,8 @@
   `SetInitialVisibility_2（复合节点，NinjaLive Actor）→ MySetInitialVisibility2`（+ `EMyInactiveBehaviour` 枚举 + `MyTraceMeshInactiveBehaviour` / `MyInactiveGrayMaterial`，对应蓝图变量同名项）、
   `EndOverlapDetection（复合节点，NinjaLive Actor）→ MyEndOverlapDetection`（+ `MyInteractionVolumeTemplate` / `MyOverlappingActors` / `MyForceTrackObjectsWithNocollisionFlag`，对应蓝图变量同名项；委托回调为 `MyEndOverlapComponent`）、
   `ExcludeLargeObjects（复合节点，NinjaLive Actor）→ MyExcludeLargeObjects`（+ `MyAutoExcludeLargeOverlappingObjects`，返回原复合节点的 true 分支条件）、
-  `InitialOverlapCheck.CollisionTypeFilter1（复合节点，NinjaLive Actor）→ MyCollisionTypeFilter1`（+ `MyOverlapFilterInclusiveCollisionType`；首个命中输出 `ObjType` / `CollisionType`）
+  `InitialOverlapCheck.CollisionTypeFilter1（复合节点，NinjaLive Actor）→ MyCollisionTypeFilter1`（+ `MyOverlapFilterInclusiveCollisionType`；首个命中输出 `ObjType` / `CollisionType`）、
+  `InitialOverlapCheck（复合节点，NinjaLive Actor）→ MyInitialOverlapCheck`（+ `MyOverlapFilterInclusiveObjType` / `MyExcludeSpecificActorsFromOverlap` / `MyTrackActorPrimitiveComponentsWithTag` / `MyTrackActorSkeletalMeshComponentsWithTag` / `MyOverlappingActorsInitial`；等待 `MyTraceChannelsSet` 后扫描初始重叠）
 
 ## 常用操作
 

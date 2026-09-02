@@ -140,6 +140,116 @@ bool AMyNinjaLiveActor::MyCollisionTypeFilter1(const TArray<TEnumAsByte<EObjectT
 	return false;
 }
 
+void AMyNinjaLiveActor::MyInitialOverlapCheck()
+{
+	UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
+	if (!IsValid(NinjaLive))
+	{
+		return;
+	}
+
+	if (!NinjaLive->MyTraceChannelsSet)
+	{
+		if (UWorld* World = GetWorld(); World != nullptr
+			&& !World->GetTimerManager().IsTimerActive(MyInitialOverlapCheckTimer))
+		{
+			World->GetTimerManager().SetTimer(MyInitialOverlapCheckTimer, this,
+				&AMyNinjaLiveActor::MyInitialOverlapCheck, 0.01f, false);
+		}
+		return;
+	}
+
+	if (!IsValid(MyInteractionVolumeTemplate))
+	{
+		NinjaLive->MyOverlap1 = false;
+		if (MyOverlappingActorsInitial.IsEmpty())
+		{
+			MyOverlappingActorsInitial.Add(this);
+		}
+		return;
+	}
+
+	TArray<UPrimitiveComponent*> ExistingOverlaps;
+	MyInteractionVolumeTemplate->GetOverlappingComponents(ExistingOverlaps);
+	for (UPrimitiveComponent* OverlapComponent : ExistingOverlaps)
+	{
+		if (!IsValid(OverlapComponent))
+		{
+			continue;
+		}
+
+		if (OverlapComponent->ComponentTags.Contains(MyTrackActorPrimitiveComponentsWithTag))
+		{
+			NinjaLive->MyOverlappingComponents.Add(OverlapComponent);
+		}
+
+		AActor* OverlapOwner = OverlapComponent->GetOwner();
+		if (IsValid(OverlapOwner)
+			&& OverlapOwner->GetComponentsByTag(UActorComponent::StaticClass(),
+				MyTrackActorSkeletalMeshComponentsWithTag).Num() != 0)
+		{
+			MyOverlappingActorsInitial.Add(OverlapOwner);
+		}
+	}
+
+	TArray<AActor*> ActorsToIgnore;
+	ActorsToIgnore.Reserve(MyExcludeSpecificActorsFromOverlap.Num());
+	for (const TObjectPtr<AActor>& ExcludedActor : MyExcludeSpecificActorsFromOverlap)
+	{
+		ActorsToIgnore.Add(ExcludedActor.Get());
+	}
+
+	TArray<UPrimitiveComponent*> FilteredOverlaps;
+	UKismetSystemLibrary::ComponentOverlapComponents(MyInteractionVolumeTemplate,
+		MyInteractionVolumeTemplate->GetComponentTransform(), MyOverlapFilterInclusiveObjType,
+		nullptr, ActorsToIgnore, FilteredOverlaps);
+	FilteredOverlaps.Remove(MyActivationVolume.Get());
+	FilteredOverlaps.Remove(MyTraceMesh.Get());
+
+	if (FilteredOverlaps.IsEmpty())
+	{
+		NinjaLive->MyOverlap1 = false;
+	}
+	else
+	{
+		NinjaLive->MyOverlap1 = true;
+		for (UPrimitiveComponent* OverlapComponent : FilteredOverlaps)
+		{
+			if (!IsValid(OverlapComponent))
+			{
+				continue;
+			}
+
+			FString ObjType;
+			TEnumAsByte<ECollisionChannel> CollisionType = ECC_WorldStatic;
+			if (!MyCollisionTypeFilter1(MyOverlapFilterInclusiveObjType, OverlapComponent,
+				ObjType, CollisionType))
+			{
+				continue;
+			}
+
+			if (OverlapComponent->GetCollisionObjectType() == ECC_Pawn)
+			{
+				AActor* OverlapOwner = OverlapComponent->GetOwner();
+				if (!MyOverlappingActorsInitial.Contains(OverlapOwner))
+				{
+					MyOverlappingActorsInitial.Add(OverlapOwner);
+				}
+			}
+			else if (MyExcludeLargeObjects(OverlapComponent)
+				&& !NinjaLive->MyOverlappingComponents.Contains(OverlapComponent))
+			{
+				NinjaLive->MyOverlappingComponents.Add(OverlapComponent);
+			}
+		}
+	}
+
+	if (MyOverlappingActorsInitial.IsEmpty())
+	{
+		MyOverlappingActorsInitial.Add(this);
+	}
+}
+
 void AMyNinjaLiveActor::MyEndOverlapComponent(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
