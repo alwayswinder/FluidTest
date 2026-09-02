@@ -1856,6 +1856,21 @@ void UMyNinjaLiveComponent::MyMousePassTrue()
 
 	MyOverlappingMeshSizeCoeff = MyUserInputBrushScale;
 
+	// Painter v2 且非旧版单目标：鼠标命中点追加进 Niagara 追踪数组，与人物共用通道，
+	// 避免用 Line 画笔整幅覆盖 RT_Painter 清掉人物笔刷（原蓝图序列两路并行的意图）。
+	if (MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY)
+	{
+		const FLinearColor RandomColor = MyBrushRnd1(HitUV);
+		MyPositionArray.Add(FVector2D(RandomColor.R, RandomColor.G));
+		// 速度沿用上一帧鼠标位置差分（比例与 MySingleTargetVelocity 一致）。
+		const FLinearColor Gradient(RandomColor.R - MyLastMouseHitUV_2D.R,
+			RandomColor.G - MyLastMouseHitUV_2D.G, 0.0f, 0.0f);
+		MyVelocityArray.Add(Gradient * 15.0f);
+		MyBrushSizeArray.Add(static_cast<float>(MyBrushSizeCoEff()));
+		MyLastMouseHitUV_2D = RandomColor;
+		return;
+	}
+
 	if (!MyPosition3_2D.IsValidIndex(MyTouchLookupIndex) || !MyLastPosition3_2D.IsValidIndex(MyTouchLookupIndex))
 	{
 		return;
@@ -1868,6 +1883,7 @@ void UMyNinjaLiveComponent::MyMousePassTrue()
 		RandomColor,
 		MyBrushSwitch1(HitUV) ? 1.0f : 0.0f);
 	MyPosition3_2D[MyTouchLookupIndex] = RandomColor;
+	MyLastMouseHitUV_2D = RandomColor;
 
 	MyPaintLine();
 }

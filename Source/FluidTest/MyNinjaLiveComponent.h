@@ -618,6 +618,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
 	TArray<FLinearColor> MyLastPosition3_2D;
 
+	/** 上一帧鼠标命中 UV，用于 PainterV2 下鼠标点的速度差分。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
+	FLinearColor MyLastMouseHitUV_2D = FLinearColor::Black;
+
 	/** 计算旧版单目标画笔速度并写入线形 Painter 材质。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Velocity")
 	void MySingleTargetVelocity();
