@@ -102,7 +102,9 @@
   `EndOverlapDetection（复合节点，NinjaLive Actor）→ MyEndOverlapDetection`（+ `MyInteractionVolumeTemplate` / `MyOverlappingActors` / `MyForceTrackObjectsWithNocollisionFlag`，对应蓝图变量同名项；委托回调为 `MyEndOverlapComponent`）、
   `ExcludeLargeObjects（复合节点，NinjaLive Actor）→ MyExcludeLargeObjects`（+ `MyAutoExcludeLargeOverlappingObjects`，返回原复合节点的 true 分支条件）、
   `InitialOverlapCheck.CollisionTypeFilter1（复合节点，NinjaLive Actor）→ MyCollisionTypeFilter1`（+ `MyOverlapFilterInclusiveCollisionType`；首个命中输出 `ObjType` / `CollisionType`）、
-  `InitialOverlapCheck（复合节点，NinjaLive Actor）→ MyInitialOverlapCheck`（+ `MyOverlapFilterInclusiveObjType` / `MyExcludeSpecificActorsFromOverlap` / `MyTrackActorPrimitiveComponentsWithTag` / `MyTrackActorSkeletalMeshComponentsWithTag` / `MyOverlappingActorsInitial`；等待 `MyTraceChannelsSet` 后扫描初始重叠）
+  `InitialOverlapCheck（复合节点，NinjaLive Actor）→ MyInitialOverlapCheck`（+ `MyOverlapFilterInclusiveObjType` / `MyExcludeSpecificActorsFromOverlap` / `MyTrackActorPrimitiveComponentsWithTag` / `MyTrackActorSkeletalMeshComponentsWithTag` / `MyOverlappingActorsInitial`；等待 `MyTraceChannelsSet` 后扫描初始重叠）、
+  `BeginOverlapDetection > UE5 - SetInteractionVolumeCollisionResponse（复合节点）→ MySetInteractionVolumeCollisionResponse`（UE5 下按 `MyOverlapFilterInclusiveObjType` 关闭交互体积未包含对象类型对应通道的响应；仅量化或锁轴时执行）、
+  `BeginOverlapDetection > SimContainerCapacityFilter1（复合节点）→ MySimContainerCapacityFilter1`（返回是否走 then 出口：可用临时数组槽位 `MyListOfAvailableTempArrays` 至少存在一个、且（总数 - `MySkeletalMeshTempArrayPairs` 已占用）足够容纳 `MyContinuousInteractionSkeletalComponent` 全部骨骼网格；SKmesh ≤ 1 时直接通过）
 
 ## 常用操作
 

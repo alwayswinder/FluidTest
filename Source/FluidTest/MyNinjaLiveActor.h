@@ -139,6 +139,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MyInitialOverlapCheck();
 
+	/** 执行 BeginOverlapDetection > UE5 - SetInteractionVolumeCollisionResponse 复合：UE5 下按省略的过滤对象类型关闭交互体积对应通道的响应。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	void MySetInteractionVolumeCollisionResponse();
+
+	/** 执行 BeginOverlapDetection > SimContainerCapacityFilter1 复合：返回是否走 then 出口（可用临时数组槽位足够容纳全部骨骼网格，且至少有一个可用槽位）。 */
+	UFUNCTION(BlueprintPure, Category = "FluidSim|Interaction")
+	bool MySimContainerCapacityFilter1(const TArray<bool>& TempArrays,
+		const TMap<int32, UPrimitiveComponent*>& Pairs,
+		const TArray<USkeletalMeshComponent*>& SKmeshComponents) const;
+
 	/** 结束重叠回调：清理重叠组件/骨骼映射与临时数组槽位，并刷新 MyOverlap1。 */
 	UFUNCTION()
 	void MyEndOverlapComponent(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,

@@ -185,7 +185,7 @@ void AMyNinjaLiveActor::MyInitialOverlapCheck()
 
 		AActor* OverlapOwner = OverlapComponent->GetOwner();
 		if (IsValid(OverlapOwner)
-			&& OverlapOwner->GetComponentsByTag(UActorComponent::StaticClass(),
+			&& OverlapOwner->GetComponentsByTag(USkeletalMeshComponent::StaticClass(),
 				MyTrackActorSkeletalMeshComponentsWithTag).Num() != 0)
 		{
 			MyOverlappingActorsInitial.Add(OverlapOwner);
@@ -248,6 +248,72 @@ void AMyNinjaLiveActor::MyInitialOverlapCheck()
 	{
 		MyOverlappingActorsInitial.Add(this);
 	}
+}
+
+void AMyNinjaLiveActor::MySetInteractionVolumeCollisionResponse()
+{
+	// 蓝图：引擎版本字符串（GetEngineVersion）不以 “5” 开头（忽略大小写）时直接返回，不做任何设置。
+	if (!UKismetSystemLibrary::GetEngineVersion().StartsWith(TEXT("5"), ESearchCase::IgnoreCase))
+	{
+		return;
+	}
+
+	// 蓝图：量化步长 > 0 或锁轴枚举值 != 4（EMyQuantizerAxisIgnore::None）时才执行通道设置。
+	const UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
+	const int32 QuantizerStepSize = IsValid(NinjaLive) ? NinjaLive->MyQuantizerStepSize : 0;
+	const int32 AxisLocked = IsValid(NinjaLive)
+		? static_cast<int32>(NinjaLive->MyMovementIsLockedOnThisAxis) : 0;
+	if (QuantizerStepSize <= 0 && AxisLocked == 4)
+	{
+		return;
+	}
+
+	if (!IsValid(MyInteractionVolumeTemplate))
+	{
+		return;
+	}
+
+	// 蓝图链式六段：MyOverlapFilterInclusiveObjType 未包含对应对象类型时，把该碰撞通道响应设为 Ignore。
+	struct FChannelFilterEntry
+	{
+		EObjectTypeQuery ObjectType;
+		ECollisionChannel Channel;
+	};
+	const FChannelFilterEntry ChannelFilters[] = {
+		{ EObjectTypeQuery::ObjectTypeQuery6, ECC_Destructible },
+		{ EObjectTypeQuery::ObjectTypeQuery5, ECC_Vehicle },
+		{ EObjectTypeQuery::ObjectTypeQuery4, ECC_PhysicsBody },
+		{ EObjectTypeQuery::ObjectTypeQuery3, ECC_Pawn },
+		{ EObjectTypeQuery::ObjectTypeQuery2, ECC_WorldDynamic },
+		{ EObjectTypeQuery::ObjectTypeQuery1, ECC_WorldStatic },
+	};
+	for (const FChannelFilterEntry& Entry : ChannelFilters)
+	{
+		if (!MyOverlapFilterInclusiveObjType.Contains(TEnumAsByte<EObjectTypeQuery>(Entry.ObjectType)))
+		{
+			MyInteractionVolumeTemplate->SetCollisionResponseToChannel(Entry.Channel, ECR_Ignore);
+		}
+	}
+}
+
+bool AMyNinjaLiveActor::MySimContainerCapacityFilter1(const TArray<bool>& TempArrays,
+	const TMap<int32, UPrimitiveComponent*>& Pairs,
+	const TArray<USkeletalMeshComponent*>& SKmeshComponents) const
+{
+	// 蓝图 IfThenElse_2：临时数组槽位列表中没有任何可用槽位（true）时整个复合直接结束，不走 then 出口。
+	if (!TempArrays.Contains(true))
+	{
+		return false;
+	}
+
+	// 蓝图 IfThenElse_1：骨骼网格组件只有一个或没有时直接走 then 出口；
+	// 多于一个时才检查剩余槽位（总槽位 - 已占用）是否足够容纳全部骨骼网格（IfThenElse_0）。
+	if (SKmeshComponents.Num() > 1)
+	{
+		return (TempArrays.Num() - Pairs.Num()) >= SKmeshComponents.Num();
+	}
+
+	return true;
 }
 
 void AMyNinjaLiveActor::MyEndOverlapComponent(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,

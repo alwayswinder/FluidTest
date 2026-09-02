@@ -1,110 +1,46 @@
 
-void AMyNinjaLiveActor::MyInitialOverlapCheck()
+void AMyNinjaLiveActor::MySetInteractionVolumeCollisionResponse()
 {
-	UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
-	if (!IsValid(NinjaLive))
+	// 蓝图：引擎版本字符串（GetEngineVersion）不以 “5” 开头（忽略大小写）时直接返回，不做任何设置。
+	if (!UKismetSystemLibrary::GetEngineVersion().StartsWith(TEXT("5"), ESearchCase::IgnoreCase))
 	{
 		return;
 	}
 
-	if (!NinjaLive->MyTraceChannelsSet)
+	// 蓝图：量化步长 > 0 或锁轴枚举值 != 4（EMyQuantizerAxisIgnore::None）时才执行通道设置。
+	const UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
+	const int32 QuantizerStepSize = IsValid(NinjaLive) ? NinjaLive->MyQuantizerStepSize : 0;
+	const int32 AxisLocked = IsValid(NinjaLive)
+		? static_cast<int32>(NinjaLive->MyMovementIsLockedOnThisAxis) : 0;
+	if (QuantizerStepSize <= 0 && AxisLocked == 4)
 	{
-		if (UWorld* World = GetWorld(); World != nullptr
-			&& !World->GetTimerManager().IsTimerActive(MyInitialOverlapCheckTimer))
-		{
-			World->GetTimerManager().SetTimer(MyInitialOverlapCheckTimer, this,
-				&AMyNinjaLiveActor::MyInitialOverlapCheck, 0.01f, false);
-		}
 		return;
 	}
 
 	if (!IsValid(MyInteractionVolumeTemplate))
 	{
-		NinjaLive->MyOverlap1 = false;
-		if (MyOverlappingActorsInitial.IsEmpty())
-		{
-			MyOverlappingActorsInitial.Add(this);
-		}
 		return;
 	}
 
-	TArray<UPrimitiveComponent*> ExistingOverlaps;
-	MyInteractionVolumeTemplate->GetOverlappingComponents(ExistingOverlaps);
-	for (UPrimitiveComponent* OverlapComponent : ExistingOverlaps)
+	// 蓝图链式六段：MyOverlapFilterInclusiveObjType 未包含对应对象类型时，把该碰撞通道响应设为 Ignore。
+	struct FChannelFilterEntry
 	{
-		if (!IsValid(OverlapComponent))
+		EObjectTypeQuery ObjectType;
+		ECollisionChannel Channel;
+	};
+	const FChannelFilterEntry ChannelFilters[] = {
+		{ EObjectTypeQuery::ObjectTypeQuery6, ECC_Destructible },
+		{ EObjectTypeQuery::ObjectTypeQuery5, ECC_Vehicle },
+		{ EObjectTypeQuery::ObjectTypeQuery4, ECC_PhysicsBody },
+		{ EObjectTypeQuery::ObjectTypeQuery3, ECC_Pawn },
+		{ EObjectTypeQuery::ObjectTypeQuery2, ECC_WorldDynamic },
+		{ EObjectTypeQuery::ObjectTypeQuery1, ECC_WorldStatic },
+	};
+	for (const FChannelFilterEntry& Entry : ChannelFilters)
+	{
+		if (!MyOverlapFilterInclusiveObjType.Contains(TEnumAsByte<EObjectTypeQuery>(Entry.ObjectType)))
 		{
-			continue;
+			MyInteractionVolumeTemplate->SetCollisionResponseToChannel(Entry.Channel, ECR_Ignore);
 		}
-
-		if (OverlapComponent->ComponentTags.Contains(MyTrackActorPrimitiveComponentsWithTag))
-		{
-			NinjaLive->MyOverlappingComponents.Add(OverlapComponent);
-		}
-
-		AActor* OverlapOwner = OverlapComponent->GetOwner();
-		if (IsValid(OverlapOwner)
-			&& OverlapOwner->GetComponentsByTag(UActorComponent::StaticClass(),
-				MyTrackActorSkeletalMeshComponentsWithTag).Num() != 0)
-		{
-			MyOverlappingActorsInitial.Add(OverlapOwner);
-		}
-	}
-
-	TArray<AActor*> ActorsToIgnore;
-	ActorsToIgnore.Reserve(MyExcludeSpecificActorsFromOverlap.Num());
-	for (const TObjectPtr<AActor>& ExcludedActor : MyExcludeSpecificActorsFromOverlap)
-	{
-		ActorsToIgnore.Add(ExcludedActor.Get());
-	}
-
-	TArray<UPrimitiveComponent*> FilteredOverlaps;
-	UKismetSystemLibrary::ComponentOverlapComponents(MyInteractionVolumeTemplate,
-		MyInteractionVolumeTemplate->GetComponentTransform(), MyOverlapFilterInclusiveObjType,
-		nullptr, ActorsToIgnore, FilteredOverlaps);
-	FilteredOverlaps.Remove(MyActivationVolume.Get());
-	FilteredOverlaps.Remove(MyTraceMesh.Get());
-
-	if (FilteredOverlaps.IsEmpty())
-	{
-		NinjaLive->MyOverlap1 = false;
-	}
-	else
-	{
-		NinjaLive->MyOverlap1 = true;
-		for (UPrimitiveComponent* OverlapComponent : FilteredOverlaps)
-		{
-			if (!IsValid(OverlapComponent))
-			{
-				continue;
-			}
-
-			FString ObjType;
-			TEnumAsByte<ECollisionChannel> CollisionType = ECC_WorldStatic;
-			if (!MyCollisionTypeFilter1(MyOverlapFilterInclusiveObjType, OverlapComponent,
-				ObjType, CollisionType))
-			{
-				continue;
-			}
-
-			if (OverlapComponent->GetCollisionObjectType() == ECC_Pawn)
-			{
-				AActor* OverlapOwner = OverlapComponent->GetOwner();
-				if (!MyOverlappingActorsInitial.Contains(OverlapOwner))
-				{
-					MyOverlappingActorsInitial.Add(OverlapOwner);
-				}
-			}
-			else if (MyExcludeLargeObjects(OverlapComponent)
-				&& !NinjaLive->MyOverlappingComponents.Contains(OverlapComponent))
-			{
-				NinjaLive->MyOverlappingComponents.Add(OverlapComponent);
-			}
-		}
-	}
-
-	if (MyOverlappingActorsInitial.IsEmpty())
-	{
-		MyOverlappingActorsInitial.Add(this);
 	}
 }
