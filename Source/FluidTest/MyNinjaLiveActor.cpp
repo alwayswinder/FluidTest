@@ -3,6 +3,7 @@
 #include "MyNinjaLiveActor.h"
 
 #include "MyNinjaLiveComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet/KismetMathLibrary.h"
 
@@ -48,6 +49,96 @@ AMyNinjaLiveActor::AMyNinjaLiveActor()
 UMyNinjaLiveComponent* AMyNinjaLiveActor::GetNinjaLiveComponent() const
 {
 	return FindComponentByClass<UMyNinjaLiveComponent>();
+}
+
+void AMyNinjaLiveActor::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 蓝图 IfThenElse_84：禁用蓝图时只做初始可见性设置（走 then，结束）。
+	if (MyDisableBlueprint)
+	{
+		MySetInitialVisibility2();
+		return;
+	}
+
+	// 蓝图 IfThenElse_107：Pawn 接近激活时抑制 BeginPlay 初始化，激活体积保持 QueryOnly 便于 Pawn 触发。
+	if (MySimActivatedByPawnProximity)
+	{
+		MyBeginPlaySupressed = true;
+		if (IsValid(MyActivationVolume))
+		{
+			MyActivationVolume->SetBoxExtent(MyActivationVolumeSize * 50.0f);
+			MyActivationVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		}
+		return;
+	}
+
+	// 蓝图 Sequence then_0：非接近激活时激活体积无碰撞。
+	if (IsValid(MyActivationVolume))
+	{
+		MyActivationVolume->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	// 蓝图 Sequence then_1：配置追踪网格缩放，并把输入/重叠交互方式同步给组件。
+	if (IsValid(MyTraceMesh))
+	{
+		MyTraceMesh->SetWorldScale3D(MyTraceMeshSize);
+	}
+
+	UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
+	if (IsValid(NinjaLive))
+	{
+		NinjaLive->MyTraceMeshComponent = MyTraceMesh;
+		NinjaLive->MyUserInputBasedInteraction = MyUserInputBasedInteraction;
+		NinjaLive->MyOverlapBasedInteraction = MyOverlapBasedInteraction;
+	}
+
+	// 蓝图 IfThenElse_105：非重叠交互时不做体积/重叠初始化（else 无连接）。
+	if (!MyOverlapBasedInteraction)
+	{
+		return;
+	}
+
+	// 蓝图 MakeArray + GetArrayItem：UseTraceMeshAsInteractionVolume 时用 TraceMesh 作交互体积模板。
+	MyInteractionVolumeTemplate = MyUseTraceMeshAsInteractionVolume
+		? static_cast<UPrimitiveComponent*>(MyTraceMesh.Get())
+		: static_cast<UPrimitiveComponent*>(MyInteractionVolume.Get());
+
+	if (IsValid(MyInteractionVolume))
+	{
+		MyInteractionVolume->SetBoxExtent(MyInteractionVolumeSize * 50.0f);
+	}
+
+	// 蓝图清空链：重置上一轮重叠相关容器与临时数组槽位。
+	MyOverlappingActors.Reset();
+	if (IsValid(NinjaLive))
+	{
+		NinjaLive->MySkeletalMeshTempArrayPairs.Reset();
+		NinjaLive->MyOverlappingComponents.Reset();
+		// 蓝图 ForEachLoop + Array_Set：把可用临时数组槽位全部置为可用。
+		for (bool& bAvailable : NinjaLive->MyListOfAvailableTempArrays)
+		{
+			bAvailable = true;
+		}
+	}
+	MyOverlappingActorsInitial.Reset();
+
+	// 蓝图 GetAllActorsOfClass(自身类)→RemoveItem(self)→Append：同蓝图实例互不视为可交互对象。
+	TArray<AActor*> SameClassActors;
+	UGameplayStatics::GetAllActorsOfClass(this, GetClass(), SameClassActors);
+	SameClassActors.Remove(this);
+	MyNinjaLIVECollisionExclude.Reset();
+	for (AActor* Actor : SameClassActors)
+	{
+		MyNinjaLIVECollisionExclude.Add(Actor);
+	}
+	MyExcludeSpecificActorsFromOverlap.Append(MyNinjaLIVECollisionExclude);
+
+	// 蓝图执行链：初始重叠检查 → 绑定开始重叠委托 → 绑定结束重叠委托。
+	MyInitialOverlapCheck();
+	MyBeginOverlapDetection();
+	MyEndOverlapDetection();
 }
 
 void AMyNinjaLiveActor::MySetInitialVisibility2()

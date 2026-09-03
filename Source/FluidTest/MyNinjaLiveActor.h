@@ -27,6 +27,9 @@ class FLUIDTEST_API AMyNinjaLiveActor : public AActor
 public:
 	AMyNinjaLiveActor();
 
+	/** BeginPlay 初始化：按 DisableBlueprint / Pawn 接近激活分支执行激活体积、追踪网格与重叠检测设置。 */
+	virtual void BeginPlay() override;
+
 	/** 获取 NinjaLiveComponent 组件引用 */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Component")
 	UMyNinjaLiveComponent* GetNinjaLiveComponent() const;
@@ -50,6 +53,14 @@ public:
 	/** 是否使用 TraceMesh 作为交互体积 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
 	bool MyUseTraceMeshAsInteractionVolume = false;
+
+	/** 对应蓝图变量 BeginPlaySupressed：Pawn 接近激活时抑制 BeginPlay 初始化的标记。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	bool MyBeginPlaySupressed = false;
+
+	/** 对应蓝图变量 ActivationVolumeSize：激活体积盒体半尺寸（BeginPlay 中乘 50 后应用，默认值暂定）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	FVector MyActivationVolumeSize = FVector(4.0f, 4.0f, 2.0f);
 
 	/** 非持续交互时用于定位交互骨骼的包含列表。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
@@ -79,6 +90,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
 	TArray<TEnumAsByte<EObjectTypeQuery>> MyOverlapFilterInclusiveObjType = {
 		EObjectTypeQuery::ObjectTypeQuery1 };
+
+	/** 对应蓝图变量 OverlapBasedInteraction：是否基于重叠方式交互（BeginPlay 时同步给组件）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	bool MyOverlapBasedInteraction = false;
+
+	/** 对应蓝图变量 NinjaLIVECollisionExclude：BeginPlay 收集的同蓝图实例列表，追加进排除重叠列表。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TArray<TObjectPtr<AActor>> MyNinjaLIVECollisionExclude;
 
 	/** 对应蓝图变量 ExcludeSpecificActorsFromOverlap：初始重叠查询要忽略的 Actor。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
@@ -125,6 +144,14 @@ public:
 	/** 对应蓝图变量 InteractionVolumeTemplate：绑定结束重叠委托的交互体积组件。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
 	TObjectPtr<UPrimitiveComponent> MyInteractionVolumeTemplate = nullptr;
+
+	/** 对应蓝图变量 InteractionVolumeSize：交互体积盒体半尺寸（BeginPlay 中乘 50 后应用，默认值暂定）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	FVector MyInteractionVolumeSize = FVector(4.0f, 4.0f, 2.0f);
+
+	/** 对应蓝图变量 TraceMeshSize：BeginPlay 中应用到 TraceMesh 的世界缩放。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
+	FVector MyTraceMeshSize = FVector::OneVector;
 
 	/** 对应蓝图变量 OverlappingActors：当前与交互体积重叠的 Actor 列表。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
