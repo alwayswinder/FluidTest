@@ -1,46 +1,101 @@
 
-void AMyNinjaLiveActor::MySetInteractionVolumeCollisionResponse()
+void AMyNinjaLiveActor::MyBeginOverlapDetection()
 {
-	// 蓝图：引擎版本字符串（GetEngineVersion）不以 “5” 开头（忽略大小写）时直接返回，不做任何设置。
-	if (!UKismetSystemLibrary::GetEngineVersion().StartsWith(TEXT("5"), ESearchCase::IgnoreCase))
+	// 蓝图 Sequence then_0：把交互体积的 BeginOverlap 委托绑定到 BeginOverlapComponent 事件体。
+	if (IsValid(MyInteractionVolumeTemplate))
 	{
-		return;
+		MyInteractionVolumeTemplate->OnComponentBeginOverlap.AddDynamic(
+			this, &AMyNinjaLiveActor::MyBeginOverlapComponent);
 	}
 
-	// 蓝图：量化步长 > 0 或锁轴枚举值 != 4（EMyQuantizerAxisIgnore::None）时才执行通道设置。
-	const UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
-	const int32 QuantizerStepSize = IsValid(NinjaLive) ? NinjaLive->MyQuantizerStepSize : 0;
-	const int32 AxisLocked = IsValid(NinjaLive)
-		? static_cast<int32>(NinjaLive->MyMovementIsLockedOnThisAxis) : 0;
-	if (QuantizerStepSize <= 0 && AxisLocked == 4)
-	{
-		return;
-	}
+	// 蓝图 AddDelegate then 后紧接着执行：按过滤对象类型关闭交互体积对应通道的响应。
+	MySetInteractionVolumeCollisionResponse();
 
-	if (!IsValid(MyInteractionVolumeTemplate))
+	// 蓝图 Sequence then_1：遍历初始重叠 Actor，逐个走骨骼追踪流程（InitialActorsProcessed 处理中置 false）。
+	UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
+	for (const TObjectPtr<AActor>& Actor : MyOverlappingActorsInitial)
 	{
-		return;
-	}
-
-	// 蓝图链式六段：MyOverlapFilterInclusiveObjType 未包含对应对象类型时，把该碰撞通道响应设为 Ignore。
-	struct FChannelFilterEntry
-	{
-		EObjectTypeQuery ObjectType;
-		ECollisionChannel Channel;
-	};
-	const FChannelFilterEntry ChannelFilters[] = {
-		{ EObjectTypeQuery::ObjectTypeQuery6, ECC_Destructible },
-		{ EObjectTypeQuery::ObjectTypeQuery5, ECC_Vehicle },
-		{ EObjectTypeQuery::ObjectTypeQuery4, ECC_PhysicsBody },
-		{ EObjectTypeQuery::ObjectTypeQuery3, ECC_Pawn },
-		{ EObjectTypeQuery::ObjectTypeQuery2, ECC_WorldDynamic },
-		{ EObjectTypeQuery::ObjectTypeQuery1, ECC_WorldStatic },
-	};
-	for (const FChannelFilterEntry& Entry : ChannelFilters)
-	{
-		if (!MyOverlapFilterInclusiveObjType.Contains(TEnumAsByte<EObjectTypeQuery>(Entry.ObjectType)))
+		if (!IsValid(Actor) || !IsValid(NinjaLive))
 		{
-			MyInteractionVolumeTemplate->SetCollisionResponseToChannel(Entry.Channel, ECR_Ignore);
+			continue;
+		}
+
+		MyInitialActorsProcessed = false;
+		MyProcessOverlapActor(Actor.Get());
+	}
+	MyInitialActorsProcessed = true;
+}
+
+void AMyNinjaLiveActor::MyBeginOverlapComponent(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
+	if (!IsValid(NinjaLive) || !IsValid(OtherActor) || !IsValid(OtherComp))
+	{
+		return;
+	}
+
+	// 蓝图 IfThenElse_4：排除列表中的 Actor 不处理（then 无连接）。
+	if (MyExcludeSpecificActorsFromOverlap.Contains(OtherActor))
+	{
+		return;
+	}
+
+	// 蓝图 IfThenElse_1：组件带追踪标签时跳过下方过滤，直接进入所有者检查（else → IfThenElse_79）。
+	if (!OtherComp->ComponentTags.Contains(MyTrackActorPrimitiveComponentsWithTag))
+	{
+		// 蓝图 IfThenElse_2：OtherActor 带追踪标签的骨骼网格数量不为 0 时直接走骨骼追踪（then）。
+		bool bHasTaggedSkeletalMesh = false;
+		TArray<USkeletalMeshComponent*> ActorSkeletalMeshes;
+		OtherActor->GetComponents<USkeletalMeshComponent>(ActorSkeletalMeshes);
+		for (USkeletalMeshComponent* SkeletalMesh : ActorSkeletalMeshes)
+		{
+			if (IsValid(SkeletalMesh) && SkeletalMesh->ComponentTags.Contains(MyTrackActorSkeletalMeshComponentsWithTag))
+			{
+				bHasTaggedSkeletalMesh = true;
+				break;
+			}
+		}
+		if (bHasTaggedSkeletalMesh)
+		{
+			MyProcessOverlapActor(OtherActor);
+			return;
+		}
+
+		// 蓝图 IfThenElse_8：碰撞类型过滤，未命中直接结束（else 无连接）。
+		FString ObjType;
+		TEnumAsByte<ECollisionChannel> CollisionType = ECC_WorldStatic;
+		if (!MyCollisionTypeFilter2(MyOverlapFilterInclusiveObjType, OtherComp, ObjType, CollisionType))
+		{
+			return;
+		}
+
+		// 蓝图 IfThenElse_80：Pawn 通道的组件走骨骼追踪，否则落入 While 所有者检查（else → IfThenElse_79）。
+		if (CollisionType == ECC_Pawn)
+		{
+			MyProcessOverlapActor(OtherActor);
+			return;
 		}
 	}
+
+	// 蓝图 IfThenElse_79：所有者是同类 NinjaLive Actor 时忽略（then 无连接）。
+	AActor* CompOwner = OtherComp->GetOwner();
+	if (IsValid(CompOwner) && CompOwner->GetClass() == GetClass())
+	{
+		return;
+	}
+
+	// 蓝图 IfThenElse_29：已在跟踪组件列表中的组件忽略（else 无连接）。
+	if (NinjaLive->MyOverlappingComponents.Contains(OtherComp))
+	{
+		return;
+	}
+
+	// 蓝图 IfThenElse_6：排除过大的组件，通过后加入跟踪列表并标记有重叠。
+	if (!MyExcludeLargeObjects(OtherComp))
+	{
+		return;
+	}
+	NinjaLive->MyOverlappingComponents.Add(OtherComp);
+	NinjaLive->MyOverlap1 = true;
 }

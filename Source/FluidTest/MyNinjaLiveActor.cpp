@@ -4,6 +4,7 @@
 
 #include "MyNinjaLiveComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Kismet/KismetMathLibrary.h"
 
 AMyNinjaLiveActor::AMyNinjaLiveActor()
 {
@@ -322,6 +323,236 @@ bool AMyNinjaLiveActor::MySimContainerCapacityFilter1(const TArray<bool>& TempAr
 	}
 
 	return true;
+}
+
+void AMyNinjaLiveActor::MyBeginOverlapDetection()
+{
+	// 蓝图 Sequence then_0：把交互体积的 BeginOverlap 委托绑定到 BeginOverlapComponent 事件体。
+	if (IsValid(MyInteractionVolumeTemplate))
+	{
+		MyInteractionVolumeTemplate->OnComponentBeginOverlap.AddDynamic(
+			this, &AMyNinjaLiveActor::MyBeginOverlapComponent);
+	}
+
+	// 蓝图 AddDelegate then 后紧接着执行：按过滤对象类型关闭交互体积对应通道的响应。
+	MySetInteractionVolumeCollisionResponse();
+
+	// 蓝图 Sequence then_1：遍历初始重叠 Actor，逐个走骨骼追踪流程（InitialActorsProcessed 处理中置 false）。
+	UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
+	for (const TObjectPtr<AActor>& Actor : MyOverlappingActorsInitial)
+	{
+		if (!IsValid(Actor) || !IsValid(NinjaLive))
+		{
+			continue;
+		}
+
+		MyInitialActorsProcessed = false;
+		MyProcessOverlapActor(Actor.Get());
+	}
+	MyInitialActorsProcessed = true;
+}
+
+void AMyNinjaLiveActor::MyBeginOverlapComponent(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
+	if (!IsValid(NinjaLive) || !IsValid(OtherActor) || !IsValid(OtherComp))
+	{
+		return;
+	}
+
+	// 蓝图 IfThenElse_4：排除列表中的 Actor 不处理（then 无连接）。
+	if (MyExcludeSpecificActorsFromOverlap.Contains(OtherActor))
+	{
+		return;
+	}
+
+	// 蓝图 IfThenElse_1：组件带追踪标签时跳过下方过滤，直接进入所有者检查（else → IfThenElse_79）。
+	if (!OtherComp->ComponentTags.Contains(MyTrackActorPrimitiveComponentsWithTag))
+	{
+		// 蓝图 IfThenElse_2：OtherActor 带追踪标签的骨骼网格数量不为 0 时直接走骨骼追踪（then）。
+		bool bHasTaggedSkeletalMesh = false;
+		TArray<USkeletalMeshComponent*> ActorSkeletalMeshes;
+		OtherActor->GetComponents<USkeletalMeshComponent>(ActorSkeletalMeshes);
+		for (USkeletalMeshComponent* SkeletalMesh : ActorSkeletalMeshes)
+		{
+			if (IsValid(SkeletalMesh) && SkeletalMesh->ComponentTags.Contains(MyTrackActorSkeletalMeshComponentsWithTag))
+			{
+				bHasTaggedSkeletalMesh = true;
+				break;
+			}
+		}
+		if (bHasTaggedSkeletalMesh)
+		{
+			MyProcessOverlapActor(OtherActor);
+			return;
+		}
+
+		// 蓝图 IfThenElse_8：碰撞类型过滤，未命中直接结束（else 无连接）。
+		FString ObjType;
+		TEnumAsByte<ECollisionChannel> CollisionType = ECC_WorldStatic;
+		if (!MyCollisionTypeFilter2(MyOverlapFilterInclusiveObjType, OtherComp, ObjType, CollisionType))
+		{
+			return;
+		}
+
+		// 蓝图 IfThenElse_80：Pawn 通道的组件走骨骼追踪，否则落入 While 所有者检查（else → IfThenElse_79）。
+		if (CollisionType == ECC_Pawn)
+		{
+			MyProcessOverlapActor(OtherActor);
+			return;
+		}
+	}
+
+	// 蓝图 IfThenElse_79：所有者是同类 NinjaLive Actor 时忽略（then 无连接）。
+	AActor* CompOwner = OtherComp->GetOwner();
+	if (IsValid(CompOwner) && CompOwner->GetClass() == GetClass())
+	{
+		return;
+	}
+
+	// 蓝图 IfThenElse_29：已在跟踪组件列表中的组件忽略（else 无连接）。
+	if (NinjaLive->MyOverlappingComponents.Contains(OtherComp))
+	{
+		return;
+	}
+
+	// 蓝图 IfThenElse_6：排除过大的组件，通过后加入跟踪列表并标记有重叠。
+	if (!MyExcludeLargeObjects(OtherComp))
+	{
+		return;
+	}
+	NinjaLive->MyOverlappingComponents.Add(OtherComp);
+	NinjaLive->MyOverlap1 = true;
+}
+
+void AMyNinjaLiveActor::MyProcessOverlapActor(AActor* Actor)
+{
+	UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
+	if (!IsValid(NinjaLive) || !IsValid(Actor))
+	{
+		return;
+	}
+
+	// 蓝图 IfThenElse_0：已在 MyOverlappingActors 中则跳过（else 无连接）。
+	if (MyOverlappingActors.Contains(Actor))
+	{
+		return;
+	}
+
+	// 蓝图 Array_Add：加入 MyOverlappingActors。
+	MyOverlappingActors.Add(Actor);
+
+	// 蓝图 Select_1：优先带追踪标签的骨骼网格；没有时退回全部骨骼网格。
+	TArray<USkeletalMeshComponent*> SkeletalMeshes;
+	{
+		TArray<USkeletalMeshComponent*> AllSkeletalMeshes;
+		Actor->GetComponents<USkeletalMeshComponent>(AllSkeletalMeshes);
+		for (USkeletalMeshComponent* SkeletalMesh : AllSkeletalMeshes)
+		{
+			if (IsValid(SkeletalMesh) && SkeletalMesh->ComponentTags.Contains(MyTrackActorSkeletalMeshComponentsWithTag))
+			{
+				SkeletalMeshes.Add(SkeletalMesh);
+			}
+		}
+		if (SkeletalMeshes.Num() == 0)
+		{
+			SkeletalMeshes = AllSkeletalMeshes;
+		}
+	}
+
+	// 蓝图 IfThenElse_7：可用临时数组槽位不足以容纳全部骨骼网格时结束（else 无连接）。
+	TMap<int32, UPrimitiveComponent*> Pairs;
+	for (const TPair<int32, TObjectPtr<UPrimitiveComponent>>& Pair : NinjaLive->MySkeletalMeshTempArrayPairs)
+	{
+		Pairs.Add(Pair.Key, Pair.Value.Get());
+	}
+	if (!MySimContainerCapacityFilter1(NinjaLive->MyListOfAvailableTempArrays, Pairs, SkeletalMeshes))
+	{
+		return;
+	}
+
+	// 蓝图 VariableSet_4：把精确骨骼名复制到候选数组 Temp2 后再遍历骨骼网格。
+	MyOverlapFilterInclusiveBoneNameExactTemp2 = MyOverlapFilterInclusiveBoneNameExact;
+
+	// 蓝图 MacroInstance_34：逐个骨骼网格分配骨骼名与临时数组槽位，全部完成后标记有重叠。
+	for (USkeletalMeshComponent* SkeletalMesh : SkeletalMeshes)
+	{
+		if (!IsValid(SkeletalMesh))
+		{
+			continue;
+		}
+
+		const int32 NumBones = SkeletalMesh->GetNumBones();
+		if (MyOverlapFilterInclusiveBoneNameExact.Num() != 0)
+		{
+			// 有精确骨骼名：清空收集数组，逐骨骼做精确匹配（节点注释：部分名被忽略）。
+			MyOverlapFilterInclusiveBoneNameExactTemp.Reset();
+			for (int32 Index = 0; Index < NumBones; ++Index)
+			{
+				const FName BoneName = SkeletalMesh->GetBoneName(Index);
+				if (MyOverlapFilterInclusiveBoneNameExactTemp2.Contains(BoneName))
+				{
+					MyOverlapFilterInclusiveBoneNameExactTemp.Add(BoneName);
+					// 蓝图 IfThenElse_5：未启用相似名追踪时把命中的骨骼名移出候选，避免后续重复。
+					if (!MyForceTrackBonesWithSimilarName)
+					{
+						MyOverlapFilterInclusiveBoneNameExactTemp2.Remove(BoneName);
+					}
+				}
+			}
+
+			// 占槽：把收集到的精确骨骼名追加到临时数组槽位并登记映射（Map_Add），槽位置为已用。
+			const int32 ArrayIndex = NinjaLive->MyListOfAvailableTempArrays.Find(true);
+			if (ArrayIndex != INDEX_NONE)
+			{
+				NinjaLive->MyAppendToTempArray(ArrayIndex, MyOverlapFilterInclusiveBoneNameExactTemp);
+				NinjaLive->MySkeletalMeshTempArrayPairs.Emplace(ArrayIndex, SkeletalMesh);
+				NinjaLive->MyListOfAvailableTempArrays[ArrayIndex] = false;
+			}
+		}
+		else
+		{
+			// 无精确骨骼名：部分名数组为空时全部骨骼加入，否则按包含匹配（忽略大小写）加入。
+			for (int32 Index = 0; Index < NumBones; ++Index)
+			{
+				const FName BoneName = SkeletalMesh->GetBoneName(Index);
+				if (MyOverlapFilterInclusiveBoneNamePartial.Num() == 0)
+				{
+					const int32 ArrayIndex = NinjaLive->MyListOfAvailableTempArrays.Find(true);
+					if (ArrayIndex != INDEX_NONE)
+					{
+						NinjaLive->MyAddToTempArray(ArrayIndex, BoneName);
+					}
+					continue;
+				}
+
+				const FString BoneNameString = BoneName.ToString();
+				for (const FString& Partial : MyOverlapFilterInclusiveBoneNamePartial)
+				{
+					if (BoneNameString.Contains(Partial, ESearchCase::IgnoreCase))
+					{
+						const int32 ArrayIndex = NinjaLive->MyListOfAvailableTempArrays.Find(true);
+						if (ArrayIndex != INDEX_NONE)
+						{
+							NinjaLive->MyAddToTempArray(ArrayIndex, BoneName);
+						}
+					}
+				}
+			}
+
+			// 收尾：登记该骨骼网格到临时数组槽位并置为已用（MacroInstance_38 完成后 Map_Add + SetRef）。
+			const int32 ArrayIndex = NinjaLive->MyListOfAvailableTempArrays.Find(true);
+			if (ArrayIndex != INDEX_NONE)
+			{
+				NinjaLive->MySkeletalMeshTempArrayPairs.Emplace(ArrayIndex, SkeletalMesh);
+				NinjaLive->MyListOfAvailableTempArrays[ArrayIndex] = false;
+			}
+		}
+	}
+
+	// 蓝图 MacroInstance_34 Completed → 标记有重叠。
+	NinjaLive->MyOverlap1 = true;
 }
 
 void AMyNinjaLiveActor::MyEndOverlapComponent(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,

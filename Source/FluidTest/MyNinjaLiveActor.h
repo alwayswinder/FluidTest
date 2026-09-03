@@ -10,6 +10,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/EngineTypes.h"
 #include "Materials/MaterialInstance.h"
 #include "MyNinjaLiveActor.generated.h"
 
@@ -53,6 +54,26 @@ public:
 	/** 非持续交互时用于定位交互骨骼的包含列表。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
 	TArray<FName> MyOverlapFilterInclusiveBoneNameExact;
+
+	/** 对应蓝图变量 OverlapFilterInclusiveBoneNameExactTemp：精确骨骼名匹配过程中暂存的骨骼名列表。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TArray<FName> MyOverlapFilterInclusiveBoneNameExactTemp;
+
+	/** 对应蓝图变量 OverlapFilterInclusiveBoneNameExactTemp2：精确骨骼名匹配用的候选列表。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TArray<FName> MyOverlapFilterInclusiveBoneNameExactTemp2;
+
+	/** 对应蓝图变量 OverlapFilterInclusiveBoneNamePartial：按部分名称匹配的骨骼名过滤数组。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	TArray<FString> MyOverlapFilterInclusiveBoneNamePartial;
+
+	/** 对应蓝图变量 ForceTrackBonesWithSimilarName：允许追踪相似名称的额外骨骼。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	bool MyForceTrackBonesWithSimilarName = false;
+
+	/** 对应蓝图变量 InitialActorsProcessed：初始重叠 Actor 是否已在 BeginOverlapDetection 中处理过。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	bool MyInitialActorsProcessed = false;
 
 	/** 对应蓝图变量 OverlapFilterInclusiveObjType：初始重叠查询包含的对象类型。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
@@ -155,6 +176,15 @@ public:
 		const TMap<int32, UPrimitiveComponent*>& Pairs,
 		const TArray<USkeletalMeshComponent*>& SKmeshComponents) const;
 
+	/** 执行 BeginOverlapDetection 复合：绑定交互体积的重叠开始委托，并处理初始重叠 Actor 的骨骼追踪。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	void MyBeginOverlapDetection();
+
+	/** 重叠开始事件回调（BeginOverlapComponent）：按过滤规则处理进入交互体积的组件/Actor。 */
+	UFUNCTION()
+	void MyBeginOverlapComponent(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
 	/** 结束重叠回调：清理重叠组件/骨骼映射与临时数组槽位，并刷新 MyOverlap1。 */
 	UFUNCTION()
 	void MyEndOverlapComponent(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
@@ -163,4 +193,7 @@ public:
 private:
 	/** InitialOverlapCheck 等待追踪通道就绪的定时器。 */
 	FTimerHandle MyInitialOverlapCheckTimer;
+
+	/** 处理单个候选 Actor（初始重叠或重叠开始事件）：加入 MyOverlappingActors、检查容量、为骨骼分配槽位。 */
+	void MyProcessOverlapActor(AActor* Actor);
 };
