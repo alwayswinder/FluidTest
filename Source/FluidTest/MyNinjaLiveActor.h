@@ -135,6 +135,12 @@ public:
 		const UPrimitiveComponent* OverlapComponent, FString& ObjType,
 		TEnumAsByte<ECollisionChannel>& CollisionType) const;
 
+	/** 执行 BeginOverlapDetection > CollisionTypeFilter2 复合：筛选可处理的交互组件对象类型（首个命中输出 ObjType / CollisionType）。 */
+	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
+	bool MyCollisionTypeFilter2(const TArray<TEnumAsByte<EObjectTypeQuery>>& ObjectTypes,
+		const UPrimitiveComponent* OverlapComponent, FString& ObjType,
+		TEnumAsByte<ECollisionChannel>& CollisionType) const;
+
 	/** 执行 InitialOverlapCheck 复合：等待碰撞通道就绪后建立初始重叠对象列表。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MyInitialOverlapCheck();

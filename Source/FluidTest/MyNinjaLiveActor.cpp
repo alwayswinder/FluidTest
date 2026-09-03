@@ -140,6 +140,14 @@ bool AMyNinjaLiveActor::MyCollisionTypeFilter1(const TArray<TEnumAsByte<EObjectT
 	return false;
 }
 
+bool AMyNinjaLiveActor::MyCollisionTypeFilter2(const TArray<TEnumAsByte<EObjectTypeQuery>>& ObjectTypes,
+	const UPrimitiveComponent* OverlapComponent, FString& ObjType,
+	TEnumAsByte<ECollisionChannel>& CollisionType) const
+{
+	// 与 CollisionTypeFilter1 同构：非阻塞响应时在过滤数组中查找对象类型映射，首个命中输出 ObjType/CollisionType。
+	return MyCollisionTypeFilter1(ObjectTypes, OverlapComponent, ObjType, CollisionType);
+}
+
 void AMyNinjaLiveActor::MyInitialOverlapCheck()
 {
 	UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
