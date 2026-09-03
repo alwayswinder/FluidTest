@@ -1,90 +1,142 @@
 
-void AMyNinjaLiveActor::BeginPlay()
+void AMyNinjaLiveActor::Tick(float DeltaSeconds)
 {
-	Super::BeginPlay();
+	Super::Tick(DeltaSeconds);
 
-	// 蓝图 IfThenElse_84：禁用蓝图时只做初始可见性设置（走 then，结束）。
+	// 蓝图 IfThenElse_88：禁用蓝图时 Tick 直接结束（then 无连接）。
 	if (MyDisableBlueprint)
 	{
-		MySetInitialVisibility2();
 		return;
 	}
+	MyDeltaSeconds = DeltaSeconds;
 
-	// 蓝图 IfThenElse_107：Pawn 接近激活时抑制 BeginPlay 初始化，激活体积保持 QueryOnly 便于 Pawn 触发。
+	// 蓝图 Sequence then_0：接近激活时按 ActivatorProximityCheckFrequency 间隔启动接近检测（Delay）。
 	if (MySimActivatedByPawnProximity)
 	{
-		MyBeginPlaySupressed = true;
-		if (IsValid(MyActivationVolume))
+		if (UWorld* World = GetWorld();
+			World != nullptr && !World->GetTimerManager().IsTimerActive(MyProximityCheckTimer))
 		{
-			MyActivationVolume->SetBoxExtent(MyActivationVolumeSize * 50.0f);
-			MyActivationVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+			World->GetTimerManager().SetTimer(MyProximityCheckTimer, this,
+				&AMyNinjaLiveActor::MyProximityCheck,
+				static_cast<float>(MyActivatorProximityCheckFrequency), false);
 		}
-		return;
 	}
 
-	// 蓝图 Sequence then_0：非接近激活时激活体积无碰撞。
-	if (IsValid(MyActivationVolume))
+	// 蓝图 Sequence then_1 → DoOnce_18：首次 Tick 时按需开启激活体积重叠事件并设置激活者通道响应。
+	if (!MyActivatorSetupDone)
 	{
-		MyActivationVolume->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		MyActivatorSetupDone = true;
+		if (MySimActivatedByPawnProximity && IsValid(MyActivationVolume))
+		{
+			MyActivationVolume->SetGenerateOverlapEvents(true);
+			MyActivationVolume->SetCollisionResponseToChannel(MyActivatorType.GetValue(), ECR_Overlap);
+		}
 	}
+}
 
-	// 蓝图 Sequence then_1：配置追踪网格缩放，并把输入/重叠交互方式同步给组件。
-	if (IsValid(MyTraceMesh))
-	{
-		MyTraceMesh->SetWorldScale3D(MyTraceMeshSize);
-	}
-
+void AMyNinjaLiveActor::MyProximityCheck()
+{
 	UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
-	if (IsValid(NinjaLive))
-	{
-		NinjaLive->MyTraceMeshComponent = MyTraceMesh;
-		NinjaLive->MyUserInputBasedInteraction = MyUserInputBasedInteraction;
-		NinjaLive->MyOverlapBasedInteraction = MyOverlapBasedInteraction;
-	}
-
-	// 蓝图 IfThenElse_105：非重叠交互时不做体积/重叠初始化（else 无连接）。
-	if (!MyOverlapBasedInteraction)
+	if (!IsValid(NinjaLive) || !IsValid(MyActivationVolume))
 	{
 		return;
 	}
 
-	// 蓝图 MakeArray + GetArrayItem：UseTraceMeshAsInteractionVolume 时用 TraceMesh 作交互体积模板。
-	MyInteractionVolumeTemplate = MyUseTraceMeshAsInteractionVolume
-		? static_cast<UPrimitiveComponent*>(MyTraceMesh.Get())
-		: static_cast<UPrimitiveComponent*>(MyInteractionVolume.Get());
+	// 蓝图 Select_27：指定的 Activator 有效时用 Activator，否则用 0 号玩家 Pawn。
+	AActor* Target = IsValid(MyActivator) ? MyActivator.Get() : UGameplayStatics::GetPlayerPawn(this, 0);
 
-	if (IsValid(MyInteractionVolume))
+	// 蓝图 IfThenElse_52：激活体积与目标的重叠状态相对上次发生变化时才处理。
+	const bool bIsInside = IsValid(Target) ? MyActivationVolume->IsOverlappingActor(Target) : false;
+	if (bIsInside == MyPawnInsideActivationBounds)
 	{
-		MyInteractionVolume->SetBoxExtent(MyInteractionVolumeSize * 50.0f);
-	}
-
-	// 蓝图清空链：重置上一轮重叠相关容器与临时数组槽位。
-	MyOverlappingActors.Reset();
-	if (IsValid(NinjaLive))
-	{
-		NinjaLive->MySkeletalMeshTempArrayPairs.Reset();
-		NinjaLive->MyOverlappingComponents.Reset();
-		// 蓝图 ForEachLoop + Array_Set：把可用临时数组槽位全部置为可用。
-		for (bool& bAvailable : NinjaLive->MyListOfAvailableTempArrays)
+		// else → DoOnce_32 → IfThenElse_67：Pawn 不在激活体积内且从未变化时，首次按不活动行为布置 TraceMesh。
+		if (!MyPawnInsideActivationBounds && !MyInactiveShownOnce)
 		{
-			bAvailable = true;
+			MyInactiveShownOnce = true;
+			NinjaLive->MyPawnInsideActivationBounds = false;
+			MyApplyInitialInactiveState(NinjaLive);
 		}
+		return;
 	}
-	MyOverlappingActorsInitial.Reset();
 
-	// 蓝图 GetAllActorsOfClass(自身类)→RemoveItem(self)→Append：同蓝图实例互不视为可交互对象。
-	TArray<AActor*> SameClassActors;
-	UGameplayStatics::GetAllActorsOfClass(this, GetClass(), SameClassActors);
-	SameClassActors.Remove(this);
-	MyNinjaLIVECollisionExclude.Reset();
-	for (AActor* Actor : SameClassActors)
+	MyPawnInsideActivationBounds = bIsInside;
+	NinjaLive->MyPawnInsideActivationBounds = bIsInside;
+
+	if (!bIsInside)
 	{
-		MyNinjaLIVECollisionExclude.Add(Actor);
-	}
-	MyExcludeSpecificActorsFromOverlap.Append(MyNinjaLIVECollisionExclude);
+		// 离开激活体积：按 InactiveBehaviour 布置 TraceMesh（SwitchEnum_4）。
+		switch (MyTraceMeshInactiveBehaviour)
+		{
+		case EMyInactiveBehaviour::HoldLastFrameWhenInactive:
+			// 绘制密度缓冲预览到 MyMIOutput 的 DensityBuffer 参数，保留最后帧。
+			MyRTDensityPreview = UMyNinjaLiveFunctions::MyCreateRenderTarget(this, 64, 64,
+				RTF_RGBA16f, false, TEXTUREGROUP_RenderTarget, TF_Bilinear);
+			if (IsValid(MyRTDensityPreview) && IsValid(NinjaLive->MyMICompositeAndGradient))
+			{
+				UKismetRenderingLibrary::DrawMaterialToRenderTarget(this, MyRTDensityPreview,
+					NinjaLive->MyMICompositeAndGradient.Get());
+			}
+			if (IsValid(NinjaLive->MyMIOutput))
+			{
+				NinjaLive->MyMIOutput->SetTextureParameterValue(TEXT("DensityBuffer"), MyRTDensityPreview.Get());
+			}
+			break;
+		case EMyInactiveBehaviour::GrayWhenInactive:
+			if (IsValid(MyTraceMesh))
+			{
+				if (IsValid(NinjaLive->MyInactiveGrayMaterial))
+				{
+					MyTraceMesh->SetMaterial(0, NinjaLive->MyInactiveGrayMaterial.Get());
+				}
+				MyTraceMesh->SetVisibility(true);
+			}
+			break;
+		case EMyInactiveBehaviour::HiddenWhenInactive:
+			if (IsValid(MyTraceMesh))
+			{
+				MyTraceMesh->SetVisibility(false);
+			}
+			break;
+		}
 
-	// 蓝图执行链：初始重叠检查 → 绑定开始重叠委托 → 绑定结束重叠委托。
-	MyInitialOverlapCheck();
-	MyBeginOverlapDetection();
-	MyEndOverlapDetection();
+		// 蓝图 IfThenElse_2 → IfThenElse_0：初始化完成且碰撞映射包含 Pawn 通道时重置全部临时数组槽位。
+		if (NinjaLive->MyInitDone
+			&& MyOverlapFilterInclusiveCollisionType.Contains(TEnumAsByte<ECollisionChannel>(ECC_Pawn)))
+		{
+			// ForEachLoop：清空仍标记为占用的槽位。
+			for (int32 Index = 0; Index < NinjaLive->MyListOfAvailableTempArrays.Num(); ++Index)
+			{
+				if (!NinjaLive->MyListOfAvailableTempArrays[Index])
+				{
+					NinjaLive->MyClearTempArray(Index);
+				}
+			}
+			// ForLoop + Array_Set：全部槽位置为可用。
+			for (int32 Index = 0; Index < NinjaLive->MyListOfAvailableTempArrays.Num(); ++Index)
+			{
+				NinjaLive->MyListOfAvailableTempArrays[Index] = true;
+			}
+		}
+		return;
+	}
+
+	// 进入激活体积：按 InactiveBehaviour 恢复 TraceMesh（SwitchEnum_2）。
+	switch (MyTraceMeshInactiveBehaviour)
+	{
+	case EMyInactiveBehaviour::GrayWhenInactive:
+		if (IsValid(MyTraceMesh) && IsValid(NinjaLive->MyMIOutput))
+		{
+			MyTraceMesh->SetMaterial(0, NinjaLive->MyMIOutput.Get());
+		}
+		break;
+	case EMyInactiveBehaviour::HiddenWhenInactive:
+		if (IsValid(MyTraceMesh))
+		{
+			MyTraceMesh->SetVisibility(false);
+		}
+		break;
+	case EMyInactiveBehaviour::HoldLastFrameWhenInactive:
+	default:
+		break;
+	}
 }

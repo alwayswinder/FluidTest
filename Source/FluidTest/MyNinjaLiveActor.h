@@ -15,6 +15,7 @@
 #include "MyNinjaLiveActor.generated.h"
 
 class UMyNinjaLiveComponent;
+class UTextureRenderTarget2D;
 
 /**
  * NinjaLive 蓝图 Actor 的 C++ 父类。
@@ -29,6 +30,9 @@ public:
 
 	/** BeginPlay 初始化：按 DisableBlueprint / Pawn 接近激活分支执行激活体积、追踪网格与重叠检测设置。 */
 	virtual void BeginPlay() override;
+
+	/** Tick 事件：Pawn 接近激活检测、激活体积重叠配置与 TraceMesh 不活动状态切换。 */
+	virtual void Tick(float DeltaSeconds) override;
 
 	/** 获取 NinjaLiveComponent 组件引用 */
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Component")
@@ -61,6 +65,30 @@ public:
 	/** 对应蓝图变量 ActivationVolumeSize：激活体积盒体半尺寸（BeginPlay 中乘 50 后应用，默认值暂定）。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
 	FVector MyActivationVolumeSize = FVector(4.0f, 4.0f, 2.0f);
+
+	/** 对应蓝图变量 PawnInsideActivationBounds：Pawn 是否位于激活体积内（Tick 接近检测更新）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	bool MyPawnInsideActivationBounds = false;
+
+	/** 对应蓝图变量 Activator：Pawn 接近激活检查的目标（为空时回退到 0 号玩家 Pawn）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	TObjectPtr<AActor> MyActivator = nullptr;
+
+	/** 对应蓝图变量 ActivatorType：对激活者开启重叠响应的碰撞通道。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	TEnumAsByte<ECollisionChannel> MyActivatorType = ECC_Pawn;
+
+	/** 对应蓝图变量 ActivatorProximityCheckFrequency：接近检测的间隔秒数（Delay 时长）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	double MyActivatorProximityCheckFrequency = 0.1;
+
+	/** 对应蓝图变量 DeltaSeconds：最近一次 Tick 的时间增量。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	double MyDeltaSeconds = 0.0;
+
+	/** 对应蓝图变量 RT_DensityPreview：Pawn 离开时绘制密度缓冲预览的渲染目标。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	TObjectPtr<UTextureRenderTarget2D> MyRTDensityPreview = nullptr;
 
 	/** 非持续交互时用于定位交互骨骼的包含列表。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
@@ -220,6 +248,21 @@ public:
 private:
 	/** InitialOverlapCheck 等待追踪通道就绪的定时器。 */
 	FTimerHandle MyInitialOverlapCheckTimer;
+
+	/** 首次 Tick 的 DoOnce 门：只开启一次激活体积的重叠事件与激活者通道响应。 */
+	bool MyActivatorSetupDone = false;
+
+	/** 首次接近检查（Pawn 不在激活体积内）不活动状态布置的 DoOnce 门。 */
+	bool MyInactiveShownOnce = false;
+
+	/** 接近检测间隔定时器（对应蓝图 Delay）。 */
+	FTimerHandle MyProximityCheckTimer;
+
+	/** 延迟到期后检查：激活者是否进入/离开激活体积，并同步组件与 TraceMesh 状态。 */
+	void MyProximityCheck();
+
+	/** 首次 Pawn 不在激活体积内时按 InactiveBehaviour 布置 TraceMesh（SwitchEnum_1）。 */
+	void MyApplyInitialInactiveState(UMyNinjaLiveComponent* NinjaLive);
 
 	/** 处理单个候选 Actor（初始重叠或重叠开始事件）：加入 MyOverlappingActors、检查容量、为骨骼分配槽位。 */
 	void MyProcessOverlapActor(AActor* Actor);
