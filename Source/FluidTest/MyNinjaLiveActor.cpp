@@ -140,13 +140,8 @@ void AMyNinjaLiveActor::BeginPlay()
 	MyOverlappingActors.Reset();
 	if (IsValid(NinjaLive))
 	{
-		NinjaLive->MySkeletalMeshTempArrayPairs.Reset();
 		NinjaLive->MyOverlappingComponents.Reset();
-		// 蓝图 ForEachLoop + Array_Set：把可用临时数组槽位全部置为可用。
-		for (bool& bAvailable : NinjaLive->MyListOfAvailableTempArrays)
-		{
-			bAvailable = true;
-		}
+		NinjaLive->MyResetTempArraySlots();
 	}
 	MyOverlappingActorsInitial.Reset();
 
@@ -286,19 +281,7 @@ void AMyNinjaLiveActor::MyProximityCheck()
 		if (NinjaLive->MyInitDone
 			&& MyOverlapFilterInclusiveCollisionType.Contains(TEnumAsByte<ECollisionChannel>(ECC_Pawn)))
 		{
-			// ForEachLoop：清空仍标记为占用的槽位。
-			for (int32 Index = 0; Index < NinjaLive->MyListOfAvailableTempArrays.Num(); ++Index)
-			{
-				if (!NinjaLive->MyListOfAvailableTempArrays[Index])
-				{
-					NinjaLive->MyClearTempArray(Index);
-				}
-			}
-			// ForLoop + Array_Set：全部槽位置为可用。
-			for (int32 Index = 0; Index < NinjaLive->MyListOfAvailableTempArrays.Num(); ++Index)
-			{
-				NinjaLive->MyListOfAvailableTempArrays[Index] = true;
-			}
+			NinjaLive->MyResetTempArraySlots();
 		}
 		return;
 	}
@@ -784,6 +767,12 @@ void AMyNinjaLiveActor::MyProcessOverlapActor(AActor* Actor)
 			continue;
 		}
 
+		const int32 ArrayIndex = NinjaLive->MyAcquireTempArraySlot();
+		if (ArrayIndex == INDEX_NONE)
+		{
+			break;
+		}
+
 		const int32 NumBones = SkeletalMesh->GetNumBones();
 		if (MyOverlapFilterInclusiveBoneNameExact.Num() != 0)
 		{
@@ -803,14 +792,7 @@ void AMyNinjaLiveActor::MyProcessOverlapActor(AActor* Actor)
 				}
 			}
 
-			// 占槽：把收集到的精确骨骼名追加到临时数组槽位并登记映射（Map_Add），槽位置为已用。
-			const int32 ArrayIndex = NinjaLive->MyListOfAvailableTempArrays.Find(true);
-			if (ArrayIndex != INDEX_NONE)
-			{
-				NinjaLive->MyAppendToTempArray(ArrayIndex, MyOverlapFilterInclusiveBoneNameExactTemp);
-				NinjaLive->MySkeletalMeshTempArrayPairs.Emplace(ArrayIndex, SkeletalMesh);
-				NinjaLive->MyListOfAvailableTempArrays[ArrayIndex] = false;
-			}
+			NinjaLive->MyAppendToTempArray(ArrayIndex, MyOverlapFilterInclusiveBoneNameExactTemp);
 		}
 		else
 		{
@@ -820,11 +802,7 @@ void AMyNinjaLiveActor::MyProcessOverlapActor(AActor* Actor)
 				const FName BoneName = SkeletalMesh->GetBoneName(Index);
 				if (MyOverlapFilterInclusiveBoneNamePartial.Num() == 0)
 				{
-					const int32 ArrayIndex = NinjaLive->MyListOfAvailableTempArrays.Find(true);
-					if (ArrayIndex != INDEX_NONE)
-					{
-						NinjaLive->MyAddToTempArray(ArrayIndex, BoneName);
-					}
+					NinjaLive->MyAddToTempArray(ArrayIndex, BoneName);
 					continue;
 				}
 
@@ -833,23 +811,19 @@ void AMyNinjaLiveActor::MyProcessOverlapActor(AActor* Actor)
 				{
 					if (BoneNameString.Contains(Partial, ESearchCase::IgnoreCase))
 					{
-						const int32 ArrayIndex = NinjaLive->MyListOfAvailableTempArrays.Find(true);
-						if (ArrayIndex != INDEX_NONE)
-						{
-							NinjaLive->MyAddToTempArray(ArrayIndex, BoneName);
-						}
+						NinjaLive->MyAddToTempArray(ArrayIndex, BoneName);
+						break;
 					}
 				}
 			}
-
-			// 收尾：登记该骨骼网格到临时数组槽位并置为已用（MacroInstance_38 完成后 Map_Add + SetRef）。
-			const int32 ArrayIndex = NinjaLive->MyListOfAvailableTempArrays.Find(true);
-			if (ArrayIndex != INDEX_NONE)
-			{
-				NinjaLive->MySkeletalMeshTempArrayPairs.Emplace(ArrayIndex, SkeletalMesh);
-				NinjaLive->MyListOfAvailableTempArrays[ArrayIndex] = false;
-			}
 		}
+
+		if (NinjaLive->MyGetTempArrayRef(ArrayIndex).IsEmpty())
+		{
+			NinjaLive->MyReleaseTempArraySlot(ArrayIndex);
+			continue;
+		}
+		NinjaLive->MySkeletalMeshTempArrayPairs.Emplace(ArrayIndex, SkeletalMesh);
 	}
 
 	// 蓝图 MacroInstance_34 Completed → 标记有重叠。
@@ -903,9 +877,7 @@ void AMyNinjaLiveActor::MyEndOverlapComponent(UPrimitiveComponent* OverlappedCom
 				}
 				if (FoundKey != INDEX_NONE)
 				{
-					NinjaLive->MyListOfAvailableTempArrays[FoundKey] = true;
-					NinjaLive->MyGetTempArray(FoundKey).Reset();
-					NinjaLive->MySkeletalMeshTempArrayPairs.Remove(FoundKey);
+					NinjaLive->MyReleaseTempArraySlot(FoundKey);
 					bFoundMatch = true;
 				}
 			}

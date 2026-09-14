@@ -62,7 +62,7 @@ public:
 	bool MyUseTraceMeshAsInteractionVolume = false;
 
 	/** 对应蓝图变量 BeginPlaySupressed：Pawn 接近激活时抑制 BeginPlay 初始化的标记。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Lifecycle")
 	bool MyBeginPlaySupressed = false;
 
 	/** 对应蓝图变量 ActivationVolumeSize：激活体积盒体半尺寸（BeginPlay 中乘 50 后应用，默认值暂定）。 */
@@ -70,7 +70,7 @@ public:
 	FVector MyActivationVolumeSize = FVector(4.0f, 4.0f, 2.0f);
 
 	/** 对应蓝图变量 PawnInsideActivationBounds：Pawn 是否位于激活体积内（Tick 接近检测更新）。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Activation")
 	bool MyPawnInsideActivationBounds = false;
 
 	/** 对应蓝图变量 Activator：Pawn 接近激活检查的目标（为空时回退到 0 号玩家 Pawn）。 */
@@ -86,11 +86,11 @@ public:
 	double MyActivatorProximityCheckFrequency = 0.1;
 
 	/** 对应蓝图变量 DeltaSeconds：最近一次 Tick 的时间增量。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Timing")
 	double MyDeltaSeconds = 0.0;
 
 	/** 对应蓝图变量 RT_DensityPreview：Pawn 离开时绘制密度缓冲预览的渲染目标。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|RenderTarget")
 	TObjectPtr<UTextureRenderTarget2D> MyRTDensityPreview = nullptr;
 
 	/** 非持续交互时用于定位交互骨骼的包含列表。 */
@@ -98,11 +98,11 @@ public:
 	TArray<FName> MyOverlapFilterInclusiveBoneNameExact;
 
 	/** 对应蓝图变量 OverlapFilterInclusiveBoneNameExactTemp：精确骨骼名匹配过程中暂存的骨骼名列表。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<FName> MyOverlapFilterInclusiveBoneNameExactTemp;
 
 	/** 对应蓝图变量 OverlapFilterInclusiveBoneNameExactTemp2：精确骨骼名匹配用的候选列表。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<FName> MyOverlapFilterInclusiveBoneNameExactTemp2;
 
 	/** 对应蓝图变量 OverlapFilterInclusiveBoneNamePartial：按部分名称匹配的骨骼名过滤数组。 */
@@ -114,7 +114,7 @@ public:
 	bool MyForceTrackBonesWithSimilarName = false;
 
 	/** 对应蓝图变量 InitialActorsProcessed：初始重叠 Actor 是否已在 BeginOverlapDetection 中处理过。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	bool MyInitialActorsProcessed = false;
 
 	/** 对应蓝图变量 OverlapFilterInclusiveObjType：初始重叠查询包含的对象类型。 */
@@ -127,7 +127,7 @@ public:
 	bool MyOverlapBasedInteraction = false;
 
 	/** 对应蓝图变量 NinjaLIVECollisionExclude：BeginPlay 收集的同蓝图实例列表，追加进排除重叠列表。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<TObjectPtr<AActor>> MyNinjaLIVECollisionExclude;
 
 	/** 对应蓝图变量 ExcludeSpecificActorsFromOverlap：初始重叠查询要忽略的 Actor。 */
@@ -143,7 +143,7 @@ public:
 	FName MyTrackActorSkeletalMeshComponentsWithTag = NAME_None;
 
 	/** 对应蓝图变量 OverlappingActorsInitial：初始化时识别出的重叠 Actor。 */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidSim|Interaction")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<TObjectPtr<AActor>> MyOverlappingActorsInitial;
 
 	/** 对应蓝图变量 OverlapFilterInclusiveCollisionType：碰撞通道到对象类型查询的包含映射。 */
@@ -173,7 +173,7 @@ public:
 	TObjectPtr<UMaterialInstance> MyInactiveGrayMaterial = nullptr;
 
 	/** 对应蓝图变量 InteractionVolumeTemplate：绑定结束重叠委托的交互体积组件。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	UPROPERTY(BlueprintReadWrite, Transient, Category = "FluidSim|Runtime|Interaction")
 	TObjectPtr<UPrimitiveComponent> MyInteractionVolumeTemplate = nullptr;
 
 	/** 对应蓝图变量 InteractionVolumeSize：交互体积盒体半尺寸（BeginPlay 中乘 50 后应用，默认值暂定）。 */
@@ -185,7 +185,7 @@ public:
 	FVector MyTraceMeshSize = FVector::OneVector;
 
 	/** 对应蓝图变量 OverlappingActors：当前与交互体积重叠的 Actor 列表。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<TObjectPtr<AActor>> MyOverlappingActors;
 
 	/** 对应蓝图变量 ForceTrackObjectsWithNocollisionFlag：是否强制追踪无碰撞对象。 */

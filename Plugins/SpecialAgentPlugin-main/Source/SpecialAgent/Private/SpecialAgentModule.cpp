@@ -16,6 +16,11 @@
 void FSpecialAgentModule::StartupModule()
 {
 	UE_LOG(LogTemp, Log, TEXT("SpecialAgent: Module starting up"));
+	if (IsRunningCommandlet())
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("SpecialAgent: Skipping interactive services in commandlet mode"));
+		return;
+	}
 
 	// Create the MCP server instance
 	MCPServer = MakeShared<FSpecialAgentMCPServer>();
@@ -60,7 +65,10 @@ void FSpecialAgentModule::ShutdownModule()
 {
 	UE_LOG(LogTemp, Log, TEXT("SpecialAgent: Module shutting down"));
 
-	UnregisterStatusBarWidget();
+	if (!IsRunningCommandlet())
+	{
+		UnregisterStatusBarWidget();
+	}
 
 	if (MCPServer.IsValid())
 	{

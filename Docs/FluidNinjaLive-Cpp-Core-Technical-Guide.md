@@ -24,7 +24,7 @@ AMyNinjaLiveActor
 | 类型 | 责任 | 关键状态/接口 |
 | --- | --- | --- |
 | `AMyNinjaLiveActor` | 世界对象、激活区、交互区、TraceMesh、进入/离开重叠管理 | `BeginPlay`、`Tick`、`MyBeginOverlapComponent`、`MyEndOverlapComponent` |
-| `UMyNinjaLiveComponent` | 初始化、资源生命周期、输入和笔刷、流体阶段调度、LOD、Niagara | `MyAfterBind`、`MyAfterReadyCheck`、`MyFluidCoreStep` |
+| `UMyNinjaLiveComponent` | 初始化、资源生命周期、输入和笔刷、流体阶段调度、LOD、Niagara；实现按 Core/Interaction/Rendering 分文件维护 | `MyAfterBind`、`MyAfterReadyCheck`、`MyFluidCoreStep` |
 | `UMyNinjaLiveFunctions` | 可复用的 RT 创建、AssetRegistry 预设/模板加载、相机和射线追踪 | `MyCreateRenderTarget`、`MyPresetLoader`、`MyTraceMouse` |
 | `AMyNinjaLiveMemoryPoolManager` | 原蓝图内存池的类型骨架 | 精度、分辨率、RGBA/RG/R 池条目；尚未接入组件的 RT 分配路径 |
 | `MyNinjaFluidEnums.h` | 蓝图枚举的数值映射 | 输入、量化、锁轴、精度、输出 RT、非激活显示行为 |
@@ -140,7 +140,7 @@ Actor 的交互体积可由 Box 或 TraceMesh 担任。初始扫描等待组件�
 
 离开回调会释放相应槽位、清空数组、删除映射并重算 `MyOverlap1`。容量判断要求至少有一个可用槽位；多个骨骼网格时，剩余槽位必须不少于网格数。
 
-> 注意：`MyListOfAvailableTempArrays` 的语义在不同路径中以“可用/占用”布尔值表达，维护时必须以当前调用处为准；不要仅凭变量名改变判断方向。
+`MyListOfAvailableTempArrays` 统一使用 `true=可用、false=占用`。申请、释放和重置必须通过组件的 `MyAcquireTempArraySlot`、`MyReleaseTempArraySlot`、`MyResetTempArraySlots` 完成；40 个槽位的数据保存在组件内部固定容器中，不再作为 40 个可编辑属性暴露。
 
 ## 8. 材质、输出与外部消费者
 

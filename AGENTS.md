@@ -33,7 +33,7 @@
   include 路径基于 `Source` 根，写 `"FluidTest/X.h"`
 - **注释**：只写功能说明（一句话即可），不粘贴蓝图节点还原；不确定的暂留大概，随迁移补充
 - 已迁移：`ResetTempArrays → MyResetTempArrays`、`GetTempArray → MyGetTempArray`、
-  `MyAddToTempArray` / `MyClearTempArray` / `MyAppendToTempArray`、40 个 `MyTempArray0~39`、
+  `MyAddToTempArray` / `MyClearTempArray` / `MyAppendToTempArray`、内部 40 槽临时数组与统一申请/释放 API、
   `CompareMapLength → MyCompareMapLength`、`VelocityHandlerForSimArea → MyVelocityHandlerForSimArea`、
   `ParsePresetMapAndSetVariables（复合节点）→ MyParsePresetMapAndSetVariables`、
   `CheckComponentOwner（复合节点）→ MyCheckComponentOwner`、`Enable OWNER Input → MyEnableOwnerInput`、

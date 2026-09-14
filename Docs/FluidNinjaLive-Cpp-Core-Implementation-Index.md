@@ -6,7 +6,10 @@
 
 | 文件 | 内容 |
 | --- | --- |
-| `MyNinjaLiveComponent.h/.cpp` | 核心模拟组件，运行时代码主体 |
+| `MyNinjaLiveComponent.h/.cpp` | 核心模拟组件的接口、生命周期、调度与空间状态 |
+| `MyNinjaLiveComponentInteraction.cpp` | 输入、物体追踪、画笔与临时数组槽位管理 |
+| `MyNinjaLiveComponentRendering.cpp` | RenderTarget、动态材质、Niagara、输出与输入资产 |
+| `MyNinjaLiveComponentTests.cpp` | 组件内部状态的开发自动化测试 |
 | `MyNinjaLiveActor.h/.cpp` | 蓝图 Actor 父类、激活体积和重叠追踪 |
 | `MyNinjaLiveFunctions.h/.cpp` | RenderTarget、资源/预设、相机与射线函数库 |
 | `MyNinjaLiveMemoryPoolManager.h/.cpp` | 内存池类型和 Actor 骨架 |
@@ -18,7 +21,7 @@
 | 函数 | 实现摘要 |
 | --- | --- |
 | `BeginPlay` / `MyCheckReady` | 用 Timer 等待 TraceMesh；就绪后设置重播委托、主变量并进入绑定流程。 |
-| `MyRePlay` | 清空 40 个临时数组，重新读取 Owner 激活配置，重建运行时资源。 |
+| `MyRePlay` | 清空内部 40 槽临时数组，重新读取 Owner 激活配置，重建运行时资源。 |
 | `TickComponent` / `MyCustomTick` | 在 Unreal 原生 Tick 与固定周期 Timer Tick 间切换。 |
 | `MyAfterTickDelay` | 过滤禁用、接近激活和不可见暂停；维护点击/碰撞计时并一次性停用 Painter v2。 |
 | `MyAfterReadyCheck` | LOD、笔刷、朝向、反馈材质参数、Painter 数组和交互分派的每帧入口。 |
