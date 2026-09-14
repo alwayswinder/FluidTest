@@ -3626,7 +3626,7 @@ void UMyNinjaLiveComponent::MyLOD()
 		return;
 	}
 
-	// DoOnce：首次进入立即检查一次，之后由定时器按 LOD-CheckFrequency 周期检查。
+	// DoOnce：首次进入立即检查一次，之后仅在没有等待中的 Delay 时安排下一次检查。
 	if (!MyLODDoOnceClosed)
 	{
 		MyLODDoOnceClosed = true;
@@ -3635,9 +3635,13 @@ void UMyNinjaLiveComponent::MyLOD()
 
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().SetTimer(MyLODCheckTimer, this,
-			&UMyNinjaLiveComponent::MyCheckLODLevel,
-			static_cast<float>(MyLODCheckFrequency), false);
+		FTimerManager& TimerManager = World->GetTimerManager();
+		if (!TimerManager.IsTimerActive(MyLODCheckTimer))
+		{
+			TimerManager.SetTimer(MyLODCheckTimer, this,
+				&UMyNinjaLiveComponent::MyCheckLODLevel,
+				FMath::Max(static_cast<float>(MyLODCheckFrequency), KINDA_SMALL_NUMBER), false);
+		}
 	}
 }
 
