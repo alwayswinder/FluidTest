@@ -32,7 +32,7 @@ public:
 		TEnumAsByte<TextureGroup> LODgroup = TEXTUREGROUP_World,
 		TEnumAsByte<TextureFilter> Filter = TF_Bilinear);
 
-	/** 按预设行的 SourceString 定位并加载模板资源。 */
+	/** 按预设行的软对象引用（兼容 SourceString 回退）精确加载模板资源。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Template", meta = (WorldContext = "WorldContextObject"))
 	static void MyTemplateLoader(
 		UObject* WorldContextObject,

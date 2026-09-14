@@ -896,22 +896,22 @@ public:
 	int32 MyResolutionY = 256;
 
 	/** 允许的最高采样帧率，用于计算采样间隔。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation", meta = (ClampMin = "1"))
 	int32 MyMaxSamplingFPS = 60;
 
 	/** 当前实际使用的采样帧率。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation", meta = (ClampMin = "1"))
 	int32 MySamplingFPS = 60;
 
 	/** 对应蓝图变量 MinSamplingFPS：LOD 降采样时允许的最低采样帧率。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation", meta = (ClampMin = "1"))
 	int32 MyMinSamplingFPS = 60;
 
 	// ------------------------------------------------------------------
 	// LOD-DistaceStepsPrecalc 复合节点
 	// ------------------------------------------------------------------
 	/** LOD 阈值数量，同时作为当前 LOD 等级的初始值。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD", meta = (ClampMin = "1"))
 	int32 MyLODSteps = 1;
 
 	/** LOD 距离阈值的近端和远端边界。 */
@@ -935,7 +935,7 @@ public:
 	TArray<double> MyLODStepsArray;
 
 	/** 对应蓝图变量 LOD-CheckFrequency：LOD 周期检查的间隔秒数。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD", meta = (ClampMin = "0.001"))
 	double MyLODCheckFrequency = 0.2;
 
 	/** 预计算 LOD 距离阈值；仅在任一 LOD 降级选项启用时刷新阈值数组。 */
@@ -1559,6 +1559,12 @@ private:
 	FTimerHandle MyLoadTexturesTimer;
 	FTimerHandle MyNiagaraPainterV2SafetyTimer;
 	FTimerHandle MyNiagaraPainterV2CooldownTimer;
+
+	/** 清理当前 Painter v2 的运行时 Niagara 实例及其延迟初始化定时器。 */
+	void MyDestroyPainterV2();
+
+	/** 规范化采样与 LOD 参数，保证除法和定时器间隔有效。 */
+	void MyNormalizeTimingParameters();
 
 	/** 线条绘制失败冷却定时器（对应 RetriggerableDelay）。 */
 	FTimerHandle MyLineDrawingFailCooldownTimer;

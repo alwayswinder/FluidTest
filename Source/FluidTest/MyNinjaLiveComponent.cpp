@@ -71,7 +71,7 @@ void UMyNinjaLiveComponent::MyCheckReady()
 		World->GetTimerManager().ClearTimer(MyTimerCheckReady);
 	}
 	MyTimerCheckReady.Invalidate();
-	MyComponentRePlayEvent.AddDynamic(this, &UMyNinjaLiveComponent::MyRePlay);
+	MyComponentRePlayEvent.AddUniqueDynamic(this, &UMyNinjaLiveComponent::MyRePlay);
 	MyProximityActivationMasterVarsQuantizerOutMat();
 	MyAfterBind();
 }
@@ -196,9 +196,10 @@ void UMyNinjaLiveComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		MyCustomTickLoopStarted = true;
 		if (UWorld* World = GetWorld())
 		{
+			MyNormalizeTimingParameters();
 			World->GetTimerManager().SetTimer(MyCustomTickLoopTimer, this,
 				&UMyNinjaLiveComponent::MyCustomTick,
-				static_cast<float>(MyTickRateCustom), true);
+				FMath::Max(static_cast<float>(MyTickRateCustom), KINDA_SMALL_NUMBER), true);
 		}
 	}
 }
@@ -384,8 +385,10 @@ void UMyNinjaLiveComponent::MyDynamicSimspeedAndWorldOffsetAdjustment()
 		return;
 	}
 
+	const int32 SafeMaxSamplingFPS = FMath::Max(MyMaxSamplingFPS, 1);
+	const int32 SafeSamplingFPS = FMath::Max(MySamplingFPS, 1);
 	const double BaseTexelSizeMultiplier = FMath::Max(
-		static_cast<double>(UKismetMathLibrary::Divide_IntInt(MyMaxSamplingFPS, MySamplingFPS)) * 0.5, 1.0) * MySpeed;
+		static_cast<double>(UKismetMathLibrary::Divide_IntInt(SafeMaxSamplingFPS, SafeSamplingFPS)) * 0.5, 1.0) * MySpeed;
 	const double SingleTargetTexelSizeMultiplier =
 		(MySpeedTemp * MySingleTargetModeSpeedInfluenceFactor_LEGACY +
 			(1.0 - MySingleTargetModeSpeedInfluenceFactor_LEGACY)) * BaseTexelSizeMultiplier;
@@ -422,10 +425,12 @@ void UMyNinjaLiveComponent::MyDynamicSimspeedAndWorldOffsetAdjustment()
 				[this, SetTexelSizeMultiplierOnSolverMaterials]()
 				{
 					MySimSpeedAdjustmentPending = false;
+					const int32 SafeMaxFPS = FMath::Max(MyMaxSamplingFPS, 1);
+					const int32 SafeSamplingFPS = FMath::Max(MySamplingFPS, 1);
 					const double CurrentMultiplier = MyHalfResPressureAndDivergenceBuffers
 						? 1.0
 						: FMath::Max(static_cast<double>(UKismetMathLibrary::Divide_IntInt(
-							MyMaxSamplingFPS, MySamplingFPS)) * 0.5, 1.0) * MySpeed;
+							SafeMaxFPS, SafeSamplingFPS)) * 0.5, 1.0) * MySpeed;
 					SetTexelSizeMultiplierOnSolverMaterials(CurrentMultiplier);
 				});
 
@@ -930,7 +935,7 @@ bool UMyNinjaLiveComponent::MyBrushSwitch1(FLinearColor InLinearColor) const
 		|| IsAtEdge(LastPos1)
 		|| CurrentPos1.Equals(LastPos1, 0.001)
 		|| LastPos1.Equals(FVector::ZeroVector, 0.001)
-		|| MyTimeSinceLastClick < (1.0 / static_cast<double>(MySamplingFPS)) * 1.5;
+		|| MyTimeSinceLastClick < (1.0 / static_cast<double>(FMath::Max(MySamplingFPS, 1))) * 1.5;
 }
 
 FLinearColor UMyNinjaLiveComponent::MyBrushRnd3(const FLinearColor InColor) const
@@ -2131,11 +2136,11 @@ void UMyNinjaLiveComponent::MyFPSPrecisionResolution()
 		MyResolutionY = 256;
 	}
 
+	MyNormalizeTimingParameters();
+
 	// 采样频率直接取上限，并将其转换为每次 Tick 的时间间隔。
 	MySamplingFPS = MyMaxSamplingFPS;
-	MyTickRateCustom = MyMaxSamplingFPS > 0
-		? 1.0 / static_cast<double>(MyMaxSamplingFPS)
-		: 0.0;
+	MyTickRateCustom = 1.0 / static_cast<double>(MyMaxSamplingFPS);
 
 	MySimPrecisionIndex = (MySimPrecision == EMySimPrecision::Bit32) ? 1 : 0;
 
@@ -2144,8 +2149,20 @@ void UMyNinjaLiveComponent::MyFPSPrecisionResolution()
 	MyPV2_Connect_TrackpointsWithLines = MyPV2_Interpolation;
 }
 
+void UMyNinjaLiveComponent::MyNormalizeTimingParameters()
+{
+	MyMaxSamplingFPS = FMath::Max(MyMaxSamplingFPS, 1);
+	MyMinSamplingFPS = FMath::Clamp(MyMinSamplingFPS, 1, MyMaxSamplingFPS);
+	MySamplingFPS = FMath::Clamp(MySamplingFPS, MyMinSamplingFPS, MyMaxSamplingFPS);
+	MyLODSteps = FMath::Max(MyLODSteps, 1);
+	MyLODCheckFrequency = FMath::Max(MyLODCheckFrequency, static_cast<double>(KINDA_SMALL_NUMBER));
+	MyTickRateCustom = FMath::Max(MyTickRateCustom, static_cast<double>(KINDA_SMALL_NUMBER));
+}
+
 void UMyNinjaLiveComponent::MyInitPainterV2()
 {
+	MyDestroyPainterV2();
+
 	// 不支持 Painter v2 的配置会回退到常规追踪流程。
 	if (!MyUsePAINTER_V2_ToTrackObjects || MySingleTargetMode_LEGACY)
 	{
@@ -2168,7 +2185,7 @@ void UMyNinjaLiveComponent::MyInitPainterV2()
 		return;
 	}
 
-	// 每次初始化创建独立 Niagara 实例，避免旧的运行时参数残留。
+	// 前一轮实例已清理；每次初始化创建独立 Niagara 实例，避免运行时参数残留。
 	MyNiagaraBasedPainter = NewObject<UNiagaraComponent>(OwnerActor, UNiagaraComponent::StaticClass(), NAME_None);
 	if (!IsValid(MyNiagaraBasedPainter))
 	{
@@ -2224,6 +2241,29 @@ void UMyNinjaLiveComponent::MyInitPainterV2()
 		MySetPainterV2PaintbufferInput();
 		MyFinalizePainterV2Setup();
 	}
+}
+
+void UMyNinjaLiveComponent::MyDestroyPainterV2()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(MyNiagaraPainterV2SafetyTimer);
+		World->GetTimerManager().ClearTimer(MyNiagaraPainterV2CooldownTimer);
+	}
+
+	UNiagaraComponent* ExistingPainter = MyNiagaraBasedPainter.Get();
+	MyNiagaraBasedPainter = nullptr;
+	if (!IsValid(ExistingPainter))
+	{
+		return;
+	}
+
+	ExistingPainter->Deactivate();
+	if (AActor* PainterOwner = ExistingPainter->GetOwner())
+	{
+		PainterOwner->RemoveInstanceComponent(ExistingPainter);
+	}
+	ExistingPainter->DestroyComponent();
 }
 
 void UMyNinjaLiveComponent::MyForwardScalarParamsToNiagara()
@@ -2652,11 +2692,11 @@ void UMyNinjaLiveComponent::MyApplyPainterV2SharedParameters()
 	MyVelocityArray.Reset();
 	MyBrushSizeArray.Reset();
 
-	if (MyForceMaxSamplingFPSToNiagara && MyMaxSamplingFPS > 0)
+	if (MyForceMaxSamplingFPSToNiagara)
 	{
 		// Solo 模式使 Niagara 以流体模拟指定的采样频率独立更新。
 		MyNiagaraBasedPainter->SetForceSolo(true);
-		MyNiagaraBasedPainter->SetComponentTickInterval(1.0 / static_cast<double>(MyMaxSamplingFPS));
+		MyNiagaraBasedPainter->SetComponentTickInterval(1.0 / static_cast<double>(FMath::Max(MyMaxSamplingFPS, 1)));
 		MyNiagaraBasedPainter->ReinitializeSystem();
 	}
 }
@@ -3290,7 +3330,7 @@ void UMyNinjaLiveComponent::MyCreateOutputMaterialAndSetItOnTargetsStep03()
 			if (MyForceMaxSamplingFPSToNiagara)
 			{
 				NiagaraComponent->SetForceSolo(true);
-				NiagaraComponent->SetComponentTickInterval(1.0 / static_cast<double>(MyMaxSamplingFPS));
+				NiagaraComponent->SetComponentTickInterval(1.0 / static_cast<double>(FMath::Max(MyMaxSamplingFPS, 1)));
 				NiagaraComponent->ReinitializeSystem();
 			}
 		}
@@ -3585,6 +3625,8 @@ void UMyNinjaLiveComponent::MyRestartInputMedia()
 
 void UMyNinjaLiveComponent::MyLODDistaceStepsPrecalc()
 {
+	MyNormalizeTimingParameters();
+
 	// 蓝图始终先用 LOD-Steps 初始化当前等级；禁用两个降级选项时不触碰既有阈值数据。
 	MyLODLevel = MyLODSteps;
 	if (!MyLOD1ReduceSimQuality && !MyLOD2ReduceSamplingFPS)
@@ -3593,17 +3635,13 @@ void UMyNinjaLiveComponent::MyLODDistaceStepsPrecalc()
 	}
 
 	const int32 LastIndex = MyLODSteps - 1;
-	if (LastIndex < 0)
-	{
-		MyLODStepsArray.Reset();
-		return;
-	}
 
 	// 原蓝图以 (Max(FarBound, NearBound) - 1) / (LOD-Steps - 1) 计算步长。
 	// 单步没有可定义的分段范围，因此保留数组为空，避免原图的零除未定义结果。
 	if (LastIndex == 0)
 	{
 		MyLODStepsArray.Reset();
+		MyLODStepRange = 0.0;
 		return;
 	}
 
@@ -3654,6 +3692,8 @@ void UMyNinjaLiveComponent::MyCheckLODLevel()
 	}
 
 	// 与玩家摄像机的距离（蓝图 GetDistanceTo；相机无效时按 0 处理）。
+	MyNormalizeTimingParameters();
+
 	const double Distance = Owner->GetDistanceTo(UGameplayStatics::GetPlayerCameraManager(this, 0));
 	const double LODStepsD = static_cast<double>(MyLODSteps);
 

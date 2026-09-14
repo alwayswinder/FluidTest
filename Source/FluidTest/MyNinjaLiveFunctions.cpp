@@ -11,7 +11,79 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "UObject/SoftObjectPath.h"
+#include "UObject/SoftObjectPtr.h"
 #include "UObject/UnrealType.h"
+
+namespace
+{
+	const FSoftObjectProperty* MyFindSourceSoftObjectProperty(const UScriptStruct* RowStruct)
+	{
+		if (RowStruct == nullptr)
+		{
+			return nullptr;
+		}
+
+		for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
+		{
+			if (It->GetFName().ToString().StartsWith(TEXT("Source")))
+			{
+				if (const FSoftObjectProperty* Property = CastField<FSoftObjectProperty>(*It))
+				{
+					return Property;
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	const FStrProperty* MyFindSourceStringProperty(const UScriptStruct* RowStruct)
+	{
+		if (RowStruct == nullptr)
+		{
+			return nullptr;
+		}
+
+		for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
+		{
+			if (It->GetFName().ToString().StartsWith(TEXT("SourceString")))
+			{
+				if (const FStrProperty* Property = CastField<FStrProperty>(*It))
+				{
+					return Property;
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	FString MyMakeTemplatePath(const FString& SourcePath, const FString& DataTablePath)
+	{
+		FString TemplatePath = SourcePath.TrimStartAndEnd();
+		if (TemplatePath.Len() >= 2 && TemplatePath.Contains(TEXT("'")) && TemplatePath.EndsWith(TEXT("'")))
+		{
+			int32 FirstQuote = INDEX_NONE;
+			if (TemplatePath.FindChar(TEXT('\''), FirstQuote))
+			{
+				TemplatePath = TemplatePath.Mid(FirstQuote + 1, TemplatePath.Len() - FirstQuote - 2);
+			}
+		}
+
+		if (!TemplatePath.StartsWith(TEXT("/"), ESearchCase::IgnoreCase))
+		{
+			TemplatePath = FString::Printf(TEXT("%s/%s"), *DataTablePath, *TemplatePath);
+		}
+
+		return TemplatePath;
+	}
+
+	bool MyHasObjectName(const FString& ObjectPath)
+	{
+		const int32 LastSeparator = ObjectPath.Find(TEXT("/"), ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+		const int32 ObjectNameSeparator = ObjectPath.Find(TEXT("."), ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+		return ObjectNameSeparator > LastSeparator;
+	}
+}
 
 UTextureRenderTarget2D* UMyNinjaLiveFunctions::MyCreateRenderTarget(
 	UObject* WorldContextObject,
@@ -71,41 +143,65 @@ void UMyNinjaLiveFunctions::MyTemplateLoader(
 		return;
 	}
 
-	const FStrProperty* SourceStringProperty = nullptr;
-	for (TFieldIterator<FProperty> It(LoadedDataTable->RowStruct); It; ++It)
+	FSoftObjectPath SourceObjectPath;
+	FString SourcePathForDisplay;
+	bool bUsesLegacyStringPath = false;
+	if (const FSoftObjectProperty* SourceObjectProperty = MyFindSourceSoftObjectProperty(LoadedDataTable->RowStruct))
 	{
-		if (It->GetFName().ToString().StartsWith(TEXT("SourceString")))
+		const FSoftObjectPtr SourceObject = SourceObjectProperty->GetPropertyValue_InContainer(RowData);
+		SourceObjectPath = SourceObject.ToSoftObjectPath();
+		SourcePathForDisplay = SourceObjectPath.ToString();
+	}
+
+	if (!SourceObjectPath.IsValid())
+	{
+		bUsesLegacyStringPath = true;
+		const FStrProperty* SourceStringProperty = MyFindSourceStringProperty(LoadedDataTable->RowStruct);
+		if (SourceStringProperty == nullptr)
 		{
-			SourceStringProperty = CastField<FStrProperty>(*It);
-			break;
+			return;
+		}
+
+		SourcePathForDisplay = SourceStringProperty->GetPropertyValue_InContainer(RowData);
+		if (SourcePathForDisplay.IsEmpty())
+		{
+			return;
+		}
+		const FString ResolvedTemplatePath = MyMakeTemplatePath(SourcePathForDisplay, LoadedDatatablePath);
+		if (MyHasObjectName(ResolvedTemplatePath))
+		{
+			SourceObjectPath = FSoftObjectPath(ResolvedTemplatePath);
+		}
+		else
+		{
+			FAssetRegistryModule& AssetRegistryModule =
+				FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+			TArray<FAssetData> Assets;
+			AssetRegistryModule.Get().GetAssetsByPackageName(FName(*ResolvedTemplatePath), Assets, false, true);
+			if (Assets.Num() == 1)
+			{
+				SourceObjectPath = Assets[0].ToSoftObjectPath();
+			}
+			else if (Assets.Num() > 1)
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("FluidSim: 模板包 '%s' 包含 %d 个资产；请将 SourceString 改为完整对象路径或 Soft Object Reference。"),
+					*ResolvedTemplatePath, Assets.Num());
+			}
 		}
 	}
 
-	if (SourceStringProperty == nullptr)
+	if (!SourceObjectPath.IsValid())
 	{
 		return;
 	}
 
-	const FString& SourceString = SourceStringProperty->GetPropertyValue_InContainer(RowData);
-	if (SourceString.IsEmpty())
-	{
-		return;
-	}
-
-	const bool bSourceUsesAbsolutePath = SourceString.StartsWith(TEXT("/"), ESearchCase::IgnoreCase);
-	LoadedTmpFullPath = bSourceUsesAbsolutePath
-		? SourceString
-		: FString::Printf(TEXT("%s/%s"), *LoadedDatatablePath, *SourceString);
-
-	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
-	TArray<FAssetData> AssetData;
-	AssetRegistryModule.Get().GetAssetsByPackageName(FName(*LoadedTmpFullPath), AssetData, false, true);
-
-	if (!AssetData.IsEmpty())
-	{
-		// 蓝图 ForEachLoop 的首个循环体即进入函数返回节点，只处理第一个资产。
-		LoadedTemplateObject = AssetData[0].GetAsset();
-	}
+	LoadedTemplateObject = SourceObjectPath.TryLoad();
+	const FString ResolvedObjectPath = SourceObjectPath.ToString();
+	const int32 ObjectNameSeparator = ResolvedObjectPath.Find(TEXT("."), ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+	LoadedTmpFullPath = ObjectNameSeparator == INDEX_NONE
+		? ResolvedObjectPath
+		: ResolvedObjectPath.Left(ObjectNameSeparator);
 
 	if (!IsValid(LoadedTemplateObject))
 	{
@@ -117,7 +213,8 @@ void UMyNinjaLiveFunctions::MyTemplateLoader(
 	const FString PackageDirectory = LastSeparator != INDEX_NONE
 		? LoadedTmpFullPath.Left(LastSeparator + 1)
 		: FString();
-	UsesAbsolutePath = bSourceUsesAbsolutePath && PackageDirectory != LoadedDatatablePath;
+	UsesAbsolutePath = !bUsesLegacyStringPath || SourcePathForDisplay.StartsWith(TEXT("/"), ESearchCase::IgnoreCase)
+		&& PackageDirectory != LoadedDatatablePath;
 	LoadedTemplateNameOnly = UsesAbsolutePath && LastSeparator != INDEX_NONE
 		? LoadedTmpFullPath.Mid(LastSeparator + 1)
 		: LoadedTmpFullPath;
@@ -155,16 +252,23 @@ void UMyNinjaLiveFunctions::MyPresetLoader(
 		TArray<FAssetData> Assets;
 		AssetRegistryModule.Get().GetAssets(Filter, Assets);
 
+		TArray<FAssetData> ExactNameMatches;
 		for (const FAssetData& Asset : Assets)
 		{
-			if (Asset.AssetName.ToString().Contains(ExpectedAssetName))
+			if (Asset.AssetName == FName(*ExpectedAssetName))
 			{
-				LoadedDataTable = Cast<UDataTable>(Asset.GetAsset());
-				if (IsValid(LoadedDataTable))
-				{
-					break;
-				}
+				ExactNameMatches.Add(Asset);
 			}
+		}
+
+		if (ExactNameMatches.Num() == 1)
+		{
+			LoadedDataTable = Cast<UDataTable>(ExactNameMatches[0].GetAsset());
+		}
+		else if (ExactNameMatches.Num() > 1)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("FluidSim: 预设 '%s' 在给定搜索路径中找到 %d 个同名数据表；请改用 PreferredPreset 或收窄路径。"),
+				*ExpectedAssetName, ExactNameMatches.Num());
 		}
 	}
 
@@ -182,15 +286,7 @@ void UMyNinjaLiveFunctions::MyPresetLoader(
 		return;
 	}
 
-	const FStrProperty* SourceStringProperty = nullptr;
-	for (TFieldIterator<FProperty> It(LoadedDataTable->RowStruct); It; ++It)
-	{
-		if (It->GetFName().ToString().StartsWith(TEXT("SourceString")))
-		{
-			SourceStringProperty = CastField<FStrProperty>(*It);
-			break;
-		}
-	}
+	const FStrProperty* SourceStringProperty = MyFindSourceStringProperty(LoadedDataTable->RowStruct);
 
 	if (SourceStringProperty == nullptr)
 	{

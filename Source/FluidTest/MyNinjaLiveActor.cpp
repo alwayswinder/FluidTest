@@ -56,6 +56,27 @@ UMyNinjaLiveComponent* AMyNinjaLiveActor::GetNinjaLiveComponent() const
 	return FindComponentByClass<UMyNinjaLiveComponent>();
 }
 
+void AMyNinjaLiveActor::MyPrepareInteractionOverlapBindings()
+{
+	if (MyBoundInteractionVolumeTemplate.Get() == MyInteractionVolumeTemplate.Get())
+	{
+		return;
+	}
+
+	MyClearInteractionOverlapBindings();
+	MyBoundInteractionVolumeTemplate = MyInteractionVolumeTemplate;
+}
+
+void AMyNinjaLiveActor::MyClearInteractionOverlapBindings()
+{
+	if (UPrimitiveComponent* BoundVolume = MyBoundInteractionVolumeTemplate.Get())
+	{
+		BoundVolume->OnComponentBeginOverlap.RemoveDynamic(this, &AMyNinjaLiveActor::MyBeginOverlapComponent);
+		BoundVolume->OnComponentEndOverlap.RemoveDynamic(this, &AMyNinjaLiveActor::MyEndOverlapComponent);
+	}
+	MyBoundInteractionVolumeTemplate.Reset();
+}
+
 void AMyNinjaLiveActor::BeginPlay()
 {
 	Super::BeginPlay();
@@ -146,6 +167,21 @@ void AMyNinjaLiveActor::BeginPlay()
 	MyEndOverlapDetection();
 }
 
+void AMyNinjaLiveActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	MyClearInteractionOverlapBindings();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(MyProximityCheckTimer);
+		World->GetTimerManager().ClearTimer(MyInitialOverlapCheckTimer);
+	}
+	MyProximityCheckTimer.Invalidate();
+	MyInitialOverlapCheckTimer.Invalidate();
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void AMyNinjaLiveActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -165,7 +201,7 @@ void AMyNinjaLiveActor::Tick(float DeltaSeconds)
 		{
 			World->GetTimerManager().SetTimer(MyProximityCheckTimer, this,
 				&AMyNinjaLiveActor::MyProximityCheck,
-				static_cast<float>(MyActivatorProximityCheckFrequency), false);
+				FMath::Max(static_cast<float>(MyActivatorProximityCheckFrequency), KINDA_SMALL_NUMBER), false);
 		}
 	}
 
@@ -338,7 +374,8 @@ void AMyNinjaLiveActor::MyEndOverlapDetection()
 {
 	if (IsValid(MyInteractionVolumeTemplate))
 	{
-		MyInteractionVolumeTemplate->OnComponentEndOverlap.AddDynamic(
+		MyPrepareInteractionOverlapBindings();
+		MyInteractionVolumeTemplate->OnComponentEndOverlap.AddUniqueDynamic(
 			this, &AMyNinjaLiveActor::MyEndOverlapComponent);
 	}
 }
@@ -593,7 +630,8 @@ void AMyNinjaLiveActor::MyBeginOverlapDetection()
 	// 蓝图 Sequence then_0：把交互体积的 BeginOverlap 委托绑定到 BeginOverlapComponent 事件体。
 	if (IsValid(MyInteractionVolumeTemplate))
 	{
-		MyInteractionVolumeTemplate->OnComponentBeginOverlap.AddDynamic(
+		MyPrepareInteractionOverlapBindings();
+		MyInteractionVolumeTemplate->OnComponentBeginOverlap.AddUniqueDynamic(
 			this, &AMyNinjaLiveActor::MyBeginOverlapComponent);
 	}
 

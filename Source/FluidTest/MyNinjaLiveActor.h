@@ -31,6 +31,9 @@ public:
 	/** BeginPlay 初始化：按 DisableBlueprint / Pawn 接近激活分支执行激活体积、追踪网格与重叠检测设置。 */
 	virtual void BeginPlay() override;
 
+	/** 解绑重叠回调并清理本 Actor 创建的定时器。 */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	/** Tick 事件：Pawn 接近激活检测、激活体积重叠配置与 TraceMesh 不活动状态切换。 */
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -79,7 +82,7 @@ public:
 	TEnumAsByte<ECollisionChannel> MyActivatorType = ECC_Pawn;
 
 	/** 对应蓝图变量 ActivatorProximityCheckFrequency：接近检测的间隔秒数（Delay 时长）。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation", meta = (ClampMin = "0.001"))
 	double MyActivatorProximityCheckFrequency = 0.1;
 
 	/** 对应蓝图变量 DeltaSeconds：最近一次 Tick 的时间增量。 */
@@ -246,6 +249,15 @@ public:
 		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
 private:
+	/** 当前已绑定重叠委托的交互体积；目标变更或 EndPlay 时统一解绑。 */
+	TWeakObjectPtr<UPrimitiveComponent> MyBoundInteractionVolumeTemplate;
+
+	/** 确保绑定目标与当前交互体积一致，切换时先解除旧组件上的两个回调。 */
+	void MyPrepareInteractionOverlapBindings();
+
+	/** 解除本 Actor 在交互体积上注册的开始/结束重叠回调。 */
+	void MyClearInteractionOverlapBindings();
+
 	/** InitialOverlapCheck 等待追踪通道就绪的定时器。 */
 	FTimerHandle MyInitialOverlapCheckTimer;
 
