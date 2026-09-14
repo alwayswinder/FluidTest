@@ -1180,9 +1180,9 @@ public:
 	/** MuteBrush 计算出的实际画笔强度。 */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Brush")
 	double MyBrushStrengthTemp1 = 0.001;
-	/** SetBrushDensityParams3 用于限制画笔强度的临时值。 */
+	/** SetBrushDensityParams3 用于限制画笔强度的上限值；无上限即 1.0（该属性为 Transient，靠此处默认值生效）。 */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Brush")
-	double MyBrushStrengthTemp2 = 0.0;
+	double MyBrushStrengthTemp2 = 1.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushHardness = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")

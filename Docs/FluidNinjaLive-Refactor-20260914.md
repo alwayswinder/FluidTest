@@ -66,6 +66,35 @@
 4. `MyCreateOrAcquireRenderTargets` 中 `RT_Output` 的创建条件是"已有 6 个 RT"，即必须有密度输入才会创建输出缓冲，
    与 `MyMake1stOutputAvailableForNiagara` 的直觉不符，需与蓝图复合节点的数组长度判断再核对一次。
 5. 组件 `EndPlay` 未复位 `MyCustomTickLoopStarted` / 各 DoOnce 门；若同一实例再次 BeginPlay，自定义 tick 循环不会重启。
+6. **（已用资产核对确认，会直接影响运行）** `MyBrushStrengthTemp2` 在本次重构中被改为 `Transient`，但
+   `NinjaLiveComponent` 蓝图 CDO 与 `NinjaLive` 蓝图里的组件模板都把该默认值显式设为 `1.0`。`Transient`
+   会丢弃这个默认值，运行时回到 C++ 的 `0.0`；而 C++ 只读不写它
+   （`MySetBrushDensityParams1/3` 中的 `Min(MyBrushStrengthTemp2, MyBrushStrengthTemp1)`），
+   结果是写入画笔材质的 `BrushStrength` 恒为 0。修复二选一：把 C++ 默认值改为 `1.0`，或去掉 `Transient` 恢复可序列化。
+   同批被 `Transient` 丢弃的蓝图默认值还有 `MyFluidSolver1Iterations`（5 → 0，仅 LOD1 开启时参与）
+   和 `MyListOfAvailableTempArrays`（40×true → 空，依赖 Actor BeginPlay 重建）。
+
+## 资产属性核对方法（可复现）
+
+用 SpecialAgent MCP（`http://localhost:8767/mcp`）的 `python-execute` 读取蓝图默认值：
+
+1. `unreal.load_asset(<蓝图路径>)` → `generated_class()` → `get_default_object()` 得到 Actor 级 CDO；
+2. 组件模板不在本蓝图里，而在父蓝图（本 BP 的组件继承自 `NinjaLive`）：
+   `SubobjectDataSubsystem.k2_gather_subobject_data_for_blueprint()` +
+   `SubobjectDataBlueprintFunctionLibrary.get_object()/get_variable_name()` 取出 `NinjaLiveComponent` 模板；
+3. 用 `dir(obj)` 过滤出非 callable 成员，逐个 `get_editor_property()`，并与
+   `unreal.get_default_object(<C++ 原生类>)` 对比得到"蓝图覆盖项"；
+4. 对比时必须先去掉 `str()` 里的 `(0x....)` 地址，否则所有结构体/对象都会被误判为"不同"。
+
+`NinjaLive_Area_Water_Blueprint` 的实测结果（2026-09 复核）：
+
+| 范围 | Python 可见属性 | 与 C++ 原生默认值不同 |
+| --- | ---: | ---: |
+| Actor（CDO） | 69 | 17 |
+| `NinjaLiveComponent` 模板 | 297 | 74 |
+
+组件 302 个 `UPROPERTY` 中，仅 2 个委托与 5 个纯 `Transient` 内部标记对 Python 不可见。完整导出见
+`Saved/BP_PropertyDump.json`。这 74 个覆盖项就是后续做 `USTRUCT` 分组时必须迁移的默认值清单。
 
 ## 下一阶段建议
 
