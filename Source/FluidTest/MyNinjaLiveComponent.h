@@ -499,7 +499,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	TMap<FString, double> MyPresetMap;
 
-	/** 追踪时排除的 NinjaLive 接口 Actor。 */
+	/** 追踪时排除的同类 NinjaLive Actor。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	TArray<TObjectPtr<AActor>> MyNinjaLiveTraceExclude;
 
@@ -1489,7 +1489,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TObjectPtr<UMaterialInterface> MyInactiveGrayMaterial = nullptr;
 
-	/** TraceMesh 隐藏时使用的空材质。 */
+	/** TraceMesh 隐藏和空输出阶段使用的基础材质，由蓝图实例指定。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TObjectPtr<UMaterialInterface> MyNullMaterial = nullptr;
 

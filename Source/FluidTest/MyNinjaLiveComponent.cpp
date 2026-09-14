@@ -2893,15 +2893,9 @@ void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
 	MyMICollisionPainterDot = CreateMaterialAt(0);
 	MyMICollisionPainterOffset = CreatePlatformMaterial(16);
 
-	if (UMaterialInterface* NullMaterial = LoadObject<UMaterialInterface>(
-		nullptr, TEXT("/Game/FluidNinjaLive/Core/Materials/M_SolidColor.M_SolidColor")))
-	{
-		MyMINull = UMaterialInstanceDynamic::Create(NullMaterial, this);
-	}
-	else
-	{
-		MyMINull = nullptr;
-	}
+	MyMINull = IsValid(MyNullMaterial)
+		? UMaterialInstanceDynamic::Create(MyNullMaterial, this)
+		: nullptr;
 
 	auto FindRenderTarget = [this](const TCHAR* Name) -> UTextureRenderTarget2D*
 	{
@@ -3307,20 +3301,20 @@ void UMyNinjaLiveComponent::MyAfterCreateRT()
 {
 	MyCreateDynamicMaterialInstances();
 
-	UClass* NinjaLiveInterfaceClass = LoadClass<UInterface>(
-		nullptr,
-		TEXT("/Game/FluidNinjaLive/Core/NinjaLiveInterface.NinjaLiveInterface_C"));
 	MyNinjaLiveTraceExclude.Reset();
-	if (NinjaLiveInterfaceClass != nullptr)
+	// 原蓝图接口只标记 NinjaLive 自身；按 Owner 的生成类收集同类实例，避免加载蓝图接口资产。
+	if (AActor* Owner = GetOwner())
 	{
-		TArray<AActor*> InterfaceActors;
-		UGameplayStatics::GetAllActorsWithInterface(this, NinjaLiveInterfaceClass, InterfaceActors);
-		for (AActor* InterfaceActor : InterfaceActors)
+		TArray<AActor*> SameClassActors;
+		UGameplayStatics::GetAllActorsOfClass(this, Owner->GetClass(), SameClassActors);
+		for (AActor* SameClassActor : SameClassActors)
 		{
-			MyNinjaLiveTraceExclude.Add(InterfaceActor);
+			if (IsValid(SameClassActor) && SameClassActor != Owner)
+			{
+				MyNinjaLiveTraceExclude.Add(SameClassActor);
+			}
 		}
 	}
-	MyNinjaLiveTraceExclude.Remove(GetOwner());
 
 	MyManageContinuousInteractions();
 	MyAlternativeInputsFedToCompositeDensityInput();
