@@ -28,12 +28,37 @@
 #include "NiagaraSystem.h"
 #include "Misc/EngineVersion.h"
 #include "MyNinjaLiveActor.h"
+#include "FluidTest/MyNinjaFluidRenderPipeline.h"
 #include "FluidTest/MyNinjaLiveFunctions.h"
 #include "MyNinjaLiveMemoryPoolManager.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "TimerManager.h"
+
+void UMyNinjaLiveComponent::MySetScalarParameterByCachedIndex(UMaterialInstanceDynamic* Material,
+	TMap<FName, int32>& ParameterIndices, FName ParameterName, float Value)
+{
+	if (!IsValid(Material))
+	{
+		return;
+	}
+
+	if (const int32* ParameterIndex = ParameterIndices.Find(ParameterName))
+	{
+		Material->SetScalarParameterByIndex(*ParameterIndex, Value);
+		return;
+	}
+
+	int32 ParameterIndex = INDEX_NONE;
+	if (Material->InitializeScalarParameterAndGetIndex(ParameterName, Value, ParameterIndex))
+	{
+		ParameterIndices.Add(ParameterName, ParameterIndex);
+	}
+}
 
 void UMyNinjaLiveComponent::MySetAdditionalFluidsimParams()
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FluidSim_MySetAdditionalFluidsimParams);
+
 	double VelocityX = 0.0;
 	double VelocityY = 0.0;
 	double VelocityZ = 0.0;
@@ -43,7 +68,8 @@ void UMyNinjaLiveComponent::MySetAdditionalFluidsimParams()
 	{
 		auto SetCompositeScalar = [this](FName ParameterName, double Value)
 		{
-			MyMICompositeAndGradient->SetScalarParameterValue(ParameterName, static_cast<float>(Value));
+			MySetScalarParameterByCachedIndex(MyMICompositeAndGradient,
+				MyCompositeScalarParameterIndices, ParameterName, static_cast<float>(Value));
 		};
 
 		SetCompositeScalar(TEXT("VeloFromBrushMotion"), MyVeloFromBrushMotion);
@@ -73,17 +99,23 @@ void UMyNinjaLiveComponent::MySetAdditionalFluidsimParams()
 
 	if (IsValid(MyMIDivergence))
 	{
-		MyMIDivergence->SetScalarParameterValue(TEXT("Divergence"), static_cast<float>(MyDivergence));
-		MyMIDivergence->SetScalarParameterValue(TEXT("BrushPuncture"),
-			static_cast<float>(MyBrushPuncture + VelocityZ));
+		MySetScalarParameterByCachedIndex(MyMIDivergence, MyDivergenceScalarParameterIndices,
+			TEXT("Divergence"), static_cast<float>(MyDivergence));
+		MySetScalarParameterByCachedIndex(MyMIDivergence, MyDivergenceScalarParameterIndices,
+			TEXT("BrushPuncture"), static_cast<float>(MyBrushPuncture + VelocityZ));
 	}
 }
 
 void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exec)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FluidSim_MyCoreFluidsimOPs);
+	FMyNinjaFluidRenderPipeline::MyPollOutputDiffs();
 
 	ThenExec = false;
 	PainterV2Exec = true;
+	const bool bOutputRequired =
+		MyMake1stOutputAvailableFor2ndOutput || MyMake1stOutputAvailableForNiagara;
+	const bool bValidateOutput = FMyNinjaFluidRenderPipeline::MyIsOutputValidationEnabled();
 
 	auto FindRenderTarget = [this](const TCHAR* Name) -> UTextureRenderTarget2D*
 	{
@@ -103,7 +135,41 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 	UTextureRenderTarget2D* const PressureTarget = FindRenderTarget(TEXT("RT_PressureDivergence"));
 	UTextureRenderTarget2D* const PressureTempTarget = FindRenderTarget(TEXT("RT_PressureDivergenceTemp"));
 	UTextureRenderTarget2D* const DensityInputTarget = FindRenderTarget(TEXT("RT_DensityInputMaterial"));
-	UTextureRenderTarget2D* const OutputTarget = FindRenderTarget(TEXT("RT_Output"));
+	UTextureRenderTarget2D* OutputTarget = FindRenderTarget(TEXT("RT_Output"));
+	if (bOutputRequired)
+	{
+		MyRDGOutputTargetCreatedForValidation = false;
+	}
+	else if (!bValidateOutput && MyRDGOutputTargetCreatedForValidation)
+	{
+		MyRenderTargetsMap.Remove(TEXT("RT_Output"));
+		OutputTarget = nullptr;
+		MyRDGOutputTargetCreatedForValidation = false;
+	}
+	if (!bValidateOutput)
+	{
+		MyRDGOutputComparisonTarget = nullptr;
+	}
+	else if (!IsValid(OutputTarget))
+	{
+		const int32 OutputMultiplier = MyForce2xResolutionOutputBuffer ? 2 : 1;
+		const ETextureRenderTargetFormat OutputFormat = MyForce8bitOutputBuffer
+			? RTF_RGBA8
+			: (MySimPrecisionIndex == 0 ? RTF_RGBA16f : RTF_RGBA32f);
+		OutputTarget = UMyNinjaLiveFunctions::MyCreateRenderTarget(
+			this,
+			FMath::Max(1, MyResolutionX) * OutputMultiplier,
+			FMath::Max(1, MyResolutionY) * OutputMultiplier,
+			OutputFormat,
+			MySimAreaClamp,
+			TEXTUREGROUP_RenderTarget,
+			TF_Bilinear);
+		if (IsValid(OutputTarget))
+		{
+			MyRenderTargetsMap.Add(TEXT("RT_Output"), OutputTarget);
+			MyRDGOutputTargetCreatedForValidation = true;
+		}
+	}
 
 
 	if (MyUseInputMaterials && MyInputMaterials.IsValidIndex(MyInputMaterialSelected))
@@ -215,9 +281,38 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 	}
 
 
-	if (MyMake1stOutputAvailableFor2ndOutput || MyMake1stOutputAvailableForNiagara)
+	if (bOutputRequired || bValidateOutput)
 	{
-		Draw(OutputTarget, MyMIOutput);
+		const uint64 OutputFrameIndex = MyRDGOutputFrameIndex++;
+		UTextureRenderTarget2D* ComparisonTarget = nullptr;
+		if (IsValid(OutputTarget) &&
+			FMyNinjaFluidRenderPipeline::MyShouldValidateOutput(OutputFrameIndex))
+		{
+			const bool bNeedsComparisonTarget =
+				!IsValid(MyRDGOutputComparisonTarget) ||
+				MyRDGOutputComparisonTarget->SizeX != OutputTarget->SizeX ||
+				MyRDGOutputComparisonTarget->SizeY != OutputTarget->SizeY ||
+				MyRDGOutputComparisonTarget->RenderTargetFormat != OutputTarget->RenderTargetFormat;
+			if (bNeedsComparisonTarget)
+			{
+				MyRDGOutputComparisonTarget = UMyNinjaLiveFunctions::MyCreateRenderTarget(
+					this,
+					OutputTarget->SizeX,
+					OutputTarget->SizeY,
+					OutputTarget->RenderTargetFormat,
+					MySimAreaClamp,
+					OutputTarget->LODGroup,
+					OutputTarget->Filter);
+			}
+			ComparisonTarget = MyRDGOutputComparisonTarget;
+		}
+		FMyNinjaFluidRenderPipeline::MyDrawOutput(
+			this,
+			OutputTarget,
+			MyMIOutput,
+			ComparisonTarget,
+			this,
+			OutputFrameIndex);
 	}
 
 	if (!MySimplePainterMode)
@@ -267,6 +362,32 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 
 		ThenExec = true;
 	}
+}
+
+void UMyNinjaLiveComponent::MyApplyRDGOutputDiffResult(
+	int64 SampleId,
+	FLinearColor MaxDifference,
+	int32 ExceededPixelCount,
+	int32 ComparedPixelCount,
+	float Tolerance)
+{
+	MyRDGOutputDiffSampleId = SampleId;
+	MyRDGOutputDiffMax = MaxDifference;
+	MyRDGOutputDiffExceededPixelCount = ExceededPixelCount;
+	MyRDGOutputDiffComparedPixelCount = ComparedPixelCount;
+	MyRDGOutputDiffTolerance = Tolerance;
+	MyRDGOutputDiffWithinTolerance = ExceededPixelCount == 0;
+
+	UE_LOG(LogTemp, Display,
+		TEXT("FluidTest NinjaLive RT_Output GPU diff sample=%lld max=(%.9g, %.9g, %.9g, %.9g) exceeded=%d/%d tolerance=%.9g"),
+		SampleId,
+		MaxDifference.R,
+		MaxDifference.G,
+		MaxDifference.B,
+		MaxDifference.A,
+		ExceededPixelCount,
+		ComparedPixelCount,
+		Tolerance);
 }
 
 void UMyNinjaLiveComponent::MyFluidCoreStep()
@@ -424,6 +545,8 @@ void UMyNinjaLiveComponent::MyDestroyPainterV2()
 
 void UMyNinjaLiveComponent::MyForwardScalarParamsToNiagara()
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FluidSim_MyForwardScalarParamsToNiagara);
+
 	if (!MyUsePAINTER_V2_ToTrackObjects || MySingleTargetMode_LEGACY ||
 		!IsValid(MyMICollisionPainterDot) || !IsValid(MyNiagaraBasedPainter))
 	{
@@ -460,6 +583,8 @@ void UMyNinjaLiveComponent::MyForwardScalarParamsToNiagara()
 
 void UMyNinjaLiveComponent::MySetPosVelocityScaleArraysToPainterV2()
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FluidSim_MySetPosVelocityScaleArraysToPainterV2);
+
 	if (!MyUsePAINTER_V2_ToTrackObjects || MySingleTargetMode_LEGACY || !IsValid(MyNiagaraBasedPainter))
 	{
 		return;
@@ -735,6 +860,8 @@ void UMyNinjaLiveComponent::MyApplyPainterV2SharedParameters()
 void UMyNinjaLiveComponent::MyCreateOrAcquireRenderTargets()
 {
 	MyRenderTargetsMap.Empty();
+	MyRDGOutputComparisonTarget = nullptr;
+	MyRDGOutputTargetCreatedForValidation = false;
 	MyMapLengthTmp = MyRenderTargetsMap.Num();
 
 	const int32 FullWidth = FMath::Max(1, MyResolutionX);
@@ -794,17 +921,22 @@ void UMyNinjaLiveComponent::MyCreateOrAcquireRenderTargets()
 		AddRenderTarget(MyRenderTargetsList[5], FullWidth, FullHeight, RTF_R8, false);
 	}
 
-	if (MyMake1stOutputAvailableFor2ndOutput || MyMake1stOutputAvailableForNiagara)
+	if (MyMake1stOutputAvailableFor2ndOutput || MyMake1stOutputAvailableForNiagara ||
+		FMyNinjaFluidRenderPipeline::MyIsOutputValidationEnabled())
 	{
 		const int32 OutputMultiplier = MyForce2xResolutionOutputBuffer ? 2 : 1;
 		const ETextureRenderTargetFormat OutputFormat = MyForce8bitOutputBuffer ? RTF_RGBA8 : RGBAFormat;
 		AddRenderTarget(TEXT("RT_Output"), FullWidth * OutputMultiplier, FullHeight * OutputMultiplier,
 			OutputFormat, MySimAreaClamp);
+		MyRDGOutputTargetCreatedForValidation =
+			!MyMake1stOutputAvailableFor2ndOutput && !MyMake1stOutputAvailableForNiagara;
 	}
 }
 
 void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
 {
+	MyCompositeScalarParameterIndices.Reset();
+	MyDivergenceScalarParameterIndices.Reset();
 
 	auto CreateMaterialAt = [this](int32 MaterialIndex) -> UMaterialInstanceDynamic*
 	{
@@ -1288,6 +1420,8 @@ void UMyNinjaLiveComponent::MyAfterCreateRT()
 void UMyNinjaLiveComponent::MyBuildTraceExcludeList()
 {
 	MyNinjaLiveTraceExclude.Reset();
+	MyNinjaLiveTraceExcludeRaw.Reset();
+	MyTraceExcludeRefreshFrame = MAX_uint64;
 
 
 	AActor* Owner = GetOwner();
@@ -1305,6 +1439,7 @@ void UMyNinjaLiveComponent::MyBuildTraceExcludeList()
 			MyNinjaLiveTraceExclude.Add(SameClassActor);
 		}
 	}
+	MyRefreshTraceExcludeActors();
 }
 
 void UMyNinjaLiveComponent::MyApplyPlatformCompatibilityOptions()

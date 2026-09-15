@@ -1,0 +1,28 @@
+#include "/Engine/Public/Platform.ush"
+
+Texture2D<float4> ReferenceTexture;
+Texture2D<float4> CandidateTexture;
+RWBuffer<uint> ResultBuffer;
+int2 TextureExtent;
+float Tolerance;
+
+[numthreads(8, 8, 1)]
+void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+	if (DispatchThreadId.x >= TextureExtent.x || DispatchThreadId.y >= TextureExtent.y)
+	{
+		return;
+	}
+
+	int3 TexturePosition = int3(DispatchThreadId.xy, 0);
+	float4 Difference = abs(ReferenceTexture.Load(TexturePosition) - CandidateTexture.Load(TexturePosition));
+	uint4 DifferenceBits = asuint(Difference);
+	InterlockedMax(ResultBuffer[0], DifferenceBits.x);
+	InterlockedMax(ResultBuffer[1], DifferenceBits.y);
+	InterlockedMax(ResultBuffer[2], DifferenceBits.z);
+	InterlockedMax(ResultBuffer[3], DifferenceBits.w);
+	if (any(Difference > Tolerance))
+	{
+		InterlockedAdd(ResultBuffer[4], 1);
+	}
+}

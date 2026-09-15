@@ -10,7 +10,7 @@ public class FluidTest : ModuleRules
 
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "MediaAssets", "Niagara", "AssetRegistry" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] {  });
+		PrivateDependencyModuleNames.AddRange(new string[] { "RenderCore", "RHI", "Renderer" });
 
 
 

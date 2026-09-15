@@ -138,6 +138,30 @@ public:
 	int32 MyMapLengthTmp = 0;
 
 
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	FLinearColor MyRDGOutputDiffMax = FLinearColor::Black;
+
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	int32 MyRDGOutputDiffExceededPixelCount = 0;
+
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	int32 MyRDGOutputDiffComparedPixelCount = 0;
+
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	float MyRDGOutputDiffTolerance = 0.0f;
+
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	int64 MyRDGOutputDiffSampleId = 0;
+
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	bool MyRDGOutputDiffWithinTolerance = true;
+
+
 
 
 
@@ -736,12 +760,6 @@ public:
 	FVector MyDefineLineTracingSource() const;
 
 
-	void MyBuildTraceExcludeActors(TArray<AActor*>& Out) const;
-
-
-
-
-
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	FVector MyTracePositionTemp = FVector::ZeroVector;
 
@@ -931,6 +949,14 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exec);
+
+
+	void MyApplyRDGOutputDiffResult(
+		int64 SampleId,
+		FLinearColor MaxDifference,
+		int32 ExceededPixelCount,
+		int32 ComparedPixelCount,
+		float Tolerance);
 
 
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
@@ -1509,6 +1535,19 @@ private:
 
 
 	void MySetCompositeEraserSwitch();
+	void MyRefreshTraceExcludeActors();
+
+	void MySetScalarParameterByCachedIndex(UMaterialInstanceDynamic* Material,
+		TMap<FName, int32>& ParameterIndices, FName ParameterName, float Value);
+
+	TArray<AActor*> MyNinjaLiveTraceExcludeRaw;
+	uint64 MyTraceExcludeRefreshFrame = MAX_uint64;
+	TMap<FName, int32> MyCompositeScalarParameterIndices;
+	TMap<FName, int32> MyDivergenceScalarParameterIndices;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextureRenderTarget2D> MyRDGOutputComparisonTarget = nullptr;
+	uint64 MyRDGOutputFrameIndex = 0;
+	bool MyRDGOutputTargetCreatedForValidation = false;
 
 
 	FTimerHandle MyTimerCheckReady;

@@ -94,6 +94,12 @@ void UMyNinjaLiveComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	MyRenderTargetsMap.Reset();
 	MyNiagaraSystemsToDrive.Reset();
 	MyNinjaLiveTraceExclude.Reset();
+	MyNinjaLiveTraceExcludeRaw.Reset();
+	MyTraceExcludeRefreshFrame = MAX_uint64;
+	MyCompositeScalarParameterIndices.Reset();
+	MyDivergenceScalarParameterIndices.Reset();
+	MyRDGOutputComparisonTarget = nullptr;
+	MyRDGOutputTargetCreatedForValidation = false;
 
 	MyMICompositeAndGradient = nullptr;
 	MyMIAdvection = nullptr;
@@ -130,6 +136,7 @@ void UMyNinjaLiveComponent::MyCheckReady()
 
 void UMyNinjaLiveComponent::MyAfterReadyCheck()
 {
+	MyRefreshTraceExcludeActors();
 	MyLOD();
 	MyMuteBrush();
 	MyCameraFacing();

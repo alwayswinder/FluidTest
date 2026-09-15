@@ -439,7 +439,7 @@ void UMyNinjaLiveFunctions::MyTraceOverlap(
 		HitValidator = true;
 	}
 
-	if (!HitValidator && !PainterV2)
+	if (!HitValidator)
 	{
 		return;
 	}

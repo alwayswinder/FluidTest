@@ -30,6 +30,7 @@
 #include "MyNinjaLiveActor.h"
 #include "FluidTest/MyNinjaLiveFunctions.h"
 #include "MyNinjaLiveMemoryPoolManager.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "TimerManager.h"
 
 void UMyNinjaLiveComponent::MyMuteBrush()
@@ -431,15 +432,19 @@ FVector UMyNinjaLiveComponent::MyDefineLineTracingSource() const
 	return TraceSource;
 }
 
-void UMyNinjaLiveComponent::MyBuildTraceExcludeActors(TArray<AActor*>& Out) const
+void UMyNinjaLiveComponent::MyRefreshTraceExcludeActors()
 {
-
-	Out.Reset(MyNinjaLiveTraceExclude.Num());
+	if (MyTraceExcludeRefreshFrame == GFrameCounter)
+	{
+		return;
+	}
+	MyTraceExcludeRefreshFrame = GFrameCounter;
+	MyNinjaLiveTraceExcludeRaw.Reset(MyNinjaLiveTraceExclude.Num());
 	for (const TObjectPtr<AActor>& Excluded : MyNinjaLiveTraceExclude)
 	{
 		if (IsValid(Excluded))
 		{
-			Out.Add(Excluded.Get());
+			MyNinjaLiveTraceExcludeRaw.Add(Excluded.Get());
 		}
 	}
 }
@@ -468,17 +473,18 @@ void UMyNinjaLiveComponent::MyApplyTraceArtifactBrushMute(FVector TracePosition,
 
 void UMyNinjaLiveComponent::MyTraceObjects2(FVector Start, FLinearColor& HitUV, bool& ThenExec, bool& NoHitExec)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(FluidSim_MyTraceObjects2);
+	MyRefreshTraceExcludeActors();
+
 	ThenExec = false;
 	NoHitExec = false;
 
 
 	FVector TracePosition = FVector::ZeroVector;
 	bool HitValid = false;
-	TArray<AActor*> TraceExclude;
-	MyBuildTraceExcludeActors(TraceExclude);
 	UMyNinjaLiveFunctions::MyTraceOverlap(
 		this, Start, MyPosition1_3D, 1.5, MyTraceChannel,
-		TraceExclude, MyUsePAINTER_V2_ToTrackObjects,
+		MyNinjaLiveTraceExcludeRaw, MyUsePAINTER_V2_ToTrackObjects,
 		HitUV, TracePosition, HitValid);
 
 	if (!HitValid)
@@ -516,13 +522,12 @@ void UMyNinjaLiveComponent::MyTraceObjects1(FVector Start, FLinearColor& HitUV)
 
 	if (MyContinuousInteractionWithOwnerActor || MyOverlap1)
 	{
+		MyRefreshTraceExcludeActors();
 		FVector TracePosition = FVector::ZeroVector;
 		bool HitValid = false;
-		TArray<AActor*> TraceExclude;
-		MyBuildTraceExcludeActors(TraceExclude);
 		UMyNinjaLiveFunctions::MyTraceOverlap(
 			this, Start, MyPosition1_3D, 1.5, MyTraceChannel,
-			TraceExclude, false,
+			MyNinjaLiveTraceExcludeRaw, false,
 			HitUV, TracePosition, HitValid);
 
 
@@ -533,10 +538,9 @@ void UMyNinjaLiveComponent::MyTraceObjects1(FVector Start, FLinearColor& HitUV)
 bool UMyNinjaLiveComponent::MyTraceGestures(FLinearColor& HitUV)
 {
 	HitUV = FLinearColor::Black;
-	TArray<AActor*> TraceExclude;
-	MyBuildTraceExcludeActors(TraceExclude);
+	MyRefreshTraceExcludeActors();
 
-	auto TraceInput = [this, &HitUV, &TraceExclude](uint8 FingerIndex)
+	auto TraceInput = [this, &HitUV](uint8 FingerIndex)
 	{
 		FLinearColor TraceHitUV = FLinearColor::Black;
 		bool bSimHitByMouse = false;
@@ -548,7 +552,7 @@ bool UMyNinjaLiveComponent::MyTraceGestures(FLinearColor& HitUV)
 			MyTouch,
 			FingerIndex,
 			MyTraceChannel,
-			TraceExclude,
+			MyNinjaLiveTraceExcludeRaw,
 			TraceHitUV,
 			bSimHitByMouse,
 			bMouseClickValid,
