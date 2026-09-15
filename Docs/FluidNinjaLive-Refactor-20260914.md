@@ -41,6 +41,13 @@
 
 在复核本轮重构时追加的小范围整理，不改任何蓝图可见的名字、参数与执行顺序：
 
+- **补齐 4 个被 `Transient` 丢弃的蓝图默认值**（`MyBrushStrengthTemp2`、`MyPosition3_2D`、
+  `MyLastPosition3_2D`、`MyListOfAvailableTempArrays`），并把 LOD 迭代次数 `MyFluidSolver1Iterations`
+  恢复为可序列化；核对结论见 `Docs/FluidNinjaLive-BP-Contract.md`（蓝图覆盖项 177 → 169，减少的正好是这 4 个）。
+- 建立"蓝图契约基线"：`Docs/FluidNinjaLive-BP-Contract.md` + `Saved/asset_baseline.py`，用于后续重构前后自动比对。
+- 去重：`MyOverlapArtifactWorkaround2` 与 `MyTraceObjects1` 里的越界静音逻辑合并为
+  `MyApplyTraceArtifactBrushMute`（容差作为参数保留各自语义）；`MySetBrushDensityParams1/3` 的
+  `EraserSwitch` 写入合并为 `MySetCompositeEraserSwitch`。
 - `MyGetTempArray` 改为返回值副本的 `BlueprintPure`（蓝图侧本来就是值拷贝），并新增仅 C++ 使用的
   `MyGetTempArrayRef`；临时数组越界时返回组件自身的空占位数组，去掉原先的函数级 `static` 数组。
 - 三个输出材质 Tag 应用、追踪排除列表、平台兼容开关、预设加载分别从

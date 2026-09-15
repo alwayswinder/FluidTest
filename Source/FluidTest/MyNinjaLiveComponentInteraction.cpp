@@ -77,6 +77,11 @@ void UMyNinjaLiveComponent::MySetBrushDensityParams1(double Value)
 		MyMICollisionPainterLine->SetScalarParameterValue(TEXT("BrushNoise"), static_cast<float>(MyBrushNoise));
 	}
 
+	MySetCompositeEraserSwitch();
+}
+
+void UMyNinjaLiveComponent::MySetCompositeEraserSwitch()
+{
 	if (!MySimplePainterMode && IsValid(MyMICompositeAndGradient))
 	{
 		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("EraserSwitch"), MyEraserMode ? 1.0f : 0.0f);
@@ -120,10 +125,7 @@ void UMyNinjaLiveComponent::MySetBrushDensityParams3(double Value)
 	MyMICollisionPainterDot->SetScalarParameterValue(TEXT("BrushPuncture"), static_cast<float>(MyBrushPuncture));
 	MyMICollisionPainterDot->SetScalarParameterValue(TEXT("BrushNoise"), static_cast<float>(MyBrushNoise));
 
-	if (!MySimplePainterMode && IsValid(MyMICompositeAndGradient))
-	{
-		MyMICompositeAndGradient->SetScalarParameterValue(TEXT("EraserSwitch"), MyEraserMode ? 1.0f : 0.0f);
-	}
+	MySetCompositeEraserSwitch();
 }
 
 bool UMyNinjaLiveComponent::MyBrushSwitch2(FLinearColor InLinearColor) const
@@ -444,14 +446,20 @@ void UMyNinjaLiveComponent::MyBuildTraceExcludeActors(TArray<AActor*>& Out) cons
 
 void UMyNinjaLiveComponent::MyOverlapArtifactWorkaround2(FVector In)
 {
+	// 越界修复入口：用 0.1 的容差判定物体是否在移动。
+	MyApplyTraceArtifactBrushMute(In, 0.1f);
+}
+
+void UMyNinjaLiveComponent::MyApplyTraceArtifactBrushMute(FVector TracePosition, float ObjectMoveTolerance)
+{
 	// 保存上一帧追踪位置（此时 TracePositionTemp 仍是旧值），再更新为本帧输入。
 	MyLastTracePositionTemp = MyTracePositionTemp;
-	MyTracePositionTemp = In;
+	MyTracePositionTemp = TracePosition;
 
 	// 越界判定：追踪位置未变（物体停在边缘）、物体自身在移动、且非持续交互模式时，
 	// FluidTrace 无法生成有效 UV，静音画笔避免伪影。
 	const bool bTraceNotMoving = MyTracePositionTemp.Equals(MyLastTracePositionTemp, 0.1f);
-	const bool bObjectMoving = !MyPosition1_3D.Equals(MyLastPosition1_3D, 0.1f);
+	const bool bObjectMoving = !MyPosition1_3D.Equals(MyLastPosition1_3D, ObjectMoveTolerance);
 	const bool bNotContinuousInteraction = !MyContinuousInteractionWithOwnerActor;
 	const bool bMuteBrush = bTraceNotMoving && bObjectMoving && bNotContinuousInteraction;
 
@@ -517,15 +525,8 @@ void UMyNinjaLiveComponent::MyTraceObjects1(FVector Start, FLinearColor& HitUV)
 			TraceExclude, false,
 			HitUV, TracePosition, HitValid);
 
-		// 保存上一帧追踪位置（此时 MyTracePositionTemp 仍是旧值），再更新为本帧追踪位置。
-		MyLastTracePositionTemp = MyTracePositionTemp;
-		MyTracePositionTemp = TracePosition;
-
-		// 物体跨出模拟平面边缘仍保持重叠时 FluidTrace 失效、无法生成有效 UV，静音画笔避免伪影。
-		const bool bTraceNotMoving = MyTracePositionTemp.Equals(MyLastTracePositionTemp, 0.1f);
-		const bool bObjectMoving = !MyPosition1_3D.Equals(MyLastPosition1_3D, 0.001f);
-		const bool bNotContinuousInteraction = !MyContinuousInteractionWithOwnerActor;
-		MyBrushStrengthTemp1 = (bTraceNotMoving && bObjectMoving && bNotContinuousInteraction) ? 0.0 : MyBrushStrength;
+		// 物体跨出模拟平面边缘仍保持重叠时 FluidTrace 失效、无法生成有效 UV，静音画笔避免伪影（此处用 0.001 容差）。
+		MyApplyTraceArtifactBrushMute(TracePosition, 0.001f);
 	}
 }
 

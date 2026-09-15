@@ -45,6 +45,11 @@ UMyNinjaLiveComponent::UMyNinjaLiveComponent()
 		TEXT("RT_DensityInputMaterial"),
 		TEXT("RT_Output")
 	};
+
+	// 以下三个数组在蓝图里带有默认值，但属性已标记 Transient（不走序列化），因此必须在 C++ 侧恢复同样的初始状态。
+	MyPosition3_2D.Init(FLinearColor::Transparent, MyTouchSlotCount);
+	MyLastPosition3_2D.Init(FLinearColor::Transparent, MyTouchSlotCount);
+	MyListOfAvailableTempArrays.Init(true, MyTempArrayCount);
 }
 
 void UMyNinjaLiveComponent::BeginPlay()

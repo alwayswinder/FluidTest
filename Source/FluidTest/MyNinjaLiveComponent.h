@@ -257,7 +257,7 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<FName> MyContinuousInteractionBoneNamesExactTemp2;
 
-	/** 临时数组槽位可用性（true=可用、false=已占用）；状态切换统一走 Acquire/Release/Reset。 */
+	/** 临时数组槽位可用性（true=可用、false=已占用）；蓝图默认 40 个 true，由构造函数恢复，状态切换统一走 Acquire/Release/Reset。 */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<bool> MyListOfAvailableTempArrays;
 
@@ -533,7 +533,7 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	FLinearColor MyLastPosition2_2D = FLinearColor::Black;
 
-	/** 多触点当前位置与上一帧位置。 */
+	/** 多触点当前位置与上一帧位置；蓝图默认 10 个透明项，Transient 后由构造函数按 MyTouchSlotCount 重建。 */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<FLinearColor> MyPosition3_2D;
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
@@ -764,6 +764,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyOverlapArtifactWorkaround2(FVector In);
 
+	/** 越界静音判定：记录本帧追踪位置后，按追踪位置是否停滞与物体移动容差决定是否把画笔强度置 0。 */
+	void MyApplyTraceArtifactBrushMute(FVector TracePosition, float ObjectMoveTolerance);
+
 	/** 物体追踪：从 Start 追踪到物体位置，命中输出 UV 并重置画笔与碰撞计时；ThenExec/NoHitExec 对应两个执行分支。 */
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTraceObjects2(FVector Start, FLinearColor& HitUV, bool& ThenExec, bool& NoHitExec);
@@ -890,9 +893,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	bool MyHalfResPressureAndDivergenceBuffers = false;
 
-	/** Pressure Solver 1 在当前 LOD 下的迭代次数。 */
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|LOD")
-	int32 MyFluidSolver1Iterations = 0;
+	/** Pressure Solver 1 在当前 LOD 下的迭代次数；蓝图里显式设为 5，运行期由 LOD 检查更新，故保留序列化。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
+	int32 MyFluidSolver1Iterations = 5;
 
 	/** Pressure Solver 1 的最大迭代次数。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
@@ -1482,6 +1485,9 @@ private:
 	static constexpr int32 MyTempArrayCount = 40;
 	TStaticArray<TArray<FName>, MyTempArrayCount> MyTempArrays;
 
+	/** 多触点位置数组的槽位数（蓝图 Position3_2D / LastPosition3_2D 的默认长度）。 */
+	static constexpr int32 MyTouchSlotCount = 10;
+
 	/** 越界访问时的空占位数组，避免返回悬空引用。 */
 	TArray<FName> MyInvalidTempArray;
 
@@ -1499,6 +1505,9 @@ private:
 
 	/** 加载并解析预设，随后载入速度/密度输入纹理。 */
 	void MyApplyPresetAndInputTextures();
+
+	/** 把 EraserMode 写入 Composite 材质的 EraserSwitch 参数（简单画笔模式下跳过）。 */
+	void MySetCompositeEraserSwitch();
 
 	/** 延迟检查 TraceMesh 是否创建完成的定时器。 */
 	FTimerHandle MyTimerCheckReady;
