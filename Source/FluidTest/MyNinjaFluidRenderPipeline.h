@@ -12,7 +12,9 @@ enum class EMyNinjaRDGDiffTarget : uint8
 	Advection,
 	Divergence,
 	Pressure,
-	PressureTemp
+	PressureTemp,
+	Painter,
+	Composite
 };
 
 class FMyNinjaFluidRenderPipeline
@@ -27,6 +29,9 @@ public:
 	static bool MyUseRDGPressure();
 	static bool MyIsPressureValidationEnabled();
 	static bool MyShouldValidatePressure(uint64 FrameIndex);
+	static bool MyUseRDGPainter();
+	static bool MyIsPainterValidationEnabled();
+	static bool MyShouldValidatePainter(uint64 FrameIndex);
 	static void MyPollOutputDiffs();
 	static void MyShutdown();
 	static void MyDrawOutput(
@@ -66,6 +71,27 @@ public:
 		UTextureRenderTarget2D* CandidatePressureTarget,
 		UTextureRenderTarget2D* ReferencePressureTempTarget,
 		UTextureRenderTarget2D* CandidatePressureTempTarget,
+		UMyNinjaLiveComponent* Component,
+		uint64 SampleId);
+	static void MyCopyPainterCompositeTargets(
+		UTextureRenderTarget2D* SourcePainterTarget,
+		UTextureRenderTarget2D* DestinationPainterTarget,
+		UTextureRenderTarget2D* SourceCompositeTarget,
+		UTextureRenderTarget2D* DestinationCompositeTarget);
+	static void MyDrawPainterComposite(
+		UObject* WorldContextObject,
+		UTextureRenderTarget2D* PainterTarget,
+		UTextureRenderTarget2D* CompositeTarget,
+		UMaterialInterface* FirstOffsetMaterial,
+		UMaterialInterface* SecondOffsetMaterial,
+		UMaterialInterface* CompositeMaterial,
+		bool bUseRDG);
+	static void MyComparePainterCompositeTargets(
+		UObject* WorldContextObject,
+		UTextureRenderTarget2D* ReferencePainterTarget,
+		UTextureRenderTarget2D* CandidatePainterTarget,
+		UTextureRenderTarget2D* ReferenceCompositeTarget,
+		UTextureRenderTarget2D* CandidateCompositeTarget,
 		UMyNinjaLiveComponent* Component,
 		uint64 SampleId);
 };

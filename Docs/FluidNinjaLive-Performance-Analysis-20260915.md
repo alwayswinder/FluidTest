@@ -277,3 +277,34 @@ FluidTest.NinjaLive.PressureRDGValidationInterval 30
 | RG32f，1024×1024，半分辨率，三轮迭代 | RDG + Legacy | 0–117 | `max=0`，`exceeded=0/1048576` | `max=0`，`exceeded=0/1048576` |
 
 RG16f 容差为 `0.001`，RG32f 容差为 `0.000001`。三轮均正常退出，未出现断言、GPU 崩溃或设备移除；UE 5.7 Development 编译成功，`FluidTest.NinjaLive` 两个自动化测试全部通过。当前结果证明单轮压力配对在覆盖的格式、分辨率和迭代数下达到像素级等价，并把每轮两个独立 Canvas/RDG 提交收敛为一个 GraphBuilder；下一步可评估将相邻压力轮次批量入图，但必须先解决共享 MID 参数快照问题。
+
+## 15. RDG Painter/Composite 第四阶段验证
+
+第四阶段将启用 Painter 双缓冲时的三段绘制合入同一个 RDG GraphBuilder：先从 Painter 读取并写入 Composite，再从 Composite 读取并写回 Painter，非 SimplePainter 模式最后从更新后的 Painter 读取并写回 Composite。三个 pass 之间均建立显式纹理只读依赖。正常 RDG 路径把原来的三次独立 Canvas 提交收敛为一次 GraphBuilder 提交，并将 RenderTarget 的即时资源更新调用从三次降为两次。
+
+首段 Offset 材质必须读取本帧尚未清零的 `WorldOffsetDeltaX/Y`，第二段则必须读取清零后的偏移并把输入纹理改为 Composite。为避免共享 MID 在图提交前被后续参数覆盖，RDG 路径维护一个持久的首 pass MID 快照；Legacy 默认且验证关闭时仍执行原逻辑，不承担参数复制开销。
+
+控制台变量：
+
+```text
+FluidTest.NinjaLive.PainterRenderPath 0
+FluidTest.NinjaLive.PainterRenderPath 1
+FluidTest.NinjaLive.PainterRDGValidation 1
+FluidTest.NinjaLive.PainterRDGValidationInterval 30
+```
+
+- `PainterRenderPath=0`：Legacy Painter/Composite 主路径，也是默认值。
+- `PainterRenderPath=1`：三段绘制共用一个 GraphBuilder 的 RDG 主路径。
+- `PainterRDGValidation=1`：开启 Legacy/RDG 双向 GPU 差分。
+- `PainterRDGValidationInterval`：差分采样间隔，最小为 1 帧。
+
+验证模式维护独立的 Painter、Composite 对照 RT，以及首段 Offset、第二段 Offset 和 CompositeAndGradient 对照 MID。每个采样帧先复制真实双 RT 历史，再从首段和第二段主 MID 状态分别同步全部动态 override，并把纹理参数重新绑定到对照链；两条路径完成后同时比较最终 Painter 和 Composite。验证关闭时对照资源会释放引用。
+
+在 D3D12、SM6、`/Game/_MyTest/M_Start`、RGBA16f、2048×2048、非 SimplePainter、启用双缓冲的关卡默认配置下完成逐帧双向验证：
+
+| 主路径与对照 | 采样范围 | Painter | Composite |
+|---|---:|---:|---:|
+| Legacy + RDG | 0–117 | `max=0`，`exceeded=0/4194304` | `max=0`，`exceeded=0/4194304` |
+| RDG + Legacy | 0–117 | `max=0`，`exceeded=0/4194304` | `max=0`，`exceeded=0/4194304` |
+
+两轮共 472 次纹理比较全部为精确零差异，容差为 `0.001`；两轮均正常退出，未出现断言、GPU 崩溃或设备移除。UE 5.7 Development 编译成功，`FluidTest.NinjaLive` 两个自动化测试全部通过。当前验证证明第四阶段在覆盖场景中达到像素级等价；尚未覆盖 SimplePainter、RGBA8 和 RGBA32f 配置，因此这些配置继续依赖默认 Legacy 路径，切换 RDG 前应分别补齐双向验证。

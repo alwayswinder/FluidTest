@@ -75,6 +75,24 @@ namespace
 		TEXT("Number of pressure frames between RDG validation samples."),
 		ECVF_Default);
 
+	TAutoConsoleVariable<int32> CVarMyNinjaPainterRenderPath(
+		TEXT("FluidTest.NinjaLive.PainterRenderPath"),
+		0,
+		TEXT("0 uses legacy painter draws. 1 uses the RDG painter pipeline."),
+		ECVF_Default);
+
+	TAutoConsoleVariable<int32> CVarMyNinjaPainterRDGValidation(
+		TEXT("FluidTest.NinjaLive.PainterRDGValidation"),
+		0,
+		TEXT("Enables asynchronous GPU comparison for painter pipeline draws."),
+		ECVF_Default);
+
+	TAutoConsoleVariable<int32> CVarMyNinjaPainterRDGValidationInterval(
+		TEXT("FluidTest.NinjaLive.PainterRDGValidationInterval"),
+		30,
+		TEXT("Number of painter frames between RDG validation samples."),
+		ECVF_Default);
+
 	class FMyNinjaOutputDiffCS : public FGlobalShader
 	{
 	public:
@@ -759,6 +777,171 @@ namespace
 				GraphBuilder.Execute();
 			});
 	}
+
+	void MyDrawPainterCompositeRDG(
+		UWorld* World,
+		UTextureRenderTarget2D* PainterTarget,
+		UTextureRenderTarget2D* CompositeTarget,
+		UMaterialInterface* FirstOffsetMaterial,
+		UMaterialInterface* SecondOffsetMaterial,
+		UMaterialInterface* CompositeMaterial)
+	{
+		FirstOffsetMaterial->EnsureIsComplete();
+		SecondOffsetMaterial->EnsureIsComplete();
+		if (CompositeMaterial)
+		{
+			CompositeMaterial->EnsureIsComplete();
+		}
+		World->FlushDeferredParameterCollectionInstanceUpdates();
+
+		FTextureRenderTargetResource* PainterResource =
+			PainterTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* CompositeResource =
+			CompositeTarget->GameThread_GetRenderTargetResource();
+		const FMaterialRenderProxy* FirstOffsetProxy = FirstOffsetMaterial->GetRenderProxy();
+		const FMaterialRenderProxy* SecondOffsetProxy = SecondOffsetMaterial->GetRenderProxy();
+		const FMaterialRenderProxy* CompositeProxy = CompositeMaterial
+			? CompositeMaterial->GetRenderProxy()
+			: nullptr;
+		const FIntPoint PainterExtent(PainterTarget->SizeX, PainterTarget->SizeY);
+		const FIntPoint CompositeExtent(CompositeTarget->SizeX, CompositeTarget->SizeY);
+		const FGameTime Time = World->GetTime();
+		const ERHIFeatureLevel::Type FeatureLevel = World->GetFeatureLevel();
+
+		ENQUEUE_RENDER_COMMAND(MyNinjaDrawPainterCompositeRDG)(
+			[PainterResource, CompositeResource, FirstOffsetProxy, SecondOffsetProxy,
+				CompositeProxy, PainterExtent, CompositeExtent, Time,
+				FeatureLevel](FRHICommandListImmediate& RHICmdList)
+			{
+				MyProcessCompletedOutputDiffs();
+				PainterResource->FlushDeferredResourceUpdate(RHICmdList);
+				CompositeResource->FlushDeferredResourceUpdate(RHICmdList);
+
+				FRDGBuilder GraphBuilder(RHICmdList);
+				{
+					RDG_EVENT_SCOPE(GraphBuilder, "FluidTest.NinjaLive.PainterCompositePipeline");
+					FRDGTextureRef PainterTexture = RegisterExternalTexture(
+						GraphBuilder,
+						PainterResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.RDGPainter"));
+					FRDGTextureRef CompositeTexture = RegisterExternalTexture(
+						GraphBuilder,
+						CompositeResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.RDGComposite"));
+					MyAddTextureReadBarrier(GraphBuilder, PainterTexture, CompositeTexture);
+					CompositeTexture = MyAddMaterialPass(
+						GraphBuilder,
+						CompositeResource,
+						FirstOffsetProxy,
+						CompositeExtent,
+						Time,
+						FeatureLevel,
+						TEXT("FluidTest.NinjaLive.RDGComposite"),
+						TEXT("PainterOffsetFirst"));
+					MyAddTextureReadBarrier(GraphBuilder, CompositeTexture, PainterTexture);
+					PainterTexture = MyAddMaterialPass(
+						GraphBuilder,
+						PainterResource,
+						SecondOffsetProxy,
+						PainterExtent,
+						Time,
+						FeatureLevel,
+						TEXT("FluidTest.NinjaLive.RDGPainter"),
+						TEXT("PainterOffsetSecond"));
+					if (CompositeProxy)
+					{
+						MyAddTextureReadBarrier(GraphBuilder, PainterTexture, CompositeTexture);
+						CompositeTexture = MyAddMaterialPass(
+							GraphBuilder,
+							CompositeResource,
+							CompositeProxy,
+							CompositeExtent,
+							Time,
+							FeatureLevel,
+							TEXT("FluidTest.NinjaLive.RDGComposite"),
+							TEXT("CompositeAndGradient"));
+					}
+					GraphBuilder.SetTextureAccessFinal(PainterTexture, ERHIAccess::SRVMask);
+					GraphBuilder.SetTextureAccessFinal(CompositeTexture, ERHIAccess::SRVMask);
+				}
+				GraphBuilder.Execute();
+			});
+
+		PainterTarget->UpdateResourceImmediate(false);
+		CompositeTarget->UpdateResourceImmediate(false);
+	}
+
+	void MyComparePainterCompositeTargetsRDG(
+		UWorld* World,
+		UTextureRenderTarget2D* ReferencePainterTarget,
+		UTextureRenderTarget2D* CandidatePainterTarget,
+		UTextureRenderTarget2D* ReferenceCompositeTarget,
+		UTextureRenderTarget2D* CandidateCompositeTarget,
+		UMyNinjaLiveComponent* Component,
+		int64 SampleId)
+	{
+		FTextureRenderTargetResource* ReferencePainterResource =
+			ReferencePainterTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* CandidatePainterResource =
+			CandidatePainterTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* ReferenceCompositeResource =
+			ReferenceCompositeTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* CandidateCompositeResource =
+			CandidateCompositeTarget->GameThread_GetRenderTargetResource();
+		const FIntPoint PainterExtent(CandidatePainterTarget->SizeX, CandidatePainterTarget->SizeY);
+		const FIntPoint CompositeExtent(CandidateCompositeTarget->SizeX, CandidateCompositeTarget->SizeY);
+		const ERHIFeatureLevel::Type FeatureLevel = World->GetFeatureLevel();
+		const float PainterTolerance = MyGetTextureTolerance(CandidatePainterTarget);
+		const float CompositeTolerance = MyGetTextureTolerance(CandidateCompositeTarget);
+		const TWeakObjectPtr<UMyNinjaLiveComponent> WeakComponent(Component);
+
+		ENQUEUE_RENDER_COMMAND(MyNinjaComparePainterCompositeTargetsRDG)(
+			[ReferencePainterResource, CandidatePainterResource, ReferenceCompositeResource,
+				CandidateCompositeResource, PainterExtent, CompositeExtent, FeatureLevel,
+				PainterTolerance, CompositeTolerance, WeakComponent,
+				SampleId](FRHICommandListImmediate& RHICmdList)
+			{
+				MyProcessCompletedOutputDiffs();
+				ReferencePainterResource->FlushDeferredResourceUpdate(RHICmdList);
+				CandidatePainterResource->FlushDeferredResourceUpdate(RHICmdList);
+				ReferenceCompositeResource->FlushDeferredResourceUpdate(RHICmdList);
+				CandidateCompositeResource->FlushDeferredResourceUpdate(RHICmdList);
+
+				FRDGBuilder GraphBuilder(RHICmdList);
+				{
+					RDG_EVENT_SCOPE(GraphBuilder, "FluidTest.NinjaLive.PainterValidation");
+					FRDGTextureRef ReferencePainterTexture = RegisterExternalTexture(
+						GraphBuilder,
+						ReferencePainterResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.ReferencePainter"));
+					FRDGTextureRef CandidatePainterTexture = RegisterExternalTexture(
+						GraphBuilder,
+						CandidatePainterResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.CandidatePainter"));
+					FRDGTextureRef ReferenceCompositeTexture = RegisterExternalTexture(
+						GraphBuilder,
+						ReferenceCompositeResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.ReferenceComposite"));
+					FRDGTextureRef CandidateCompositeTexture = RegisterExternalTexture(
+						GraphBuilder,
+						CandidateCompositeResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.CandidateComposite"));
+					MyAddTextureDiffPass(
+						GraphBuilder, ReferencePainterTexture, CandidatePainterTexture,
+						PainterExtent, PainterTolerance, FeatureLevel, WeakComponent,
+						SampleId, EMyNinjaRDGDiffTarget::Painter);
+					MyAddTextureDiffPass(
+						GraphBuilder, ReferenceCompositeTexture, CandidateCompositeTexture,
+						CompositeExtent, CompositeTolerance, FeatureLevel, WeakComponent,
+						SampleId, EMyNinjaRDGDiffTarget::Composite);
+					GraphBuilder.SetTextureAccessFinal(ReferencePainterTexture, ERHIAccess::SRVMask);
+					GraphBuilder.SetTextureAccessFinal(CandidatePainterTexture, ERHIAccess::SRVMask);
+					GraphBuilder.SetTextureAccessFinal(ReferenceCompositeTexture, ERHIAccess::SRVMask);
+					GraphBuilder.SetTextureAccessFinal(CandidateCompositeTexture, ERHIAccess::SRVMask);
+				}
+				GraphBuilder.Execute();
+			});
+	}
 }
 
 bool FMyNinjaFluidRenderPipeline::MyUseRDGOutput()
@@ -821,6 +1004,27 @@ bool FMyNinjaFluidRenderPipeline::MyShouldValidatePressure(uint64 FrameIndex)
 	}
 	const uint64 Interval = static_cast<uint64>(
 		FMath::Max(CVarMyNinjaPressureRDGValidationInterval.GetValueOnGameThread(), 1));
+	return FrameIndex % Interval == 0;
+}
+
+bool FMyNinjaFluidRenderPipeline::MyUseRDGPainter()
+{
+	return CVarMyNinjaPainterRenderPath.GetValueOnGameThread() != 0;
+}
+
+bool FMyNinjaFluidRenderPipeline::MyIsPainterValidationEnabled()
+{
+	return CVarMyNinjaPainterRDGValidation.GetValueOnGameThread() != 0;
+}
+
+bool FMyNinjaFluidRenderPipeline::MyShouldValidatePainter(uint64 FrameIndex)
+{
+	if (!MyIsPainterValidationEnabled())
+	{
+		return false;
+	}
+	const uint64 Interval = static_cast<uint64>(
+		FMath::Max(CVarMyNinjaPainterRDGValidationInterval.GetValueOnGameThread(), 1));
 	return FrameIndex % Interval == 0;
 }
 
@@ -1109,6 +1313,111 @@ void FMyNinjaFluidRenderPipeline::MyComparePressureTargets(
 		CandidatePressureTarget,
 		ReferencePressureTempTarget,
 		CandidatePressureTempTarget,
+		Component,
+		static_cast<int64>(SampleId));
+}
+
+void FMyNinjaFluidRenderPipeline::MyCopyPainterCompositeTargets(
+	UTextureRenderTarget2D* SourcePainterTarget,
+	UTextureRenderTarget2D* DestinationPainterTarget,
+	UTextureRenderTarget2D* SourceCompositeTarget,
+	UTextureRenderTarget2D* DestinationCompositeTarget)
+{
+	if (!IsValid(SourcePainterTarget) || !SourcePainterTarget->GetResource() ||
+		!IsValid(DestinationPainterTarget) || !DestinationPainterTarget->GetResource() ||
+		!IsValid(SourceCompositeTarget) || !SourceCompositeTarget->GetResource() ||
+		!IsValid(DestinationCompositeTarget) || !DestinationCompositeTarget->GetResource())
+	{
+		return;
+	}
+
+	MyCopyAdvectionDivergenceTargets(
+		SourcePainterTarget,
+		DestinationPainterTarget,
+		SourceCompositeTarget,
+		DestinationCompositeTarget);
+}
+
+void FMyNinjaFluidRenderPipeline::MyDrawPainterComposite(
+	UObject* WorldContextObject,
+	UTextureRenderTarget2D* PainterTarget,
+	UTextureRenderTarget2D* CompositeTarget,
+	UMaterialInterface* FirstOffsetMaterial,
+	UMaterialInterface* SecondOffsetMaterial,
+	UMaterialInterface* CompositeMaterial,
+	bool bUseRDG)
+{
+	if (!FApp::CanEverRender() || !IsValid(WorldContextObject))
+	{
+		return;
+	}
+
+	const bool bCanDraw =
+		IsValid(PainterTarget) && PainterTarget->GetResource() &&
+		IsValid(CompositeTarget) && CompositeTarget->GetResource() &&
+		IsValid(FirstOffsetMaterial) && IsValid(SecondOffsetMaterial);
+	if (!bCanDraw)
+	{
+		return;
+	}
+
+	if (bUseRDG)
+	{
+		if (UWorld* World = GEngine->GetWorldFromContextObject(
+			WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
+		{
+			MyDrawPainterCompositeRDG(
+				World,
+				PainterTarget,
+				CompositeTarget,
+				FirstOffsetMaterial,
+				SecondOffsetMaterial,
+				CompositeMaterial);
+			return;
+		}
+	}
+
+	UKismetRenderingLibrary::DrawMaterialToRenderTarget(
+		WorldContextObject, CompositeTarget, FirstOffsetMaterial);
+	UKismetRenderingLibrary::DrawMaterialToRenderTarget(
+		WorldContextObject, PainterTarget, SecondOffsetMaterial);
+	if (IsValid(CompositeMaterial))
+	{
+		UKismetRenderingLibrary::DrawMaterialToRenderTarget(
+			WorldContextObject, CompositeTarget, CompositeMaterial);
+	}
+}
+
+void FMyNinjaFluidRenderPipeline::MyComparePainterCompositeTargets(
+	UObject* WorldContextObject,
+	UTextureRenderTarget2D* ReferencePainterTarget,
+	UTextureRenderTarget2D* CandidatePainterTarget,
+	UTextureRenderTarget2D* ReferenceCompositeTarget,
+	UTextureRenderTarget2D* CandidateCompositeTarget,
+	UMyNinjaLiveComponent* Component,
+	uint64 SampleId)
+{
+	if (!FApp::CanEverRender() || !IsValid(WorldContextObject) ||
+		!IsValid(ReferencePainterTarget) || !ReferencePainterTarget->GetResource() ||
+		!IsValid(CandidatePainterTarget) || !CandidatePainterTarget->GetResource() ||
+		!IsValid(ReferenceCompositeTarget) || !ReferenceCompositeTarget->GetResource() ||
+		!IsValid(CandidateCompositeTarget) || !CandidateCompositeTarget->GetResource())
+	{
+		return;
+	}
+
+	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World)
+	{
+		return;
+	}
+
+	MyComparePainterCompositeTargetsRDG(
+		World,
+		ReferencePainterTarget,
+		CandidatePainterTarget,
+		ReferenceCompositeTarget,
+		CandidateCompositeTarget,
 		Component,
 		static_cast<int64>(SampleId));
 }

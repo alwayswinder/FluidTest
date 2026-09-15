@@ -198,6 +198,12 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
 	FMyNinjaRDGTextureDiffDiagnostics MyRDGPressureTempDiff;
 
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	FMyNinjaRDGTextureDiffDiagnostics MyRDGPainterDiff;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	FMyNinjaRDGTextureDiffDiagnostics MyRDGCompositeDiff;
+
 
 
 
@@ -1606,6 +1612,19 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> MyMIPressureCycle2Comparison = nullptr;
 	uint64 MyRDGPressureFrameIndex = 0;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextureRenderTarget2D> MyRDGPainterComparisonTarget = nullptr;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextureRenderTarget2D> MyRDGCompositeComparisonTarget = nullptr;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> MyMICollisionPainterOffsetFirstPass = nullptr;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> MyMICollisionPainterOffsetComparisonFirstPass = nullptr;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> MyMICollisionPainterOffsetComparisonSecondPass = nullptr;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> MyMICompositeAndGradientComparison = nullptr;
+	uint64 MyRDGPainterFrameIndex = 0;
 
 
 	FTimerHandle MyTimerCheckReady;

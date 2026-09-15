@@ -114,6 +114,7 @@
 - RDG 试迁移（2026-09-15）：`RT_Output` 已接入可切换的 RDG Canvas raster 路径，默认保留旧路径；支持异步 GPU Compute 差分和旧/新双向对照，2048×2048 双路径验证最大误差为 0、超阈值像素为 0；验证 readback 限制为最多 4 个并发请求，退出时安全回收，验证关闭后释放临时 RT。
 - RDG 核心管线第二阶段（2026-09-15）：`Advection → Divergence` 已合入同一个 RDG GraphBuilder，默认仍保留 Legacy；支持按帧旧/新双向 GPU 差分，验证前会复制真实目标历史以覆盖 Divergence 保留压力通道的写入语义；D3D12/SM6、2048×2048 下双向连续 117 帧最大误差为 0、超阈值像素为 0。
 - RDG 压力管线第三阶段（2026-09-15）：每轮 `PressureCycle1 → PressureCycle2` 已合入同一个 RDG GraphBuilder，默认仍保留 Legacy；独立压力开关和双 RT/MID ping-pong 对照支持双向 GPU 差分；RG16f 2048×2048 双向及 RG32f 半分辨率三轮迭代验证均为零误差。
+- RDG Painter 管线第四阶段（2026-09-15）：双缓冲 `Painter → Composite → Painter → Composite` 三次绘制已合入同一个 RDG GraphBuilder，首 pass 使用独立 MID 参数快照保留世界偏移时序；默认仍保留 Legacy，独立 Painter 开关和双 RT/MID 对照支持双向 GPU 差分；RGBA16f 2048×2048 双向连续 118 帧均为零误差。
 
 ## 常用操作
 

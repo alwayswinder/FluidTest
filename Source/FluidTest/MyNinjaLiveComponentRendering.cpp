@@ -118,6 +118,8 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 	const bool bValidateOutput = FMyNinjaFluidRenderPipeline::MyIsOutputValidationEnabled();
 	const bool bValidateCore = FMyNinjaFluidRenderPipeline::MyIsCoreValidationEnabled();
 	const bool bValidatePressure = FMyNinjaFluidRenderPipeline::MyIsPressureValidationEnabled();
+	const bool bUseRDGPainter = FMyNinjaFluidRenderPipeline::MyUseRDGPainter();
+	const bool bValidatePainter = FMyNinjaFluidRenderPipeline::MyIsPainterValidationEnabled();
 
 	auto FindRenderTarget = [this](const TCHAR* Name) -> UTextureRenderTarget2D*
 	{
@@ -149,6 +151,18 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 		MyRDGPressureTempComparisonTarget = nullptr;
 		MyMIPressureCycle1Comparison = nullptr;
 		MyMIPressureCycle2Comparison = nullptr;
+	}
+	if (!bValidatePainter)
+	{
+		MyRDGPainterComparisonTarget = nullptr;
+		MyRDGCompositeComparisonTarget = nullptr;
+		MyMICollisionPainterOffsetComparisonFirstPass = nullptr;
+		MyMICollisionPainterOffsetComparisonSecondPass = nullptr;
+		MyMICompositeAndGradientComparison = nullptr;
+		if (!bUseRDGPainter)
+		{
+			MyMICollisionPainterOffsetFirstPass = nullptr;
+		}
 	}
 	if (bOutputRequired)
 	{
@@ -264,29 +278,198 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 
 	if (MyEnablePainterDoubleBuffering && IsValid(MyMICollisionPainterOffset))
 	{
-		MyMICollisionPainterOffset->SetTextureParameterValue(TEXT("Texture"), PainterTarget);
-		Draw(CompositeTarget, MyMICollisionPainterOffset);
-		MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("WorldOffsetDeltaX"), 0.0f);
-		MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("WorldOffsetDeltaY"), 0.0f);
-		MyMICollisionPainterOffset->SetTextureParameterValue(TEXT("Texture"), CompositeTarget);
-
-		if (MySimplePainterMode)
+		if ((!bUseRDGPainter && !bValidatePainter) ||
+			!IsValid(PainterTarget) || !IsValid(CompositeTarget) ||
+			(!MySimplePainterMode && !IsValid(MyMICompositeAndGradient)))
 		{
-			for (UMaterialInstanceDynamic* PainterMaterial : { MyMICollisionPainterLine.Get(), MyMICollisionPainterDot.Get() })
+			MyMICollisionPainterOffset->SetTextureParameterValue(TEXT("Texture"), PainterTarget);
+			Draw(CompositeTarget, MyMICollisionPainterOffset);
+			MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("WorldOffsetDeltaX"), 0.0f);
+			MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("WorldOffsetDeltaY"), 0.0f);
+			MyMICollisionPainterOffset->SetTextureParameterValue(TEXT("Texture"), CompositeTarget);
+
+			if (MySimplePainterMode)
 			{
-				if (IsValid(PainterMaterial))
+				for (UMaterialInstanceDynamic* PainterMaterial : { MyMICollisionPainterLine.Get(), MyMICollisionPainterDot.Get() })
 				{
-					PainterMaterial->SetScalarParameterValue(TEXT("VeloMult"), static_cast<float>(MyVeloFromBrushMotion));
+					if (IsValid(PainterMaterial))
+					{
+						PainterMaterial->SetScalarParameterValue(TEXT("VeloMult"), static_cast<float>(MyVeloFromBrushMotion));
+					}
+				}
+				MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("DensityTxtScale"), static_cast<float>(MyDensityTxtScale));
+				MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("DensityTxtMult"), static_cast<float>(MyDensityTxtMult));
+			}
+
+			Draw(PainterTarget, MyMICollisionPainterOffset);
+			if (!MySimplePainterMode)
+			{
+				Draw(CompositeTarget, MyMICompositeAndGradient);
+			}
+		}
+		else
+		{
+			auto EnsureComparisonTarget = [this](
+				TObjectPtr<UTextureRenderTarget2D>& ComparisonTarget,
+				UTextureRenderTarget2D* SourceTarget)
+			{
+				if (!IsValid(ComparisonTarget) ||
+					ComparisonTarget->SizeX != SourceTarget->SizeX ||
+					ComparisonTarget->SizeY != SourceTarget->SizeY ||
+					ComparisonTarget->RenderTargetFormat != SourceTarget->RenderTargetFormat)
+				{
+					ComparisonTarget = UMyNinjaLiveFunctions::MyCreateRenderTarget(
+						this,
+						SourceTarget->SizeX,
+						SourceTarget->SizeY,
+						SourceTarget->RenderTargetFormat,
+						MySimAreaClamp,
+						SourceTarget->LODGroup,
+						SourceTarget->Filter);
+				}
+			};
+			auto EnsureComparisonMaterial = [this](
+				TObjectPtr<UMaterialInstanceDynamic>& ComparisonMaterial,
+				UMaterialInstanceDynamic* SourceMaterial)
+			{
+				UMaterialInterface* ParentMaterial = IsValid(SourceMaterial->Parent)
+					? SourceMaterial->Parent.Get()
+					: SourceMaterial;
+				if (!IsValid(ComparisonMaterial) || ComparisonMaterial->Parent != ParentMaterial)
+				{
+					ComparisonMaterial = UMaterialInstanceDynamic::Create(ParentMaterial, this);
+				}
+			};
+
+			EnsureComparisonMaterial(MyMICollisionPainterOffsetFirstPass, MyMICollisionPainterOffset);
+			const uint64 PainterFrameIndex = MyRDGPainterFrameIndex++;
+			bool bValidatePainterFrame =
+				FMyNinjaFluidRenderPipeline::MyShouldValidatePainter(PainterFrameIndex) &&
+				IsValid(PainterTarget) && IsValid(CompositeTarget) &&
+				(MySimplePainterMode || IsValid(MyMICompositeAndGradient));
+			if (bValidatePainterFrame)
+			{
+				EnsureComparisonTarget(MyRDGPainterComparisonTarget, PainterTarget);
+				EnsureComparisonTarget(MyRDGCompositeComparisonTarget, CompositeTarget);
+				EnsureComparisonMaterial(
+					MyMICollisionPainterOffsetComparisonFirstPass, MyMICollisionPainterOffset);
+				EnsureComparisonMaterial(
+					MyMICollisionPainterOffsetComparisonSecondPass, MyMICollisionPainterOffset);
+				if (!MySimplePainterMode)
+				{
+					EnsureComparisonMaterial(
+						MyMICompositeAndGradientComparison, MyMICompositeAndGradient);
+				}
+				bValidatePainterFrame =
+					IsValid(MyRDGPainterComparisonTarget) &&
+					IsValid(MyRDGCompositeComparisonTarget) &&
+					IsValid(MyMICollisionPainterOffsetComparisonFirstPass) &&
+					IsValid(MyMICollisionPainterOffsetComparisonSecondPass) &&
+					(MySimplePainterMode || IsValid(MyMICompositeAndGradientComparison));
+				if (bValidatePainterFrame)
+				{
+					FMyNinjaFluidRenderPipeline::MyCopyPainterCompositeTargets(
+						PainterTarget,
+						MyRDGPainterComparisonTarget,
+						CompositeTarget,
+						MyRDGCompositeComparisonTarget);
 				}
 			}
-			MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("DensityTxtScale"), static_cast<float>(MyDensityTxtScale));
-			MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("DensityTxtMult"), static_cast<float>(MyDensityTxtMult));
-		}
 
-		Draw(PainterTarget, MyMICollisionPainterOffset);
-		if (!MySimplePainterMode)
-		{
-			Draw(CompositeTarget, MyMICompositeAndGradient);
+			if (!IsValid(MyMICollisionPainterOffsetFirstPass))
+			{
+				MyMICollisionPainterOffset->SetTextureParameterValue(TEXT("Texture"), PainterTarget);
+				Draw(CompositeTarget, MyMICollisionPainterOffset);
+				MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("WorldOffsetDeltaX"), 0.0f);
+				MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("WorldOffsetDeltaY"), 0.0f);
+				MyMICollisionPainterOffset->SetTextureParameterValue(TEXT("Texture"), CompositeTarget);
+				if (MySimplePainterMode)
+				{
+					for (UMaterialInstanceDynamic* PainterMaterial : { MyMICollisionPainterLine.Get(), MyMICollisionPainterDot.Get() })
+					{
+						if (IsValid(PainterMaterial))
+						{
+							PainterMaterial->SetScalarParameterValue(TEXT("VeloMult"), static_cast<float>(MyVeloFromBrushMotion));
+						}
+					}
+					MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("DensityTxtScale"), static_cast<float>(MyDensityTxtScale));
+					MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("DensityTxtMult"), static_cast<float>(MyDensityTxtMult));
+				}
+				Draw(PainterTarget, MyMICollisionPainterOffset);
+				if (!MySimplePainterMode)
+				{
+					Draw(CompositeTarget, MyMICompositeAndGradient);
+				}
+			}
+			else
+			{
+				MyMICollisionPainterOffsetFirstPass->CopyParameterOverrides(MyMICollisionPainterOffset);
+				MyMICollisionPainterOffsetFirstPass->SetTextureParameterValue(TEXT("Texture"), PainterTarget);
+				if (bValidatePainterFrame)
+				{
+					MyMICollisionPainterOffsetComparisonFirstPass->CopyParameterOverrides(
+						MyMICollisionPainterOffsetFirstPass);
+					MyMICollisionPainterOffsetComparisonFirstPass->SetTextureParameterValue(
+						TEXT("Texture"), MyRDGPainterComparisonTarget);
+				}
+
+				MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("WorldOffsetDeltaX"), 0.0f);
+				MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("WorldOffsetDeltaY"), 0.0f);
+				MyMICollisionPainterOffset->SetTextureParameterValue(TEXT("Texture"), CompositeTarget);
+				if (MySimplePainterMode)
+				{
+					for (UMaterialInstanceDynamic* PainterMaterial : { MyMICollisionPainterLine.Get(), MyMICollisionPainterDot.Get() })
+					{
+						if (IsValid(PainterMaterial))
+						{
+							PainterMaterial->SetScalarParameterValue(TEXT("VeloMult"), static_cast<float>(MyVeloFromBrushMotion));
+						}
+					}
+					MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("DensityTxtScale"), static_cast<float>(MyDensityTxtScale));
+					MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("DensityTxtMult"), static_cast<float>(MyDensityTxtMult));
+				}
+				if (bValidatePainterFrame)
+				{
+					MyMICollisionPainterOffsetComparisonSecondPass->CopyParameterOverrides(
+						MyMICollisionPainterOffset);
+					MyMICollisionPainterOffsetComparisonSecondPass->SetTextureParameterValue(
+						TEXT("Texture"), MyRDGCompositeComparisonTarget);
+					if (!MySimplePainterMode)
+					{
+						MyMICompositeAndGradientComparison->CopyParameterOverrides(MyMICompositeAndGradient);
+						MyMICompositeAndGradientComparison->SetTextureParameterValue(
+							TEXT("VeloPainter"), MyRDGPainterComparisonTarget);
+					}
+				}
+
+				FMyNinjaFluidRenderPipeline::MyDrawPainterComposite(
+					this,
+					PainterTarget,
+					CompositeTarget,
+					MyMICollisionPainterOffsetFirstPass,
+					MyMICollisionPainterOffset,
+					MySimplePainterMode ? nullptr : MyMICompositeAndGradient.Get(),
+					bUseRDGPainter);
+				if (bValidatePainterFrame)
+				{
+					FMyNinjaFluidRenderPipeline::MyDrawPainterComposite(
+						this,
+						MyRDGPainterComparisonTarget,
+						MyRDGCompositeComparisonTarget,
+						MyMICollisionPainterOffsetComparisonFirstPass,
+						MyMICollisionPainterOffsetComparisonSecondPass,
+						MySimplePainterMode ? nullptr : MyMICompositeAndGradientComparison.Get(),
+						!bUseRDGPainter);
+					FMyNinjaFluidRenderPipeline::MyComparePainterCompositeTargets(
+						this,
+						bUseRDGPainter ? MyRDGPainterComparisonTarget.Get() : PainterTarget,
+						bUseRDGPainter ? PainterTarget : MyRDGPainterComparisonTarget.Get(),
+						bUseRDGPainter ? MyRDGCompositeComparisonTarget.Get() : CompositeTarget,
+						bUseRDGPainter ? CompositeTarget : MyRDGCompositeComparisonTarget.Get(),
+						this,
+						PainterFrameIndex);
+				}
+			}
 		}
 	}
 	else if (!MySimplePainterMode)
@@ -576,6 +759,14 @@ void UMyNinjaLiveComponent::MyApplyRDGCoreDiffResult(
 	case EMyNinjaRDGDiffTarget::PressureTemp:
 		Diagnostics = &MyRDGPressureTempDiff;
 		TargetName = TEXT("PressureTemp");
+		break;
+	case EMyNinjaRDGDiffTarget::Painter:
+		Diagnostics = &MyRDGPainterDiff;
+		TargetName = TEXT("Painter");
+		break;
+	case EMyNinjaRDGDiffTarget::Composite:
+		Diagnostics = &MyRDGCompositeDiff;
+		TargetName = TEXT("Composite");
 		break;
 	default:
 		return;
@@ -1080,6 +1271,13 @@ void UMyNinjaLiveComponent::MyCreateOrAcquireRenderTargets()
 	MyMIPressureCycle1Comparison = nullptr;
 	MyMIPressureCycle2Comparison = nullptr;
 	MyRDGPressureFrameIndex = 0;
+	MyRDGPainterComparisonTarget = nullptr;
+	MyRDGCompositeComparisonTarget = nullptr;
+	MyMICollisionPainterOffsetFirstPass = nullptr;
+	MyMICollisionPainterOffsetComparisonFirstPass = nullptr;
+	MyMICollisionPainterOffsetComparisonSecondPass = nullptr;
+	MyMICompositeAndGradientComparison = nullptr;
+	MyRDGPainterFrameIndex = 0;
 	MyMapLengthTmp = MyRenderTargetsMap.Num();
 
 	const int32 FullWidth = FMath::Max(1, MyResolutionX);
@@ -1157,6 +1355,10 @@ void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
 	MyDivergenceScalarParameterIndices.Reset();
 	MyMIPressureCycle1Comparison = nullptr;
 	MyMIPressureCycle2Comparison = nullptr;
+	MyMICollisionPainterOffsetFirstPass = nullptr;
+	MyMICollisionPainterOffsetComparisonFirstPass = nullptr;
+	MyMICollisionPainterOffsetComparisonSecondPass = nullptr;
+	MyMICompositeAndGradientComparison = nullptr;
 
 	auto CreateMaterialAt = [this](int32 MaterialIndex) -> UMaterialInstanceDynamic*
 	{
