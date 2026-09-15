@@ -1,4 +1,4 @@
-// MyNinjaLiveComponentRendering.cpp — RenderTarget、材质与 Niagara
+
 
 #include "MyNinjaLiveComponent.h"
 
@@ -81,7 +81,7 @@ void UMyNinjaLiveComponent::MySetAdditionalFluidsimParams()
 
 void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exec)
 {
-	// 简单画笔仅触发 PainterV2Exec；非简单画笔在压力循环完成后还会触发 ThenExec。
+
 	ThenExec = false;
 	PainterV2Exec = true;
 
@@ -97,11 +97,18 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 			UKismetRenderingLibrary::DrawMaterialToRenderTarget(this, Target, Material);
 		}
 	};
+	UTextureRenderTarget2D* const CompositeTarget = FindRenderTarget(TEXT("RT_Composite"));
+	UTextureRenderTarget2D* const AdvectionTarget = FindRenderTarget(TEXT("RT_Advection"));
+	UTextureRenderTarget2D* const PainterTarget = FindRenderTarget(TEXT("RT_Painter"));
+	UTextureRenderTarget2D* const PressureTarget = FindRenderTarget(TEXT("RT_PressureDivergence"));
+	UTextureRenderTarget2D* const PressureTempTarget = FindRenderTarget(TEXT("RT_PressureDivergenceTemp"));
+	UTextureRenderTarget2D* const DensityInputTarget = FindRenderTarget(TEXT("RT_DensityInputMaterial"));
+	UTextureRenderTarget2D* const OutputTarget = FindRenderTarget(TEXT("RT_Output"));
 
-	// 输入材质绘制在原图中发生于两个执行序列之前。
+
 	if (MyUseInputMaterials && MyInputMaterials.IsValidIndex(MyInputMaterialSelected))
 	{
-		Draw(FindRenderTarget(TEXT("RT_DensityInputMaterial")), MyInputMaterials[MyInputMaterialSelected]);
+		Draw(DensityInputTarget, MyInputMaterials[MyInputMaterialSelected]);
 	}
 
 	MyWorldSpaceOffset.Broadcast(MyTraceMeshPos);
@@ -134,7 +141,7 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 			}
 		};
 
-		// 主输出材质始终写入位置；Secondary/Tertiary 是 Select 节点额外写入的目标。
+
 		SetTraceMeshPosition(MyMIOutput);
 		if (MySecondaryMaterialsPresent)
 		{
@@ -177,13 +184,11 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 
 	if (MyEnablePainterDoubleBuffering && IsValid(MyMICollisionPainterOffset))
 	{
-		UTextureRenderTarget2D* Painter = FindRenderTarget(TEXT("RT_Painter"));
-		UTextureRenderTarget2D* Composite = FindRenderTarget(TEXT("RT_Composite"));
-		MyMICollisionPainterOffset->SetTextureParameterValue(TEXT("Texture"), Painter);
-		Draw(Composite, MyMICollisionPainterOffset);
+		MyMICollisionPainterOffset->SetTextureParameterValue(TEXT("Texture"), PainterTarget);
+		Draw(CompositeTarget, MyMICollisionPainterOffset);
 		MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("WorldOffsetDeltaX"), 0.0f);
 		MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("WorldOffsetDeltaY"), 0.0f);
-		MyMICollisionPainterOffset->SetTextureParameterValue(TEXT("Texture"), Composite);
+		MyMICollisionPainterOffset->SetTextureParameterValue(TEXT("Texture"), CompositeTarget);
 
 		if (MySimplePainterMode)
 		{
@@ -198,27 +203,27 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 			MyMICollisionPainterOffset->SetScalarParameterValue(TEXT("DensityTxtMult"), static_cast<float>(MyDensityTxtMult));
 		}
 
-		Draw(Painter, MyMICollisionPainterOffset);
+		Draw(PainterTarget, MyMICollisionPainterOffset);
 		if (!MySimplePainterMode)
 		{
-			Draw(Composite, MyMICompositeAndGradient);
+			Draw(CompositeTarget, MyMICompositeAndGradient);
 		}
 	}
 	else if (!MySimplePainterMode)
 	{
-		Draw(FindRenderTarget(TEXT("RT_Composite")), MyMICompositeAndGradient);
+		Draw(CompositeTarget, MyMICompositeAndGradient);
 	}
 
-	// 原图在压力求解前输出第一缓冲；简单画笔模式到此只会走 PainterV2Exec。
+
 	if (MyMake1stOutputAvailableFor2ndOutput || MyMake1stOutputAvailableForNiagara)
 	{
-		Draw(FindRenderTarget(TEXT("RT_Output")), MyMIOutput);
+		Draw(OutputTarget, MyMIOutput);
 	}
 
 	if (!MySimplePainterMode)
 	{
-		Draw(FindRenderTarget(TEXT("RT_Advection")), MyMIAdvection);
-		Draw(FindRenderTarget(TEXT("RT_PressureDivergence")), MyMIDivergence);
+		Draw(AdvectionTarget, MyMIAdvection);
+		Draw(PressureTarget, MyMIDivergence);
 
 		const int32 Solver1Iterations = MyLOD1ReduceSimQuality
 			? FMath::Min(MyFluidSolver1Iterations, MyPressureSolver1MaxIterations)
@@ -239,7 +244,7 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 				}
 			}
 
-			Draw(FindRenderTarget(TEXT("RT_PressureDivergenceTemp")), MyMIPressureCycle1);
+			Draw(PressureTempTarget, MyMIPressureCycle1);
 			if (IsValid(MyMIPressureCycle1))
 			{
 				MyMIPressureCycle1->SetScalarParameterValue(TEXT("KernelMult"), static_cast<float>(KernelMultiplier));
@@ -253,7 +258,7 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 				MyMIPressureCycle2->SetScalarParameterValue(TEXT("WorldOffsetDeltaX"), 0.0f);
 				MyMIPressureCycle2->SetScalarParameterValue(TEXT("WorldOffsetDeltaY"), 0.0f);
 			}
-			Draw(FindRenderTarget(TEXT("RT_PressureDivergence")), MyMIPressureCycle2);
+			Draw(PressureTarget, MyMIPressureCycle2);
 			if (IsValid(MyMIPressureCycle2))
 			{
 				MyMIPressureCycle2->SetScalarParameterValue(TEXT("KernelMult"), static_cast<float>(KernelMultiplier));
@@ -268,7 +273,7 @@ void UMyNinjaLiveComponent::MyFluidCoreStep()
 {
 	MySetPosVelocityScaleArraysToPainterV2();
 
-	// IfThenElse_16：简单画笔模式且未启用双缓冲时 then 分支无连接，直接结束。
+
 	if (MySimplePainterMode && !MyEnablePainterDoubleBuffering)
 	{
 		return;
@@ -280,21 +285,21 @@ void UMyNinjaLiveComponent::MyFluidCoreStep()
 	bool PainterV2Exec = false;
 	MyCoreFluidsimOPs(ThenExec, PainterV2Exec);
 
-	// ExecutionSequence_1 的 then_0：非简单画笔压力循环完成后补充附加流体参数。
+
 	if (ThenExec)
 	{
 		MySetAdditionalFluidsimParams();
 
-		// ExecutionSequence_25 的 then_0：光线追踪开启时执行光照处理。
+
 		if (MyEnableRayMarching)
 		{
 			MyRaymarchBasedLightingOPs();
 		}
-		// ExecutionSequence_25 的 then_1：无条件绘制内部 RT 到外部 RT。
+
 		MyDrawInternalRenderTargetToExternal();
 	}
 
-	// ExecutionSequence_1 的 then_1：Painter v2 模式下同步标量参数到 Niagara。
+
 	if (PainterV2Exec)
 	{
 		MyForwardScalarParamsToNiagara();
@@ -304,8 +309,17 @@ void UMyNinjaLiveComponent::MyFluidCoreStep()
 void UMyNinjaLiveComponent::MyInitPainterV2()
 {
 	MyDestroyPainterV2();
+	MyPainterScalarParameterInfos.Reset();
+	MyLastForwardedPainterScalarValues.Reset();
+	bMyPainterScalarParameterCacheInitialized = false;
+	MyLastSentPositionArray.Reset();
+	MyLastSentLastPositionArray.Reset();
+	MyLastSentVelocityArray.Reset();
+	MyLastSentBrushSizeArray.Reset();
+	bMyPainterArraysSent = false;
+	bMyLastSentPosInterpolValid = false;
 
-	// 不支持 Painter v2 的配置会回退到常规追踪流程。
+
 	if (!MyUsePAINTER_V2_ToTrackObjects || MySingleTargetMode_LEGACY)
 	{
 		MyUsePAINTER_V2_ToTrackObjects = false;
@@ -313,7 +327,7 @@ void UMyNinjaLiveComponent::MyInitPainterV2()
 	}
 
 	const int32 SystemIndex = MyPV2_Connect_TrackpointsWithLines ? 1 : 0;
-	// 系统资源按“是否连接追踪点”选择，缺失资源时禁止继续创建空组件。
+
 	if (!MyCoreNiagaraSystems.IsValidIndex(SystemIndex) || !IsValid(MyCoreNiagaraSystems[SystemIndex]))
 	{
 		MyUsePAINTER_V2_ToTrackObjects = false;
@@ -327,7 +341,7 @@ void UMyNinjaLiveComponent::MyInitPainterV2()
 		return;
 	}
 
-	// 前一轮实例已清理；每次初始化创建独立 Niagara 实例，避免运行时参数残留。
+
 	MyNiagaraBasedPainter = NewObject<UNiagaraComponent>(OwnerActor, UNiagaraComponent::StaticClass(), NAME_None);
 	if (!IsValid(MyNiagaraBasedPainter))
 	{
@@ -342,18 +356,18 @@ void UMyNinjaLiveComponent::MyInitPainterV2()
 	MyNiagaraBasedPainter->RegisterComponent();
 	MyNiagaraBasedPainter->SetAsset(MyCoreNiagaraSystems[SystemIndex], false);
 
-	// 输出参数声明为 RenderTarget 类型，必须使用对应 Niagara 数据接口写入。
+
 	const TObjectPtr<UTextureRenderTarget2D>* PainterTarget = MyRenderTargetsMap.Find(TEXT("RT_Painter"));
 	UTextureRenderTarget2D* PainterRenderTarget = PainterTarget ? PainterTarget->Get() : nullptr;
 	MyNiagaraBasedPainter->SetVariableTextureRenderTarget(TEXT("User.PaintbufferOutput"), PainterRenderTarget);
-	// 初始化阶段关闭位置插值，待线条绘制冷却后再恢复最终配置。
+
 	MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), false);
-	// 两条初始化路径都会执行这组共享参数；此处先完成首帧配置。
+
 	MyApplyPainterV2SharedParameters();
 
 	if (UWorld* World = GetWorld())
 	{
-		// 输入缓冲与冷却后的最终参数分别独立调度，互不等待。
+
 		World->GetTimerManager().ClearTimer(MyNiagaraPainterV2SafetyTimer);
 		if (MyNiagaraVariableSetSafetyDelay > 0.0)
 		{
@@ -379,7 +393,7 @@ void UMyNinjaLiveComponent::MyInitPainterV2()
 	}
 	else
 	{
-		// 没有 World 时不能调度 latent 分支，保留立即参数链以便编辑器预览。
+
 		MySetPainterV2PaintbufferInput();
 		MyFinalizePainterV2Setup();
 	}
@@ -416,23 +430,30 @@ void UMyNinjaLiveComponent::MyForwardScalarParamsToNiagara()
 		return;
 	}
 
-	TArray<FMaterialParameterInfo> ParameterInfos;
-	TArray<FGuid> ParameterIds;
-	MyMICollisionPainterDot->GetAllScalarParameterInfo(ParameterInfos, ParameterIds);
-
-	for (const FMaterialParameterInfo& ParameterInfo : ParameterInfos)
+	if (!bMyPainterScalarParameterCacheInitialized)
 	{
-		// 蓝图仅排除 BrushSize；该值由 Painter v2 自身的轨迹数据驱动。
-		if (ParameterInfo.Name == TEXT("BrushSize"))
+		TArray<FGuid> ParameterIds;
+		MyMICollisionPainterDot->GetAllScalarParameterInfo(MyPainterScalarParameterInfos, ParameterIds);
+		MyPainterScalarParameterInfos.RemoveAll([](const FMaterialParameterInfo& ParameterInfo)
 		{
-			continue;
-		}
+			return ParameterInfo.Name == TEXT("BrushSize");
+		});
+		bMyPainterScalarParameterCacheInitialized = true;
+	}
 
+	for (const FMaterialParameterInfo& ParameterInfo : MyPainterScalarParameterInfos)
+	{
 		float ParameterValue = 0.0f;
 		if (MyMICollisionPainterDot->GetScalarParameterValue(
 			FHashedMaterialParameterInfo(ParameterInfo), ParameterValue))
 		{
+			const float* LastValue = MyLastForwardedPainterScalarValues.Find(ParameterInfo.Name);
+			if (LastValue && *LastValue == ParameterValue)
+			{
+				continue;
+			}
 			MyNiagaraBasedPainter->SetVariableFloat(ParameterInfo.Name, ParameterValue);
+			MyLastForwardedPainterScalarValues.Add(ParameterInfo.Name, ParameterValue);
 		}
 	}
 }
@@ -444,6 +465,7 @@ void UMyNinjaLiveComponent::MySetPosVelocityScaleArraysToPainterV2()
 		return;
 	}
 
+	const bool bForceUpload = !bMyPainterArraysSent;
 	if (MyPV2_Connect_TrackpointsWithLines)
 	{
 		const bool bPositionArraysMatch = MyLastPositionArray.Num() == MyPositionArray.Num();
@@ -452,10 +474,19 @@ void UMyNinjaLiveComponent::MySetPosVelocityScaleArraysToPainterV2()
 			(MyQuantizerStepSize < 1 || bTracePositionUnchanged) && bPositionArraysMatch;
 		const bool bEnableInterpolation = bCanInterpolate && MyPV2_Interpolation &&
 			MyMaxSamplingFPS == MySamplingFPS && MyHitValid;
-		MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), bEnableInterpolation);
+		if (!bMyLastSentPosInterpolValid || bMyLastSentPosInterpol != bEnableInterpolation)
+		{
+			MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), bEnableInterpolation);
+			bMyLastSentPosInterpol = bEnableInterpolation;
+			bMyLastSentPosInterpolValid = true;
+		}
 
-		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
-			MyNiagaraBasedPainter, TEXT("User.PositionArray2D"), MyPositionArray);
+		if (bForceUpload || MyLastSentPositionArray != MyPositionArray)
+		{
+			UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
+				MyNiagaraBasedPainter, TEXT("User.PositionArray2D"), MyPositionArray);
+			MyLastSentPositionArray = MyPositionArray;
+		}
 
 		if (MyPositionArray.IsEmpty())
 		{
@@ -473,21 +504,43 @@ void UMyNinjaLiveComponent::MySetPosVelocityScaleArraysToPainterV2()
 			MyLastPositionArray = MyPositionArray;
 		}
 
-		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
-			MyNiagaraBasedPainter, TEXT("User.LastPositionArray2D"), MyLastPositionArray);
+		if (bForceUpload || MyLastSentLastPositionArray != MyLastPositionArray)
+		{
+			UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
+				MyNiagaraBasedPainter, TEXT("User.LastPositionArray2D"), MyLastPositionArray);
+			MyLastSentLastPositionArray = MyLastPositionArray;
+		}
 	}
 	else
 	{
-		MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), false);
-		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
-			MyNiagaraBasedPainter, TEXT("User.PositionArray2D"), MyPositionArray);
+		if (!bMyLastSentPosInterpolValid || bMyLastSentPosInterpol)
+		{
+			MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), false);
+			bMyLastSentPosInterpol = false;
+			bMyLastSentPosInterpolValid = true;
+		}
+		if (bForceUpload || MyLastSentPositionArray != MyPositionArray)
+		{
+			UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector2D(
+				MyNiagaraBasedPainter, TEXT("User.PositionArray2D"), MyPositionArray);
+			MyLastSentPositionArray = MyPositionArray;
+		}
 	}
 
-	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayColor(
-		MyNiagaraBasedPainter, TEXT("User.VelocityArray"), MyVelocityArray);
+	if (bForceUpload || MyLastSentVelocityArray != MyVelocityArray)
+	{
+		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayColor(
+			MyNiagaraBasedPainter, TEXT("User.VelocityArray"), MyVelocityArray);
+		MyLastSentVelocityArray = MyVelocityArray;
+	}
 
-	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayFloat(
-		MyNiagaraBasedPainter, TEXT("User.BrushSizeArray"), MyBrushSizeArray);
+	if (bForceUpload || MyLastSentBrushSizeArray != MyBrushSizeArray)
+	{
+		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayFloat(
+			MyNiagaraBasedPainter, TEXT("User.BrushSizeArray"), MyBrushSizeArray);
+		MyLastSentBrushSizeArray = MyBrushSizeArray;
+	}
+	bMyPainterArraysSent = true;
 }
 
 void UMyNinjaLiveComponent::MyClearPosVelocityScaleArraysPainterV2()
@@ -521,7 +574,7 @@ void UMyNinjaLiveComponent::MyClearPosVelocityScaleArraysPainterV2()
 
 void UMyNinjaLiveComponent::MyBuildBrushPositionArray()
 {
-	// Painter v2 且非单目标模式：把当前画笔位置追加到位置数组。
+
 	if (MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY)
 	{
 		MyPositionArray.Add(FVector2D(MyPosition1_2D.R, MyPosition1_2D.G));
@@ -530,7 +583,7 @@ void UMyNinjaLiveComponent::MyBuildBrushPositionArray()
 
 void UMyNinjaLiveComponent::MyFinalDealRTAndBrush()
 {
-	// 条件为 false（非 Painter v2 追踪或旧版单目标模式）：先把点画笔材质绘制到 RT_Painter。
+
 	if (!(MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY))
 	{
 		const TObjectPtr<UTextureRenderTarget2D>* PainterRT = MyRenderTargetsMap.Find(TEXT("RT_Painter"));
@@ -540,7 +593,7 @@ void UMyNinjaLiveComponent::MyFinalDealRTAndBrush()
 		}
 	}
 
-	// 两条分支汇合：设置 Multitarget 参数为 1，再构建画笔位置数组。
+
 	if (IsValid(MyMICollisionPainterDot))
 	{
 		MyMICollisionPainterDot->SetScalarParameterValue(TEXT("Multitarget"), 1.0f);
@@ -555,7 +608,7 @@ void UMyNinjaLiveComponent::MyDrawInternalRenderTargetToExternal()
 		return;
 	}
 
-	// 蓝图 DoOnce：仅首轮校验数组配对与目标有效性，失败后 Gate 永久关闭。
+
 	if (!bMyExternalRenderTargetExportValidated)
 	{
 		bMyExternalRenderTargetExportValidated = true;
@@ -614,7 +667,7 @@ void UMyNinjaLiveComponent::MySetPainterV2PaintbufferInput()
 {
 	if (IsValid(MyNiagaraBasedPainter))
 	{
-		// 延后绑定输入缓冲，确保 Niagara 系统实例已经完成创建。
+
 		const TObjectPtr<UTextureRenderTarget2D>* PainterTarget = MyRenderTargetsMap.Find(TEXT("RT_Painter"));
 		MyNiagaraBasedPainter->SetVariableTexture(TEXT("User.PaintbufferInput"),
 			PainterTarget ? PainterTarget->Get() : nullptr);
@@ -629,7 +682,7 @@ void UMyNinjaLiveComponent::MyFinalizePainterV2Setup()
 	}
 
 	const bool bEnableInterpolation = MyPV2_Interpolation && MyMaxSamplingFPS == MySamplingFPS;
-	// 冷却结束后写入稳定状态，并在生成速度时启用对应 Niagara 分支。
+
 	MyNiagaraBasedPainter->SetVariableBool(TEXT("User.PosInterpol"), bEnableInterpolation);
 	MyNiagaraBasedPainter->SetVariableBool(TEXT("User.GenerateVelocity"), MyPV2_GenerateVelocity);
 	MyApplyPainterV2SharedParameters();
@@ -642,7 +695,7 @@ void UMyNinjaLiveComponent::MyApplyPainterV2SharedParameters()
 		return;
 	}
 
-	// 以下参数定义 Painter v2 的采样空间、速度阈值和画笔强度。
+
 	MyNiagaraBasedPainter->SetVariableBool(TEXT("User.Quantizer"), MyQuantizerStepSize > 0);
 	MyNiagaraBasedPainter->SetVariableVec2(TEXT("User.SimResolution"),
 		FVector2D(static_cast<double>(MyResolutionX), static_cast<double>(MyResolutionY)));
@@ -654,17 +707,17 @@ void UMyNinjaLiveComponent::MyApplyPainterV2SharedParameters()
 		static_cast<float>(MyAdjustPainterV2BrushVeloNoise));
 	if (IsValid(MyPainterV2BrushVeloNoiseTexture))
 	{
-		// 没有有效噪声纹理时保留 Niagara 资源中的默认绑定。
+
 		MyNiagaraBasedPainter->SetVariableTexture(TEXT("User.BrushNoiseVeloTexture"), MyPainterV2BrushVeloNoiseTexture);
 	}
 	if (IsValid(MyTraceMeshComponent))
 	{
-		// TraceMesh 最大轴向缩放决定 Niagara 画笔的空间范围。
+
 		const FVector Scale = MyTraceMeshComponent->GetRelativeScale3D();
 		MyNiagaraBasedPainter->SetVariableFloat(TEXT("User.TraceMeshMaxExtent"), FMath::Max3(Scale.X, Scale.Y, Scale.Z));
 	}
 
-	// 新一轮 Painter 初始化不复用上一轮的追踪历史。
+
 	MyPositionArray.Reset();
 	MyLastPositionArray.Reset();
 	MyVelocityArray.Reset();
@@ -672,7 +725,7 @@ void UMyNinjaLiveComponent::MyApplyPainterV2SharedParameters()
 
 	if (MyForceMaxSamplingFPSToNiagara)
 	{
-		// Solo 模式使 Niagara 以流体模拟指定的采样频率独立更新。
+
 		MyNiagaraBasedPainter->SetForceSolo(true);
 		MyNiagaraBasedPainter->SetComponentTickInterval(1.0 / static_cast<double>(FMath::Max(MyMaxSamplingFPS, 1)));
 		MyNiagaraBasedPainter->ReinitializeSystem();
@@ -741,8 +794,7 @@ void UMyNinjaLiveComponent::MyCreateOrAcquireRenderTargets()
 		AddRenderTarget(MyRenderTargetsList[5], FullWidth, FullHeight, RTF_R8, false);
 	}
 
-	if (MyRenderTargetsMap.Num() == 6 &&
-		(MyMake1stOutputAvailableFor2ndOutput || MyMake1stOutputAvailableForNiagara))
+	if (MyMake1stOutputAvailableFor2ndOutput || MyMake1stOutputAvailableForNiagara)
 	{
 		const int32 OutputMultiplier = MyForce2xResolutionOutputBuffer ? 2 : 1;
 		const ETextureRenderTargetFormat OutputFormat = MyForce8bitOutputBuffer ? RTF_RGBA8 : RGBAFormat;
@@ -753,7 +805,7 @@ void UMyNinjaLiveComponent::MyCreateOrAcquireRenderTargets()
 
 void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
 {
-	// CoreSimMaterials 的索引由原蓝图固定定义；压力材质还取决于求解器与移动端翻转选项。
+
 	auto CreateMaterialAt = [this](int32 MaterialIndex) -> UMaterialInstanceDynamic*
 	{
 		if (!MyCoreSimMaterials.IsValidIndex(MaterialIndex) || !IsValid(MyCoreSimMaterials[MaterialIndex]))
@@ -767,8 +819,8 @@ void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
 		return CreateMaterialAt(DesktopIndex + (MyFlipRenderTargetsForMobile ? 1 : 0));
 	};
 
-	// 蓝图的 Simple Painter 分支只创建两个 Painter、Null 和 Painter Offset MID。
-	// 模拟的五个 MID 位于 If 的 false 分支，不能在此模式下提前创建。
+
+
 	if (!MySimplePainterMode)
 	{
 		MyMICompositeAndGradient = CreatePlatformMaterial(2);
@@ -811,7 +863,7 @@ void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
 
 	auto SetTexture = [](UMaterialInstanceDynamic* Material, FName Parameter, UTexture* Texture)
 	{
-		// 蓝图即使输入为空也会写入参数；跳过空纹理会意外保留旧 MID 的参数值。
+
 		if (IsValid(Material))
 		{
 			Material->SetTextureParameterValue(Parameter, Texture);
@@ -820,7 +872,7 @@ void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
 
 	if (!MySimplePainterMode)
 	{
-		// 按蓝图每个 MID 的参数名和 RT 连线绑定，不能按材质阶段泛化。
+
 		SetTexture(MyMICompositeAndGradient, TEXT("Texture"), Advection);
 		SetTexture(MyMICompositeAndGradient, TEXT("PressureTexture"), Pressure);
 		SetTexture(MyMICompositeAndGradient, TEXT("VeloPainter"), Painter);
@@ -832,7 +884,7 @@ void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
 		SetTexture(MyMICompositeAndGradient, TEXT("VeloInputTexture"), MyVelocityInput);
 		if (MyUseRenderTargetAsInput)
 		{
-			// 蓝图此处先 Cast To TextureRenderTarget2D；转换失败时不会执行 TextureAdd2 节点。
+
 			if (UTextureRenderTarget2D* InputRenderTarget = Cast<UTextureRenderTarget2D>(MyInputRenderTarget))
 			{
 				SetTexture(MyMICompositeAndGradient, TEXT("TextureAdd2"), InputRenderTarget);
@@ -845,7 +897,7 @@ void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
 		SetTexture(MyMICompositeAndGradient, TEXT("MaterialInput"),
 			IsValid(MyInputMediaPlayer) ? static_cast<UTexture*>(MyMediaTexture.Get()) : static_cast<UTexture*>(DensityInput));
 		SetTexture(MyMICompositeAndGradient, TEXT("CollisionMask"), MyCollisionMask);
-		// 蓝图只有在遮罩有效且不是默认遮罩时才写 true；不在此处回写 false。
+
 		if (IsValid(MyCollisionMask) &&
 			UKismetSystemLibrary::GetDisplayName(MyCollisionMask) != TEXT("T_maskframe_256"))
 		{
@@ -933,7 +985,7 @@ void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
 
 void UMyNinjaLiveComponent::MyCreateOutputMaterialAndSetItOnTargetsStep01()
 {
-	// 保持与蓝图相同的存在判定及循环次数计算。
+
 	MySecondaryMaterialsPresent = MySecondaryOutputMaterials.Num() != 0;
 	MyTertiaryMaterialsPresent = MyTertiaryOutputMaterials.Num() != 0;
 	MyMaterialCollectionPresent = IsValid(MySetInternalParamsToMaterialParamCollection);
@@ -1032,7 +1084,7 @@ void UMyNinjaLiveComponent::MyCreateOutputMaterialAndSetItOnTargetsStep02()
 
 void UMyNinjaLiveComponent::MyApplyOutputMaterialToTraceMesh()
 {
-	// 蓝图先按 DisableComponent 和 TraceMeshInvisible 选择 TraceMesh 的显示材质。
+
 	if (!IsValid(MyTraceMeshComponent))
 	{
 		return;
@@ -1080,7 +1132,7 @@ void UMyNinjaLiveComponent::MyApplyOutputMaterialsToTaggedActors()
 		UGameplayStatics::GetAllActorsWithTag(this, ActorTag, TargetActors);
 		if (!TargetActors.IsEmpty())
 		{
-			// 蓝图循环结束后使用此轮数组的最后一个 Actor 与当前索引设置体积云材质。
+
 			LastActor = TargetActors.Last();
 			LastMaterialIndex = Index;
 		}
@@ -1209,6 +1261,10 @@ void UMyNinjaLiveComponent::MyCreateOutputMaterialAndSetItOnTargetsStep03()
 
 void UMyNinjaLiveComponent::MyAfterCreateRT()
 {
+	MyNiagaraSystemsToDrive.Reset();
+	MyNiagaraSystemsPresent = false;
+	bMyExternalRenderTargetExportValidated = false;
+	bMyExternalRenderTargetExportGateOpen = false;
 	MyCreateDynamicMaterialInstances();
 	MyBuildTraceExcludeList();
 	MyManageContinuousInteractions();
@@ -1233,7 +1289,7 @@ void UMyNinjaLiveComponent::MyBuildTraceExcludeList()
 {
 	MyNinjaLiveTraceExclude.Reset();
 
-	// 原蓝图接口只标记 NinjaLive 自身；按 Owner 的生成类收集同类实例，避免加载蓝图接口资产。
+
 	AActor* Owner = GetOwner();
 	if (!IsValid(Owner))
 	{
@@ -1308,14 +1364,14 @@ void UMyNinjaLiveComponent::MyApplyPresetAndInputTextures()
 
 void UMyNinjaLiveComponent::MyUpdateCollisionMaskIsNonDefault()
 {
-	// 蓝图逻辑：遮罩有效且显示名不是默认 T_maskframe_256 时，视为自定义遮罩。
+
 	MyCollisionMaskIsNonDefault = IsValid(MyCollisionMask) &&
 		UKismetSystemLibrary::GetDisplayName(MyCollisionMask) != TEXT("T_maskframe_256");
 }
 
 void UMyNinjaLiveComponent::MyAlternativeInputsFedToCompositeDensityInput()
 {
-	// 场景捕捉优先写入密度输入 RT，并禁用输入材质分支。
+
 	if (IsValid(MyInputSceneCaptureCamera))
 	{
 		const TObjectPtr<UTextureRenderTarget2D>* DensityInputTarget =
@@ -1333,7 +1389,7 @@ void UMyNinjaLiveComponent::MyAlternativeInputsFedToCompositeDensityInput()
 		World->GetTimerManager().ClearTimer(MyInputMediaLoopTimer);
 	}
 
-	// 蓝图依次执行 SetMediaPlayer、OpenUrl、Play；缺少任一媒体对象时不启动该分支。
+
 	if (!IsValid(MyInputMediaPlayer) || !IsValid(MyMediaTexture) || !IsValid(MyInputMediaSource))
 	{
 		return;
@@ -1406,7 +1462,7 @@ void UMyNinjaLiveComponent::MyLoadVelocityInputTexture()
 
 void UMyNinjaLiveComponent::MyLoadDensityInputTexture()
 {
-	// 蓝图在 RenderTarget 输入模式下直接继续后续流程，不覆盖当前密度纹理。
+
 	if (MyUseRenderTargetAsInput)
 	{
 		return;

@@ -34,10 +34,23 @@ bool FMyNinjaLiveTempArraySlotsTest::RunTest(const FString& Parameters)
 
 	constexpr int32 ReleasedSlot = 17;
 	Component->MyAddToTempArray(ReleasedSlot, TEXT("TestBone"));
+	UStaticMeshComponent* DummyMesh = NewObject<UStaticMeshComponent>();
+	Component->MySkeletalMeshTempArrayPairs.Add(ReleasedSlot, DummyMesh);
 	Component->MyReleaseTempArraySlot(ReleasedSlot);
 	TestTrue(TEXT("释放后槽位应恢复为可用"), Component->MyListOfAvailableTempArrays[ReleasedSlot]);
 	TestTrue(TEXT("释放后槽位内容应被清空"), Component->MyGetTempArray(ReleasedSlot).IsEmpty());
+	TestFalse(TEXT("释放后必须删除对应组件映射"), Component->MySkeletalMeshTempArrayPairs.Contains(ReleasedSlot));
 	TestEqual(TEXT("再次申请应复用已释放槽位"), Component->MyAcquireTempArraySlot(), ReleasedSlot);
+
+	Component->MyAddToTempArray(ReleasedSlot, TEXT("ReplayBone"));
+	Component->MySkeletalMeshTempArrayPairs.Add(ReleasedSlot, DummyMesh);
+	Component->MyResetTempArraySlots();
+	TestTrue(TEXT("完整重置后组件映射必须为空"), Component->MySkeletalMeshTempArrayPairs.IsEmpty());
+	for (int32 Index = 0; Index < 40; ++Index)
+	{
+		TestTrue(TEXT("完整重置后全部槽位都应可用"), Component->MyListOfAvailableTempArrays[Index]);
+		TestTrue(TEXT("完整重置后全部槽位内容都应为空"), Component->MyGetTempArray(Index).IsEmpty());
+	}
 
 	return true;
 }

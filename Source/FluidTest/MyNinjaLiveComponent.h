@@ -1,5 +1,5 @@
-// MyNinjaLiveComponent.h — FluidNinjaLive 的 NinjaLiveComponent 蓝图对应的 C++ 父类（逐步迁移）
-// 命名规范：类/函数/变量加 My 前缀；蓝图父类修改在编辑器中进行，C++ 只提供父类骨架。
+
+
 
 #pragma once
 
@@ -10,6 +10,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialParameters.h"
 #include "MyNinjaFluidEnums.h"
 #include "Engine/SceneCapture2D.h"
 #include "TimerManager.h"
@@ -34,7 +35,7 @@ class USceneComponent;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FMyComponentRePlayEvent);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMyWorldSpaceOffsetEvent, FVector, TraceMeshPos);
 
-/** 驱动流体资源、求解阶段、输入追踪和 Painter 的运行时组件。 */
+
 UCLASS(Blueprintable, BlueprintType, ClassGroup = (FluidSim), meta = (BlueprintSpawnableComponent))
 class FLUIDTEST_API UMyNinjaLiveComponent : public UActorComponent
 {
@@ -43,424 +44,424 @@ class FLUIDTEST_API UMyNinjaLiveComponent : public UActorComponent
 public:
 	UMyNinjaLiveComponent();
 
-	/** TraceMesh 准备完成后可由 Owner 触发的重播事件。 */
+
 	UPROPERTY(BlueprintAssignable, Category = "FluidSim|Init")
 	FMyComponentRePlayEvent MyComponentRePlayEvent;
 
-	/** TraceMesh 世界位置变化时广播，对应 CoreFluidsimOPs 的 WorldSpaceOffset 委托。 */
+
 	UPROPERTY(BlueprintAssignable, Category = "FluidSim|Trace")
 	FMyWorldSpaceOffsetEvent MyWorldSpaceOffset;
 
-	/** TraceMesh 就绪后完成首次初始化与重播事件绑定。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
 	void MyCheckReady();
 
-	/** 执行 AfterReadyCheck 事件：刷新 LOD/画笔朝向与材质反馈参数，并按鼠标按下状态进入 MousePass 分支。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
 	void MyAfterReadyCheck();
 
-	/** 重置临时数据并按 Owner 设置重新初始化模拟。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
 	void MyRePlay();
 
-	/** 执行延迟 Tick；仅在碰撞计时器实际更新时返回 true。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	bool MyAfterTickDelay(double DeltaSeconds);
 
-	/** 根据鼠标与重叠状态更新当前画笔强度。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
 	void MyMuteBrush();
 
-	/** 空闲时达到画笔衰减阈值后，是否停止使用 Painter Canvas。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	bool MyStopUsingPainterCanvasWhenIdle = false;
 
-	/** 判断画笔是否已衰减至应停用 Painter Canvas 的时间阈值。 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
 	bool MyBrushFadeOutTimer() const;
 
-	/** 根据模拟区域尺寸限制世界位移引起的纹理偏移。 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Simulation")
 	FVector MyCorrectExtremes(FVector DeltaPos, FVector Scale, FVector Composite) const;
 
-	/** 根据 TraceMesh 位移更新模拟纹理偏移与相关动态材质参数。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyDynamicSimspeedAndWorldOffsetAdjustmentFinal();
 
-	/** 采样 TraceMesh 与父级位置，处理锁轴后更新模拟区域运动。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyDynamicSimspeedAndWorldOffsetAdjustment();
 
-	/** 将指定轴的位置还原为 TraceMesh 初始世界坐标。 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Trace")
 	FVector MyLockMovementOnGivenAxis(FVector Pos, EMyQuantizerAxisIgnore LockThisAxis) const;
 
-	/** 按量化锁轴或相机朝向屏蔽两组位置分量。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyKillFracOnGivenAxis(FVector Frac, FVector FracInit, EMyQuantizerAxisIgnore QuantizerIgnoresThisAxis,
 		FVector& FracOut, FVector& FracInitOut) const;
 
-	/** RenderTarget 映射表（string → RT） */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|RenderTarget")
 	TMap<FString, TObjectPtr<UTextureRenderTarget2D>> MyRenderTargetsMap;
 
-	/** RenderTarget 名称列表；由构造函数建立固定阶段顺序。 */
+
 	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "FluidSim|Runtime|RenderTarget")
 	TArray<FString> MyRenderTargetsList;
 
-	/** 模拟区域边界采样是否使用 Clamp 地址模式。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
 	bool MySimAreaClamp = false;
 
-	/** 强制输出缓冲使用 8 位格式。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
 	bool MyForce8bitOutputBuffer = false;
 
-	/** 简单 Painter 模式下强制 Painter 缓冲使用 8 位格式。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
 	bool MyForce8bitSimplePainterBuffers = false;
 
-	/** 输出缓冲是否使用两倍模拟分辨率。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
 	bool MyForce2xResolutionOutputBuffer = false;
 
-	/** 是否额外创建第二个输出缓冲。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
 	bool MyMake1stOutputAvailableFor2ndOutput = false;
 
-	/** 是否让第一个输出缓冲可供 Niagara 使用。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RT")
 	bool MyMake1stOutputAvailableForNiagara = false;
 
-	/** Map 长度临时值 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
 	int32 MyMapLengthTmp = 0;
 
-	// ------------------------------------------------------------------
-	// VelocityHandlerForSimArea 相关（模拟区域运动速度）
-	// ------------------------------------------------------------------
-	/** 模拟区域运动速度 */
+
+
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
 	double MyVeloFromSimAreaMotion = 0.0;
 
-	/** 模拟区域运动对画笔穿透强度的影响。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
 	double MySimAreaMotionEffectsBrushPuncture = 0.0;
 
-	/** TraceMesh 组件引用 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	TObjectPtr<UStaticMeshComponent> MyTraceMeshComponent = nullptr;
 
-	/** TraceMesh 父级当前位置 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	FVector MyTraceMeshParentPos = FVector::ZeroVector;
 
-	/** TraceMesh 父级上一帧位置 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	FVector MyTraceMeshParentLastPos = FVector::ZeroVector;
 
-	/** TraceMesh 的初始世界位置，用于锁定量化移动轴。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	FVector MyTraceMeshPosInitialWorld = FVector::ZeroVector;
 
-	/** TraceMesh 上一帧世界位置，用于计算本帧模拟区域位移。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	FVector MyTraceMeshLastPos = FVector::ZeroVector;
 
-	/** 本帧 TraceMesh 的世界空间位移。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	FVector MyTraceMeshDeltaPos = FVector::ZeroVector;
 
-	/** 首次采样的 TraceMesh 相对父级位置与小数部分。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	FVector MyTraceMeshPosInitialLocal = FVector::ZeroVector;
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	FVector MyTraceMeshPosInitialFractionalPart = FVector::ZeroVector;
 
-	/** 是否已经完成动态模拟区域位置的首次采样。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	bool MyDynamicSimPositionInitialized = false;
 
-	/** 量化时保持连续移动的小数分量所忽略的轴。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Quantizer")
 	EMyQuantizerAxisIgnore MyMovementNotQuantizedToStepsOnAxis = EMyQuantizerAxisIgnore::None;
 
-	/** 首次采样时可将 TraceMesh 固定到指定的世界 Z 坐标。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	bool MyForceTraceMeshToCustomVerticalPos = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace", meta = (EditCondition = "MyForceTraceMeshToCustomVerticalPos"))
 	double MyForceTraceMeshVerticalPosition = 0.0;
 
-	/** 非单目标模式下写入 TexelSizeMult 前的蓝图延迟。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	double MySimSpeedAdjustmentLatency = 0.0;
 
-	/** 旧版单目标模式对速度值的影响系数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	double MySingleTargetModeSpeedInfluenceFactor_LEGACY = 0.0;
 
-	// ------------------------------------------------------------------
-	// Enable OWNER Input 相关（用户输入方式）
-	// ------------------------------------------------------------------
-	/** 用户输入方式（UserInput_Enum，默认无输入） */
+
+
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Input")
 	EMyUserInput MyUserInputBasedInteraction = EMyUserInput::None;
 
-	/** 当前输入方式是否支持单点输入。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Input")
 	bool MySingleInput = false;
 
-	/** 当前输入方式是否支持触摸输入。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Input")
 	bool MyTouch = false;
 
-	/** 初始化用户输入类型对应的单点与触摸标记。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Input")
 	void MyCheckTouchOptions();
 
-	/** 是否显示鼠标光标 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Input")
 	bool MyShowMouseCursor = true;
 
-	// ------------------------------------------------------------------
-	// ManageContinuousInteractions 相关（Owner 组件与骨骼筛选）
-	// ------------------------------------------------------------------
-	/** 是否持续使用 Owner 上满足筛选条件的组件进行交互。 */
+
+
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
 	bool MyContinuousInteractionWithOwnerActor = false;
 
-	/** 仅接受这些组件名称；为空时接受全部候选组件。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
 	TArray<FName> MyContinuousInteractionComponentNamesExact;
 
-	/** 仅接受这些 SkeletalMesh 骨骼名称；为空时不分配骨骼临时数组。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
 	TArray<FName> MyContinuousInteractionBoneNamesExact;
 
-	/** 可参与持续交互的对象类型。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
 	TArray<TEnumAsByte<EObjectTypeQuery>> MyContinuousInteractionInclusiveObjType;
 
-	/** 已筛选出的 Owner Primitive 组件。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<TObjectPtr<UPrimitiveComponent>> MyOverlappingComponents;
 
-	/** Owner 上的 SkeletalMesh 组件缓存。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<TObjectPtr<USkeletalMeshComponent>> MyContinuousInteractionSkeletalComponent;
 
-	/** 当前 SkeletalMesh 已匹配且尚未分配的骨骼名称。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<FName> MyContinuousInteractionBoneNamesExactTemp;
 
-	/** 骨骼筛选的工作副本。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<FName> MyContinuousInteractionBoneNamesExactTemp2;
 
-	/** 临时数组槽位可用性（true=可用、false=已占用）；蓝图默认 40 个 true，由构造函数恢复，状态切换统一走 Acquire/Release/Reset。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<bool> MyListOfAvailableTempArrays;
 
-	/** SkeletalMesh 到其骨骼临时数组索引的映射。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TMap<int32, TObjectPtr<UPrimitiveComponent>> MySkeletalMeshTempArrayPairs;
 
-	/** 对应蓝图变量 OverlapBasedInteraction：是否启用基于重叠的交互。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Interaction")
 	bool MyOverlapBasedInteraction = false;
 
-	/** 清空全部临时数组 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Temp")
 	void MyResetTempArrays();
 
-	/** 按索引（0~39）返回临时数组副本；蓝图调用只读，修改须走 Add/Append/Clear 或槽位 API。 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Temp")
 	TArray<FName> MyGetTempArray(int32 Index) const;
 
-	/** 按索引（0~39）返回临时数组引用（仅 C++ 内部使用）；越界时返回空占位数组。 */
+
 	TArray<FName>& MyGetTempArrayRef(int32 Index);
 
-	/** 向指定临时数组添加一个元素 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Temp")
 	void MyAddToTempArray(int32 ArrayIndex, FName Item);
 
-	/** 清空指定临时数组 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Temp")
 	void MyClearTempArray(int32 ArrayIndex);
 
-	/** 把另一数组追加到指定临时数组末尾 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Temp")
 	void MyAppendToTempArray(int32 ArrayIndex, const TArray<FName>& Items);
 
-	/** 重置全部临时数组槽位，并统一恢复为 true=可用。 */
+
 	void MyResetTempArraySlots();
 
-	/** 占用一个可用槽位并返回索引；没有容量时返回 INDEX_NONE。 */
+
 	int32 MyAcquireTempArraySlot();
 
-	/** 清空并释放指定槽位，同时移除关联的骨骼网格映射。 */
+
 	void MyReleaseTempArraySlot(int32 ArrayIndex);
 
-	/** 刷新 Owner 持续交互组件、骨骼筛选结果与临时数组映射。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MyManageContinuousInteractions();
 
-	/** 检查重叠组件有效性（CheckValidity2）：无精确名称筛选时取第一个重叠组件，否则取对象名匹配的首个组件；ThenExec 表示是否找到有效目标。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MyCheckValidity2(UPrimitiveComponent*& SingleTarget, bool& ThenExec);
 
-	/** 解析预设参数映射并写入模拟与画笔参数。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Preset")
 	void MyParsePresetMapAndSetVariables(const TMap<FString, double>& PresetMap);
 
-	/** 比较 Map 长度：输出 MapLength、Added=(LastIndex+1)-FirstIndex、Equal=(Added+MapLengthTmp)==MapLength */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Temp")
 	void MyCompareMapLength(int32 FirstIndex, int32 LastIndex, int32& MapLength, bool& Equal, int32& Added) const;
 
-	/** 处理模拟区域速度：输出 X/Y/Z 分量（Y 取反），CoEff 默认 -0.01 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Velocity")
 	void MyVelocityHandlerForSimArea(double CoEff, double& X, double& Y, double& Z) const;
 
-	/** 检查 Owner 是否为 NinjaLive 类；返回 true 并输出 AsNinjaLive 强转引用 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Input")
 	bool MyCheckComponentOwner(AMyNinjaLiveActor*& AsNinjaLive) const;
 
-	/** 启用 Owner 的输入（输入方式非无输入且 Owner 是 NinjaLive 类时） */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Input")
 	void MyEnableOwnerInput();
 
-	/** 根据量化模式返回对应的步长值（米），用于纹理偏移量化 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Quantizer")
 	int32 MyQuantizerValues(EMyQuantizerMode InQuantizerMode) const;
 
-	// ------------------------------------------------------------------
-	// ProximityActivation-MasterVars-Quantizer-OutMat 复合节点相关变量
-	// ------------------------------------------------------------------
-	/** 是否已由 Pawn 靠近激活（运行时从 Owner 同步，蓝图 NONPUBLICLiveActivation） */
+
+
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
 	bool MyComponentActivatedByPawnProximity = false;
 
-	/** 组件是否被禁用（运行时从 Owner 同步，蓝图 Live Activation） */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Activation")
 	bool MyDisableComponent = false;
 
-	/** 对应蓝图变量 UseUnrealNativeEventTick：使用 Unreal 原生 Tick 事件还是自定义循环 Tick。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	bool MyUseUnrealNativeEventTick = true;
 
-	/** 对应蓝图变量 LimitUnrealNativeEventTick：原生 Tick 模式的帧率上限（1/TickInterval，0 不限频）。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	double MyLimitUnrealNativeEventTick = 0.0;
 
-	/** 对应蓝图变量 DeltaSeconds：最近一次 tick 的时间增量（非原生模式为 MyTickRateCustom）。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Timing")
 	double MyDeltaSeconds = 0.0;
 
-	/** 是否抑制 BeginPlay 初始化 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|System")
 	bool MyBeginPlaySupressed = false;
 
-	/** 初始化是否完成 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Lifecycle")
 	bool MyInitDone = false;
 
-	/** 材质实例是否已创建完成 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Lifecycle")
 	bool MyMaterialInstacesDone = false;
 
-	/** 阻止本帧延迟 Tick 的执行。 */
+
 	UPROPERTY(BlueprintReadWrite, Transient, Category = "FluidSim|Runtime|Timing")
 	bool MyTickBlocker = false;
 
-	/** Pawn 当前是否处在模拟激活范围内。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Activation")
 	bool MyPawnInsideActivationBounds = false;
 
-	/** Owner 不可见时暂停模拟与 Painter v2。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	bool MyPauseSimWhenNotVisible = false;
 
-	/** 判定 Owner 最近可见时使用的时间容差。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation", meta = (ClampMin = "0.0"))
 	float MyWaitBeforePause = 0.2f;
 
-	/** 距离上一次点击与碰撞的累计时间。 */
+
 	UPROPERTY(BlueprintReadWrite, Transient, Category = "FluidSim|Runtime|Timing")
 	double MyTimeSinceLastClick = 0.0;
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Timing")
 	double MyTimeSinceLastCollision = 0.0;
 
-	/** AfterTickDelay 中与蓝图 DoOnce_2 对应的停用门状态。 */
+
 	UPROPERTY(Transient)
 	bool MyAfterTickDelayDeactivateDoOnceClosed = false;
 
-	/** AfterTickDelay 中与蓝图 DoOnce_3 对应的重新武装门状态。 */
+
 	UPROPERTY(Transient)
 	bool MyAfterTickDelayRearmDoOnceClosed = false;
 
-	/** 预设名过滤条件 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|System")
 	FName MyPresetNameFilterCriteria = NAME_None;
 
-	/** 首选预设数据表；有效时可强制加载它。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	TObjectPtr<UDataTable> MyDefaultPreset = nullptr;
 
-	/** 是否优先加载首选预设。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	bool MyForceAutoLoadPreset = false;
 
-	/** 当前预设名称与查找路径。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	FString MyActualPreset;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	TArray<FName> MyPresetSearchPaths;
 
-	/** 当前预设的数值映射。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Preset")
 	TMap<FString, double> MyPresetMap;
 
-	/** 追踪时排除的同类 NinjaLive Actor。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	TArray<TObjectPtr<AActor>> MyNinjaLiveTraceExclude;
 
-	/** 是否关闭 UE 5.1 TSR 的纹理闪烁抑制周期。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MySupressUE51TextureSmearing = false;
 
-	/** UE5 早期访问版本标志（早于 UE 5.4 的版本为 false，用于修复物理速度 bug） */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|System")
 	bool MyUE5EAFLAG = false;
 
-	/** 量化步长（米），由 MyQuantizerValues 计算 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Quantizer")
 	int32 MyQuantizerStepSize = 0;
 
-	/** 延迟写入 TexelSizeMult 的定时器。 */
+
 	FTimerHandle MyTimerSimSpeedAdjustment;
 
-	/** 对应蓝图 Delay 的未完成 latent action 标记。 */
+
 	bool MySimSpeedAdjustmentPending = false;
 
-	/** 是否启用画笔双缓冲（PaintBuffer WorldSpace 偏移或 Painter v2 时需要） */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Quantizer")
 	bool MyEnablePainterDoubleBuffering = false;
 
-	/** TraceMesh 是否在世界空间移动（量化模式） */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Quantizer")
 	EMyQuantizerMode MyTraceMeshMovingInWorldSpace = EMyQuantizerMode::NoQuantizerTextureOffsetAutomatic;
 
-	/** 输出材质数组 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TArray<TObjectPtr<UMaterialInterface>> MyOutputMaterials;
 
-	/** 次级和三级输出材质数组；为空时不创建对应输出 MID。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TArray<TObjectPtr<UMaterialInterface>> MySecondaryOutputMaterials;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TArray<TObjectPtr<UMaterialInterface>> MyTertiaryOutputMaterials;
 
-	/** 三组输出材质各自选用的数组索引。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	int32 MyOutputMaterialSelected = 0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
@@ -468,94 +469,94 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	int32 MyTertiaryOutputMaterialSelected = 0;
 
-	/** 输出材质使用的参数集合；有效时同步 TraceMesh 的位置和缩放。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TObjectPtr<UMaterialParameterCollection> MySetInternalParamsToMaterialParamCollection = nullptr;
 
-	/** 是否使用 Painter v2 追踪物体（强制双缓冲） */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MyUsePAINTER_V2_ToTrackObjects = true;
 
-	/** TraceMesh 是否面向相机（与量化不兼容） */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MyCameraFacingTraceMesh = false;
 
-	/** CameraFacing 选择原蓝图中的 LookAt 朝向路径。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MyUseLegacyCameraFacing = false;
 
-	/** CameraFacing 的 LockY 路径，会组合初始旋转偏移。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MyCameraFacingLockYAxis = false;
 
-	/** 按 CameraFacing 复合节点更新 TraceMesh 的相机朝向。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Compatibility")
 	void MyCameraFacing();
 
-	/** 旧版单目标模式 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MySingleTargetMode_LEGACY = false;
 
-	/** 旧版单目标模式的目标类型。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	EMySingleObjectType MySingleTargetType_LEGACY = EMySingleObjectType::SkeletalMeshBone;
 
-	/** 旧版单目标骨骼组件在临时映射值数组中的索引。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	int32 MySingleTargetModeSkeletalMeshIndex_LEGACY = 0;
 
-	/** 旧版单目标模式是否以画笔速度更新模拟速度。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MySingleTargetModeSetSimSpeed_LEGACY = false;
 
-	/** SingleTargetVelocity 写入的当前速度长度。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	double MySpeedTemp = 0.0;
 
-	/** SingleTargetVelocity 是否从多触点数组读取当前位置。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Input")
 	bool MyMousePass = false;
 
-	/** 多触点位置数组的当前读取索引。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Input")
 	int32 MyTouchLookupIndex = 0;
 
-	/** CheckTouchOptions 的 DoOnce 状态，未重置时只执行一次。 */
+
 	bool MyCheckTouchOptionsDoOnceClosed = false;
 
-	/** Painter v2 位置数组使用的当前画笔位置。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	FLinearColor MyPosition1_2D = FLinearColor::Black;
 
-	/** 单触点当前位置与上一帧位置。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	FLinearColor MyPosition2_2D = FLinearColor::Black;
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	FLinearColor MyLastPosition2_2D = FLinearColor::Black;
 
-	/** 多触点当前位置与上一帧位置；蓝图默认 10 个透明项，Transient 后由构造函数按 MyTouchSlotCount 重建。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<FLinearColor> MyPosition3_2D;
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TArray<FLinearColor> MyLastPosition3_2D;
 
-	/** 上一帧鼠标命中 UV，用于 PainterV2 下鼠标点的速度差分。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Input")
 	FLinearColor MyLastMouseHitUV_2D = FLinearColor::Black;
 
-	/** 计算旧版单目标画笔速度并写入线形 Painter 材质。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Velocity")
 	void MySingleTargetVelocity();
 
-	/** 多物体画笔速度的最大局部空间长度。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
 	double MyBrushVelocityClamp = 0.0;
 
-	/** 是否为静态网格写入额外的画笔速度偏移。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Velocity")
 	bool MyDampenIgnoresStaticMeshes = false;
 
-	/** MultiObjectVelocity 当前处理的重叠对象及其类型索引（0：组件，1：骨骼网格）。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	TObjectPtr<UPrimitiveComponent> MyOverlappingComponent = nullptr;
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
@@ -565,295 +566,295 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	int32 MyPosDataType = 0;
 
-	/** 计算多物体画笔速度、写入点状 Painter 材质并返回最终速度颜色。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Velocity")
 	void MyMultiObjectVelocity(FLinearColor& Velocity);
 
-	// ------------------------------------------------------------------
-	// ProximityActivation-MasterVars-Quantizer-OutMat 复合节点
-	// 蓝图实现：In1=Owner 激活设置（含 CheckComponentOwner），In2=直接初始化；
-	// 内部依次：量化与 CameraFacing 冲突修正、画笔双缓冲、MasterVars 初始化、OutMat 空数组补占位材质
-	// ------------------------------------------------------------------
-	/** 初始化复合节点主流程（In2 路径：跳过 Owner 激活设置） */
+
+
+
+
+
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
 	void MyProximityActivationMasterVarsQuantizerOutMat();
 
-	/** 从 Owner 读取激活设置后走初始化（In1 路径：含 CheckComponentOwner） */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
 	void MyProximityActivationMasterVarsQuantizerOutMatFromOwner();
-	// ------------------------------------------------------------------
-	// LightDirectionProviderCheck 复合节点
-	// 蓝图：EnableRayMarching 开启时检查 LightDirectionProvider 是否有效，
-	// 无效则用 Owner 初始化并设置默认太阳参数（手动太阳位置）
-	// ------------------------------------------------------------------
-	/** 是否启用光线追踪（RayMarching） */
+
+
+
+
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	bool MyEnableRayMarching = false;
 
-	/** 光线方向提供者（默认取 Owner） */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	TObjectPtr<AActor> MyLightDirectionProvider = nullptr;
 
-	/** 光源方向是否来自旋转而非位置 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	bool MyLightDirectionSourceIsRotation_NOT_Pos = false;
 
-	/** 太阳纬度 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	double MySunLatitude = 0.0;
 
-	/** 太阳经度 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	double MySunLongitude = 0.0;
 
-	/** 太阳高度 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	double MySunHeight = 0.0;
 
-	/** 是否强制手动太阳位置 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	bool MyForceManualSunPosition = false;
 
-	/** 双面着色的混合指数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	double MyTwoSideBlendPow = 0.0;
 
-	/** 是否启用双面着色。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	bool MyTwoSidedShading = false;
 
-	/** 是否基于距离做光照衰减。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	bool MyDistanceBasedLightAttenuation = false;
 
-	/** 距离光照衰减指数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	double MyAttenuationPower = 0.0;
 
-	/** 点光源位置移动倍数（与 TraceMesh 缩放归一后的比例）。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	double MyPointLightMovementMultiplier = 0.0;
 
-	/** 光源位置的固定偏移向量。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Light")
 	FVector MyOffsetLightVector = FVector::ZeroVector;
 
-	/** 相机朝向模拟平面的面朝度（Dot × −1），供双面着色混合使用。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Light")
 	double MyFacing = 0.0;
 
 
-	/** 检查并初始化光线方向提供者（EnableRayMarching 开启时有效） */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Light")
 	void MyLightDirectionProviderCheck();
 
-	/** 计算 RayMarch 光照方向/位置并写入输出材质参数（LightingDirection、LightingPosition、LightSource、AttenuationExponent）。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Light")
 	void MyRaymarchBasedLightingOPs();
 
-	// ------------------------------------------------------------------
-	// TraceChannelAutoFind 相关（追踪通道自动查找）
-	// ------------------------------------------------------------------
-	/** 追踪通道（ETraceTypeQuery，默认 TraceTypeQuery1） */
+
+
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	TEnumAsByte<ETraceTypeQuery> MyTraceChannel = TraceTypeQuery1;
 
-	/** 碰撞通道（ECollisionChannel，默认 ECC_WorldStatic） */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	TEnumAsByte<ECollisionChannel> MyCollisionChannel = ECC_WorldStatic;
 
-	/** 首选追踪通道名称（默认 "FluidTrace"） */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	FString MyPreferredTraceChannelName = TEXT("FluidTrace");
 
-	/** 追踪通道是否已设置完毕 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	bool MyTraceChannelsSet = false;
 
-	/** 自动查找追踪通道：遍历 ETraceTypeQuery 和 ECollisionChannel，匹配 PreferredTraceChannelName 并设置对应通道 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTraceChannelAutoFind();
-	// ------------------------------------------------------------------
-	// SceneCapCamera-VS-InputMaterials 相关（场景捕捉 vs 输入材质的切换）
-	// ------------------------------------------------------------------
-	/** 输入材质数组（用于替代场景捕捉） */
+
+
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TArray<TObjectPtr<UMaterialInterface>> MyInputMaterials;
 
-	/** 输入场景捕捉相机（有效时优先使用，替代输入材质） */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TObjectPtr<ASceneCapture2D> MyInputSceneCaptureCamera = nullptr;
 
-	/** 是否使用输入材质（由 MySceneCapCameraVSInputMaterials 自动计算） */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Materials")
 	bool MyUseInputMaterials = false;
 
-	/** 判断使用场景捕捉还是输入材质：有输入材质且场景捕捉相机无效时使用输入材质 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
 	void MySceneCapCameraVSInputMaterials();
 
-	// ------------------------------------------------------------------
-	// SetTraceMeshProperties 相关（追踪网格碰撞与派生参数）
-	// ------------------------------------------------------------------
-	/** 追踪网格尺寸系数，由包围盒最大分量换算 */
+
+
+
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	double MyTraceMeshSizeCoeff = 0.0;
 
-	/** 是否按追踪网格尺寸反向缩放画笔 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	bool MyBrushScaledInverselyByTraceMeshSize = false;
 
-	/** 追踪网格初始化旋转 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	FRotator MyTraceMeshInitialRotation = FRotator::ZeroRotator;
 
-	/** 追踪网格半透明排序优先级 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	int32 MyTraceMeshTranslucentSortPrio = 0;
 
-	/** 追踪网格是否同时承担交互体积功能 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	bool MyTraceMeshIsAlsoInteractionVolume = false;
 
-	/** 配置 TraceMesh 的碰撞、重叠、排序及尺寸参数 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MySetTraceMeshProperties();
 
-	// ------------------------------------------------------------------
-	// DefineLineTracingSource 相关（描线追踪源位置）
-	// ------------------------------------------------------------------
-	/** 是否使用自定义描线源位置；false 时使用玩家相机位置。 */
+
+
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	bool MyUseCustomTraceSource = false;
 
-	/** 自定义描线源位置（Owner 局部空间）；任一轴为 0 时视为未设置。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	FVector MyCustomTraceSourcePosition = FVector::ZeroVector;
 
-	/** 返回描线追踪源位置：自定义源（未设置时偏移 100）或玩家相机位置。 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Trace")
 	FVector MyDefineLineTracingSource() const;
 
-	/** 收集追踪需要排除的 Actor（同类 NinjaLive 实例）。 */
+
 	void MyBuildTraceExcludeActors(TArray<AActor*>& Out) const;
 
-	// ------------------------------------------------------------------
-	// OverlapArtifactWorkaround2 相关（重叠越界修复）
-	// ------------------------------------------------------------------
-	/** 当前追踪位置临时值；物体轴心跨出模拟平面时由其与历史值判断越界。 */
+
+
+
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	FVector MyTracePositionTemp = FVector::ZeroVector;
 
-	/** 上一帧追踪位置临时值。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	FVector MyLastTracePositionTemp = FVector::ZeroVector;
 
-	/** 当前物体位置（3D）。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	FVector MyPosition1_3D = FVector::ZeroVector;
 
-	/** 上一帧物体位置（3D）。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	FVector MyLastPosition1_3D = FVector::ZeroVector;
 
-	/** 追踪 3D 位置是否静止（BrushSwitch2 画笔切换的判定条件之一）。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	bool MyPosition1_3D_Static = false;
 
-	/** 重叠越界时静音画笔（强度置 0）：追踪位置未动、物体在移动且非持续交互模式。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyOverlapArtifactWorkaround2(FVector In);
 
-	/** 越界静音判定：记录本帧追踪位置后，按追踪位置是否停滞与物体移动容差决定是否把画笔强度置 0。 */
+
 	void MyApplyTraceArtifactBrushMute(FVector TracePosition, float ObjectMoveTolerance);
 
-	/** 物体追踪：从 Start 追踪到物体位置，命中输出 UV 并重置画笔与碰撞计时；ThenExec/NoHitExec 对应两个执行分支。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTraceObjects2(FVector Start, FLinearColor& HitUV, bool& ThenExec, bool& NoHitExec);
 
-	/** 物体追踪（TraceObjects1）：按持续交互/重叠条件调用 MyTraceOverlap，更新追踪临时位置并在边缘越界时静音画笔。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTraceObjects1(FVector Start, FLinearColor& HitUV);
 
-	/** 追踪单点或启用的多触点；返回 true 表示至少一次追踪走到原蓝图的 out 执行出口。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	bool MyTraceGestures(FLinearColor& HitUV);
 
-	/** 执行 TraceObj2 事件图：追踪命中后更新画笔、Painter v2 数组并完成本帧 RT/画笔收尾。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTraceObj2();
 
-	/** 执行 MousePassTrue 自定义事件：鼠标穿透时置 MyMousePass 并更新多触点 3D 位置数组（Lerp 写入上一帧位置），随后画线。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MyMousePassTrue();
 
-	/** 执行 MousePassFalse 自定义事件：退出鼠标穿透状态时按重叠数量选择单目标/循环重叠处理，无重叠则进入无交互分支。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MyMousePassFalse();
 
-	/** 执行旧版 SingleTargetMode：按目标类型追踪单个骨骼或 Primitive，并推进流体核心步骤。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MySingleTargetMode();
 
-	/** 执行 MultiObjectProcessorCycle_3：依次处理每个重叠骨骼的追踪和画笔，再推进流体核心步骤。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MyMultiObjectProcessorCycle3();
 
-	/** 执行 ForLoopOverlapping 事件图：依次追踪普通重叠组件，再处理骨骼组件。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MyForLoopOverlapping();
 
-	/** 执行 NoInteraction 事件图：清零画笔强度，按空闲状态收尾画笔并推进流体模拟。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Interaction")
 	void MyNoInteraction();
 
-	/** 追踪器失败时临时关闭线条绘制：条件满足时 MyHitValid=false，冷却期后恢复为 true。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyTemporarilySwitchOffLineDrawingIFTracerFails();
 
-	// ------------------------------------------------------------------
-	// FPS-PRECISION-RESOLUTION 复合节点
-	// ------------------------------------------------------------------
-	/** 流体模拟横向分辨率，低于 8 时由初始化逻辑回退到 256。 */
+
+
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	int32 MyResolutionX = 256;
 
-	/** 流体模拟纵向分辨率，低于 8 时由初始化逻辑回退到 256。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	int32 MyResolutionY = 256;
 
-	/** 允许的最高采样帧率，用于计算采样间隔。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation", meta = (ClampMin = "1"))
 	int32 MyMaxSamplingFPS = 60;
 
-	/** 当前实际使用的采样帧率。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|LOD")
 	int32 MySamplingFPS = 60;
 
-	/** 对应蓝图变量 MinSamplingFPS：LOD 降采样时允许的最低采样帧率。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation", meta = (ClampMin = "1"))
 	int32 MyMinSamplingFPS = 60;
 
-	// ------------------------------------------------------------------
-	// LOD-DistaceStepsPrecalc 复合节点
-	// ------------------------------------------------------------------
-	/** LOD 阈值数量，同时作为当前 LOD 等级的初始值。 */
+
+
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD", meta = (ClampMin = "1"))
 	int32 MyLODSteps = 1;
 
-	/** LOD 距离阈值的近端和远端边界。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
 	double MyLODNearBound = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
 	double MyLODFarBound = 0.0;
 
-	/** 是否分别允许 LOD 降低模拟质量或采样帧率。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
 	bool MyLOD1ReduceSimQuality = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
 	bool MyLOD2ReduceSamplingFPS = false;
 
-	/** 当前 LOD 等级、相邻阈值间距及预计算出的整数距离阈值。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|LOD")
 	int32 MyLODLevel = 0;
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|LOD")
@@ -861,149 +862,149 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|LOD")
 	TArray<double> MyLODStepsArray;
 
-	/** 对应蓝图变量 LOD-CheckFrequency：LOD 周期检查的间隔秒数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD", meta = (ClampMin = "0.001"))
 	double MyLODCheckFrequency = 0.2;
 
-	/** 预计算 LOD 距离阈值；仅在任一 LOD 降级选项启用时刷新阈值数组。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|LOD")
 	void MyLODDistaceStepsPrecalc();
 
-	/** 执行 LOD 复合：周期性按与玩家摄像机的距离切换 LOD 等级，并调节模拟质量/采样帧率与 Actor Tick 间隔。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|LOD")
 	void MyLOD();
 
-	/** 执行 AfterBind 初始化流程。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
 	void MyAfterBind();
 
-	/** 自定义 Tick 间隔，等于最高采样帧率的倒数。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Timing")
 	double MyTickRateCustom = 1.0 / 60.0;
 
-	/** 流体求解使用的数值精度。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	EMySimPrecision MySimPrecision = EMySimPrecision::Bit16;
 
-	/** 精度枚举转换后的材质选择索引，16 位为 0、32 位为 1。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Simulation")
 	int32 MySimPrecisionIndex = 0;
 
-	/** 是否使用半分辨率压力和散度缓冲区。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	bool MyHalfResPressureAndDivergenceBuffers = false;
 
-	/** Pressure Solver 1 在当前 LOD 下的迭代次数；蓝图里显式设为 5，运行期由 LOD 检查更新，故保留序列化。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|LOD")
 	int32 MyFluidSolver1Iterations = 5;
 
-	/** Pressure Solver 1 的最大迭代次数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	int32 MyPressureSolver1MaxIterations = 0;
 
-	/** Pressure Solver 2 的最大迭代次数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	int32 MyPressureSolver2MaxIterations = 0;
 
-	/** 压力解算器随 LOD 变化的核缩放系数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Simulation")
 	double MyPressureSolver2KernelReduction = 0.0;
 
-	/** InputMaterials 的当前材质索引。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	int32 MyInputMaterialSelected = 0;
 
-	/** TraceMesh 在量化模式下锁定移动的轴枚举值。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	EMyQuantizerAxisIgnore MyMovementIsLockedOnThisAxis = EMyQuantizerAxisIgnore::X;
 
-	/** 跟随 TraceMesh 的可选交互体积。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	TObjectPtr<UBoxComponent> MyInteractionVolume = nullptr;
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	bool MyInteractionVolumeIsPresent = false;
 
-	/** LWC 关闭时是否跳过 Niagara 的位置参数写入。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
 	bool MyLWCAvoidNiagaraWarnings = false;
 
-	/** 执行核心流体求解步骤；ThenExec 与 PainterV2Exec 分别对应原复合节点的两个执行出口。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exec);
 
-	/** 执行 FluidCoreStep 事件链：写入 Painter 数组后按条件依次处理动态偏移、核心求解、附加参数、光线追踪光照与外部 RT 导出。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyFluidCoreStep();
 
-	/** 将补充的流体参数写入 Composite、Gradient 与 Divergence 动态材质。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Solver")
 	void MySetAdditionalFluidsimParams();
 
-	/** 是否连接 Painter v2 追踪点生成轨迹线。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MyPV2_Connect_TrackpointsWithLines = false;
 
-	/** 是否由 Painter v2 根据追踪点位移生成速度。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Compatibility")
 	bool MyPV2_GenerateVelocity = false;
 
-	/** Painter v2 是否启用位置插值，取轨迹线和速度生成需求的逻辑或。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Niagara")
 	bool MyPV2_Interpolation = false;
 
-	/** 初始化采样频率、精度索引、分辨率兜底及 Painter v2 联动参数。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyFPSPrecisionResolution();
 
-	/** 创建 Painter v2 的 Niagara 组件，并启动其参数初始化流程。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
 	void MyInitPainterV2();
 
-	/** 将点画笔材质的标量参数同步到 Painter v2 Niagara，BrushSize 由 Niagara 单独控制。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
 	void MyForwardScalarParamsToNiagara();
 
-	/** 将 Painter v2 的位置、历史位置、速度和画笔尺寸数组写入 Niagara。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
 	void MySetPosVelocityScaleArraysToPainterV2();
 
-	/** 保存上一帧 Painter v2 追踪数据并清空当前帧数组。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
 	void MyClearPosVelocityScaleArraysPainterV2();
 
-	/** Painter v2 启用时把当前画笔位置追加到位置数组。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
 	void MyBuildBrushPositionArray();
 
-	/** 最终处理画笔与 RT：条件不满足时先把点画笔绘制到 RT_Painter，再设置 Multitarget 参数并构建画笔位置数组。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
 	void MyFinalDealRTAndBrush();
 
-	/** 是否将选定的内部模拟阶段绘制到外部 RenderTarget。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RenderTarget|Export")
 	bool MyDrawInternalRenderTargetToExternalEnabled = false;
 
-	/** 与导出阶段列表按索引一一对应的外部 RenderTarget。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RenderTarget|Export")
 	TArray<TObjectPtr<UTextureRenderTarget2D>> MyExternalRenderTargets;
 
-	/** 要导出的内部模拟阶段；顺序决定写入的外部 RenderTarget。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|RenderTarget|Export")
 	TArray<EMyRenderTargetList> MyInternalRenderTargetsToExport;
 
-	/** 将选定内部阶段的材质绘制到按索引匹配的外部 RenderTarget。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|RenderTarget|Export")
 	void MyDrawInternalRenderTargetToExternal();
 
-	/** Painter v2 使用的 Niagara 系统；索引 0/1 分别对应不连接/连接追踪点。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
 	TArray<TObjectPtr<UNiagaraSystem>> MyCoreNiagaraSystems;
 
-	/** Painter v2 使用的运行时 Niagara 组件。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Niagara")
 	TObjectPtr<UNiagaraComponent> MyNiagaraBasedPainter = nullptr;
 
-	/** 原蓝图 PositionArray、LastPositionArray、VelocityArray、BrushSizeArray 的 C++ 映射。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Niagara")
 	TArray<FVector2D> MyPositionArray;
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Niagara")
@@ -1013,7 +1014,7 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Niagara")
 	TArray<float> MyBrushSizeArray;
 
-	/** 本帧及上一帧参与 Painter v2 追踪的组件集合。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Niagara")
 	TArray<TObjectPtr<UPrimitiveComponent>> MyPrimitivesArray;
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Niagara")
@@ -1023,15 +1024,15 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Niagara")
 	TArray<TObjectPtr<UPrimitiveComponent>> MyLastSKmeshesArray;
 
-	/** 使用 Painter v2 追踪、非旧版单目标且连接追踪点时，将重叠组件加入 SK 网格数组。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
 	void MyBuildOverlapSKMArray(UPrimitiveComponent* In);
 
-	/** 当前帧是否存在有效追踪命中。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Niagara")
 	bool MyHitValid = false;
 
-	/** Painter v2 的线条、速度和噪声参数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
 	float MyPV2StopLineDrawingAboveThisVelocity = 0.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
@@ -1045,54 +1046,54 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara", meta = (ClampMin = "0.0"))
 	double MyNiagaraVariableSetSafetyDelay = 0.0;
 
-	/** 按当前模拟配置创建或重建所有需要的 RenderTarget。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|RenderTarget")
 	void MyCreateOrAcquireRenderTargets();
 
-	/** 核心模拟材质；0、1 为点/线画笔，2~17 为八组桌面端/移动端材质变体。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TArray<TObjectPtr<UMaterialInterface>> MyCoreSimMaterials;
 
-	/** 是否选用为移动端翻转过的核心模拟材质。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	bool MyFlipRenderTargetsForMobile = false;
 
-	/** 画笔及求解器参数，由动态材质实例初始化时写入对应材质参数。 */
-	/** 密度画笔噪声强度。 */
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyBrushDensityNoiseScale = 0.0;
-	/** 密度画笔噪声频率。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyBrushDensityNoiseFreq = 0.0;
-	/** 速度画笔噪声强度。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyBrushVelocityNoiseScale = 0.0;
-	/** 速度画笔噪声频率。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyBrushVelocityNoiseFreq = 0.0;
-	/** 速度画笔的幂指数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyBrushVelocityPow = 1.0;
-	/** 是否在世界空间采样画笔噪声。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	bool MyBrushNoiseInWorldSpace = false;
-	/** 触发画笔阻尼的最低速度。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyDampenBrushBelowThisVelocity = 0.0;
-	/** 低速画笔的阻尼系数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyDampenBrushFactor = 0.0;
-	/** 是否允许密度输出为绝对黑色。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	bool MyAllowAbsoluteBlackDensity = false;
-	/** Painter V2 边缘遮罩强度。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyAdjustPainterV2EdgeMask = 0.0;
-	/** 模拟画笔速度参数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MySpeed = 0.0;
 
-	/** 由预设映射驱动的速度、密度和画笔参数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyVeloOffsetX = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
@@ -1111,79 +1112,79 @@ public:
 	double MyVeloDirNoise = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyInputFeedback = 0.0;
-	/** 对应蓝图变量 InputFeedbackInterface：输入反馈材质参数的上限。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyInputFeedbackInterface = 0.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushSize = 0.0;
 
-	/** 画笔尺寸全局缩放系数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyGlobalBrushScale = 0.0;
 
-	/** 重叠网格尺寸系数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyOverlappingMeshSizeCoeff = 0.0;
 
-	/** 对应蓝图自定义变量 UserInputBrushScale：鼠标穿透时覆盖画笔缩放的用户输入值。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyUserInputBrushScale = 0.0;
 
-	/** 计算画笔尺寸系数：BrushSize × TraceMeshSizeCoeff × OverlappingMeshSizeCoeff × GlobalBrushScale × 0.5。 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
 	double MyBrushSizeCoEff() const;
 
-	/** 按骨骼距离计算画笔尺寸系数：Out=|In-父骨骼Socket位置|×0.01×BrushScaleMult；骨骼网格有效时执行。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
 	void MyCalculateBrushSizeCoEffFromBoneDistance(FVector In, double BrushScaleMult, double& Out);
 
-	/** 是否按交互物体尺寸缩放画笔（CalcPos5 分支条件）。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	bool MyBrushScaledByInteractingObjSize = false;
 
-	/** 骨骼网格画笔缩放系数（CalcPos5 的缩放输入）。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MySkeletalMeshBrushScale = 0.0;
 
-	/** 计算骨骼交互位置：刷新 Position1_3D、按分支更新重叠网格尺寸系数并置 PosDataType。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyCalcPos5();
 
-	/** 计算 Primitive 交互位置：刷新 Position1_3D、更新重叠网格尺寸系数并置 PosDataType。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyCalcPos3();
 
-	/** 计算交互位置（CalcPos2）：输入对象有效时保存上一帧位置、刷新为重叠组件世界位置并更新画笔尺寸系数。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyCalcPos2(UObject* In);
 
-	/** 计算骨骼交互位置（CalcPos1）：按交互模式选取骨骼 Socket，并基于父骨骼距离更新画笔缩放。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace")
 	void MyCalcPos1(USceneComponent* Component);
 
-	/** 是否用物体包围盒范围代替组件缩放计算画笔系数（CalculateBrushSizeCoFromBounds1 分支条件）。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	bool MyUseObjBoundsInsteadOfSize = false;
 
-	/** 重叠 Primitive 物体的画笔缩放系数（米→厘米换算用 0.01）。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Brush")
 	double MyPrimitiveObjBrushScale = 0.0;
 
-	/** 按重叠物体边界或缩放计算画笔系数：启用时取包围盒/缩放数据最小值×PrimitiveObjBrushScale×0.01，否则恒为 1.0。 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
 	double MyCalculateBrushSizeCoFromBounds1(USceneComponent* Component) const;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushStrength = 0.0;
-	/** 当前画笔是否与交互区域重叠。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Interaction")
 	bool MyOverlap1 = false;
-	/** 当前鼠标按钮是否按下。 */
+
 	UPROPERTY(BlueprintReadWrite, Transient, Category = "FluidSim|Runtime|Input")
 	bool MyMousePressed = false;
-	/** MuteBrush 计算出的实际画笔强度。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Brush")
 	double MyBrushStrengthTemp1 = 0.001;
-	/** SetBrushDensityParams3 用于限制画笔强度的上限值；无上限即 1.0（该属性为 Transient，靠此处默认值生效）。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Brush")
 	double MyBrushStrengthTemp2 = 1.0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
@@ -1213,23 +1214,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushNoise = 0.0;
 
-	/** 将线画笔的密度相关参数写入 Painter 与 Composite 动态材质。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
 	void MySetBrushDensityParams1(double Value);
 
-	/** 处理线状画笔的速度、渲染目标绘制及多目标标记。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
 	void MyPaintLine();
 
-	/** 判断是否切换画笔路径：追踪位置静止、非持续交互且未重叠，或当前/上一帧画笔 2D 位置位于画布边缘（R/G <0.05 或 >0.95）。 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
 	bool MyBrushSwitch2(FLinearColor InLinearColor) const;
 
-	/** BrushSwitch1 画笔切换判定：当前/上次采样位置落在画布边缘（X/Y=R/G 接近 0 或 1）、当前位置与上次相同、上次位置为零点，或距上次点击不足 1.5 个采样间隔（1/MySamplingFPS）时返回 true。 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
 	bool MyBrushSwitch1(FLinearColor InLinearColor) const;
 
-	/** 将点画笔的密度相关参数写入 Painter 与 Composite 动态材质。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Brush")
 	void MySetBrushDensityParams3(double Value);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
@@ -1245,160 +1246,160 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Preset")
 	double MyBrushRnd = 0.0;
 
-	/** 画笔随机颜色：MyPV2_GenerateVelocity 开启时返回原色，否则 R/G 通道加 ±MyBrushRnd*0.5 随机抖动。 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
 	FLinearColor MyBrushRnd3(const FLinearColor InColor) const;
 
-	/** 画笔随机颜色（对应 BrushRnd2）：转发 MyBrushRnd3（蓝图节点不同，逻辑一致）。 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
 	FLinearColor MyBrushRnd2(const FLinearColor InColor) const;
 
-	/** 画笔随机颜色（对应 BrushRnd1）：转发 MyBrushRnd3（蓝图节点不同，逻辑一致）。 */
+
 	UFUNCTION(BlueprintPure, Category = "FluidSim|Materials|Brush")
 	FLinearColor MyBrushRnd1(const FLinearColor InColor) const;
 
-	/** 速度场反馈系数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
 	double MyFlowFeedback = 0.0;
-	/** 散度求解强度。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
 	double MyDivergence = 0.0;
-	/** 压力边缘遮罩强度。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
 	double MyPressureEdgeMasking = 0.0;
-	/** 实验性压力反馈系数。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
 	double MyExperimentalPressureFeedback = 0.0;
-	/** 实验性压力反馈分量。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
 	double MyExpPressureFeedbackComponent = 0.0;
-	/** 实验性散度反馈分量。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
 	double MyExpDivergenceFeedbackComponent = 0.0;
-	/** 第二压力求解器的核索引偏移。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
 	int32 MyExperimentalPSolver2KernelIndexOffset = 0;
-	/** 是否使用压力求解器 1；false 时使用默认求解器 2。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Solver")
 	bool MyUsePressureSolver1DefaultIs2 = false;
 
-	/** 外部密度输入纹理。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	TObjectPtr<UTexture> MyDensityInput = nullptr;
-	/** 外部速度输入纹理。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	TObjectPtr<UTexture> MyVelocityInput = nullptr;
-	/** 速度预设所在的数据表。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	TObjectPtr<UDataTable> MyLoadedDataTable = nullptr;
-	/** 速度预设的相对资源路径根。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	FString MyLoadedDataTablePath;
-	/** 有效时优先替代预设速度纹理。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	TObjectPtr<UTexture2D> MyOverwritePresetVelocityInput = nullptr;
-	/** 有效时优先替代预设密度纹理。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	TObjectPtr<UTexture2D> MyOverwritePresetDensityInput = nullptr;
-	/** 碰撞遮罩纹理。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	TObjectPtr<UTexture> MyCollisionMask = nullptr;
-	/** 作为模拟输入的 RenderTarget。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	TObjectPtr<UTexture> MyInputRenderTarget = nullptr;
-	/** 作为模拟输入的媒体纹理。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	TObjectPtr<UMediaTexture> MyMediaTexture = nullptr;
-	/** 媒体输入对应的播放器对象。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	TObjectPtr<UMediaPlayer> MyInputMediaPlayer = nullptr;
-	/** 媒体输入的文件源。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	TObjectPtr<UFileMediaSource> MyInputMediaSource = nullptr;
-	/** 媒体输入循环时长（秒）；非正值时不启用循环重播。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input", meta = (ClampMin = "0.0"))
 	double MyInputMediaLoopLength = 0.0;
-	/** 是否优先使用 InputRenderTarget 作为密度输入。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	bool MyUseRenderTargetAsInput = false;
-	/** 是否随机化画笔噪声偏移。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	bool MyRandomizeNoiseOffsets = false;
-	/** 是否随机化密度纹理偏移。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	bool MyRandomizeDensityTextureOffset = false;
-	/** 当前碰撞遮罩是否为有效的非默认纹理，可由蓝图覆盖用于测试。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	bool MyCollisionMaskIsNonDefault = false;
 
-	/** 按蓝图的默认遮罩名称规则更新碰撞遮罩状态。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Input")
 	void MyUpdateCollisionMaskIsNonDefault();
 
-	/** 配置场景捕捉或媒体源作为 Composite 的密度输入。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Input")
 	void MyAlternativeInputsFedToCompositeDensityInput();
 
-	/** 加载预设速度纹理，或优先使用覆盖纹理并同步 Composite 参数。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Input")
 	void MyLoadVelocityInputTexture();
 
-	/** 加载预设密度纹理，或优先使用覆盖纹理并同步画笔材质参数。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Input")
 	void MyLoadDensityInputTexture();
 
-	/** 材质实例准备完成后加载对应的输入纹理。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials|Input")
 	void MyLoadTextures();
 
-	/** 创建所有模拟所需的动态材质实例，并绑定当前 RenderTarget。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
 	void MyCreateDynamicMaterialInstances();
 
-	/** 完成 RenderTarget 创建后的材质、预设与 Painter 初始化流程。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Init")
 	void MyAfterCreateRT();
 
-	/** 创建主、次、三级输出 MID，并将模拟缓冲绑定到其标准参数。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
 	void MyCreateOutputMaterialAndSetItOnTargetsStep01();
 
-	/** 将输出动态材质应用到 TraceMesh 与按标签筛选的外部组件。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Materials")
 	void MyCreateOutputMaterialAndSetItOnTargetsStep02();
 
-	/** 将模拟 RenderTarget 与 TraceMesh 参数注入指定 ActorTag 下的 Niagara 组件。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Niagara")
 	void MyCreateOutputMaterialAndSetItOnTargetsStep03();
 
-	/** 合成与梯度阶段的动态材质实例。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMICompositeAndGradient = nullptr;
-	/** 平流阶段的动态材质实例。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMIAdvection = nullptr;
-	/** 散度阶段的动态材质实例。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMIDivergence = nullptr;
-	/** 第一压力循环的动态材质实例。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMIPressureCycle1 = nullptr;
-	/** 第二压力循环的动态材质实例。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMIPressureCycle2 = nullptr;
-	/** 线状碰撞画笔的动态材质实例。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMICollisionPainterLine = nullptr;
-	/** 点状碰撞画笔的动态材质实例。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMICollisionPainterDot = nullptr;
-	/** 碰撞画笔偏移阶段的动态材质实例。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMICollisionPainterOffset = nullptr;
-	/** 默认空输出使用的动态材质实例。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMINull = nullptr;
-	/** 主、次、三级输出材质对应的动态材质实例。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Materials")
 	TObjectPtr<UMaterialInstanceDynamic> MyMIOutput = nullptr;
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Materials")
@@ -1412,19 +1413,19 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Materials")
 	bool MyMaterialCollectionPresent = false;
 
-	/** 禁用组件时用于 TraceMesh 的灰色材质。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TObjectPtr<UMaterialInterface> MyInactiveGrayMaterial = nullptr;
 
-	/** TraceMesh 隐藏和空输出阶段使用的基础材质，由蓝图实例指定。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials")
 	TObjectPtr<UMaterialInterface> MyNullMaterial = nullptr;
 
-	/** 是否让 TraceMesh 使用空材质而非主输出材质。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Trace")
 	bool MyTraceMeshInvisible = false;
 
-	/** 主、次、三级输出材质要应用到的 Actor 标签。None 表示不应用。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Output")
 	FName MyApply1stOutMatToActorsWithTag = NAME_None;
 
@@ -1434,7 +1435,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Output")
 	FName MyApply3rdOutMatToActorsWithTag = NAME_None;
 
-	/** 主、次、三级输出材质要应用到的组件标签。None 表示应用 Actor 的所有 PrimitiveComponent。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Output")
 	FName MyApply1stOutMatToComponentsWithTag = NAME_None;
 
@@ -1444,145 +1445,162 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Output")
 	FName MyApply3rdOutMatToComponentsWithTag = NAME_None;
 
-	/** 用于寻找待驱动 Niagara 组件的 Actor 标签。None 时跳过 Niagara 初始化。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
 	FName MyFeedTaggedActorNiagaraComponent = NAME_None;
 
-	/** 已绑定模拟参数的 Niagara 组件。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Niagara")
 	TArray<TObjectPtr<UNiagaraComponent>> MyNiagaraSystemsToDrive;
 
-	/** 是否至少成功绑定一个 Niagara 组件。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Niagara")
 	bool MyNiagaraSystemsPresent = false;
 
-	/** 是否将压力与散度 RenderTarget 暴露给 Niagara。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
 	bool MyMakePressureAvailableForNiagara = false;
 
-	/** 是否强制 Niagara 以 MyMaxSamplingFPS 单独更新并重新初始化。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
 	bool MyForceMaxSamplingFPSToNiagara = false;
 
-	/** 是否写入大世界坐标位置变量 TraceMeshPosDouble。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Niagara")
 	bool MyLWCSupport = false;
 
-	/** 写入 Niagara 与输出材质的 TraceMesh 世界位置。 */
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Trace")
 	FVector MyTraceMeshPos = FVector::ZeroVector;
-	
-	/** 是否使用简单画笔模式；该模式跳过内存池连接。 */
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|MemoryPool")
 	bool MySimplePainterMode = false;
 
-	/** 是否使用 RGB 输入材质，连接流程初始化为 false。 */
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Materials|Input")
 	bool MyRGBInputMaterial = false;
 
 private:
-	/** 骨骼交互使用的固定数量临时数组；通过兼容函数按索引访问。 */
+
 	static constexpr int32 MyTempArrayCount = 40;
 	TStaticArray<TArray<FName>, MyTempArrayCount> MyTempArrays;
 
-	/** 多触点位置数组的槽位数（蓝图 Position3_2D / LastPosition3_2D 的默认长度）。 */
+
 	static constexpr int32 MyTouchSlotCount = 10;
 
-	/** 越界访问时的空占位数组，避免返回悬空引用。 */
+
 	TArray<FName> MyInvalidTempArray;
 
-	/** 按 DisableComponent / TraceMeshInvisible 给 TraceMesh 选择显示材质。 */
+
 	void MyApplyOutputMaterialToTraceMesh();
 
-	/** 按 Tag 把主/次/三级输出材质应用到目标 Actor 的组件与体积云。 */
+
 	void MyApplyOutputMaterialsToTaggedActors();
 
-	/** 收集追踪需要排除的同类 NinjaLive Actor。 */
+
 	void MyBuildTraceExcludeList();
 
-	/** 应用平台兼容性开关（当前为关闭 UE5.1 TSR 闪烁抑制）。 */
+
 	void MyApplyPlatformCompatibilityOptions();
 
-	/** 加载并解析预设，随后载入速度/密度输入纹理。 */
+
 	void MyApplyPresetAndInputTextures();
 
-	/** 把 EraserMode 写入 Composite 材质的 EraserSwitch 参数（简单画笔模式下跳过）。 */
+
 	void MySetCompositeEraserSwitch();
 
-	/** 延迟检查 TraceMesh 是否创建完成的定时器。 */
+
 	FTimerHandle MyTimerCheckReady;
 
-	/** 媒体输入循环重播的定时器。 */
+
 	FTimerHandle MyInputMediaLoopTimer;
 	FTimerHandle MyLoadTexturesTimer;
 	FTimerHandle MyNiagaraPainterV2SafetyTimer;
 	FTimerHandle MyNiagaraPainterV2CooldownTimer;
 
-	/** 清理当前 Painter v2 的运行时 Niagara 实例及其延迟初始化定时器。 */
+
 	void MyDestroyPainterV2();
 
-	/** 规范化采样与 LOD 参数，保证除法和定时器间隔有效。 */
+
 	void MyNormalizeTimingParameters();
 
-	/** 线条绘制失败冷却定时器（对应 RetriggerableDelay）。 */
+
+	void MyApplySimulationTickRate();
+
+
 	FTimerHandle MyLineDrawingFailCooldownTimer;
 
-	/** LOD 周期检查定时器（对应蓝图 Delay），以及 DoOnce 首次检查已执行的状态（内部状态，不暴露给蓝图）。 */
+
 	FTimerHandle MyLODCheckTimer;
 	UPROPERTY(Transient)
 	bool MyLODDoOnceClosed = false;
 
-	/** 按与玩家摄像机的距离刷新 LOD 等级与模拟/采样参数（LOD 复合的周期检查体）。 */
+
 	void MyCheckLODLevel();
 
-	/** ReceiveTick 中"限制原生 tick 频率"的 DoOnce 关闭状态（内部状态，不暴露给蓝图）。 */
+
 	UPROPERTY(Transient)
 	bool MyNativeTickLimiterDoOnceClosed = false;
 
-	/** 非原生 tick 分支的自定义循环定时器与启动状态（对应蓝图 Delay 自循环）。 */
+
 	FTimerHandle MyCustomTickLoopTimer;
 	UPROPERTY(Transient)
 	bool MyCustomTickLoopStarted = false;
 
-	/** 非原生 tick 分支每周期回调：更新 DeltaSeconds 并执行 AfterTickDelay/AfterReadyCheck。 */
+
 	void MyCustomTick();
 
-	/** 倒带并重播当前媒体输入。 */
+
 	void MyRestartInputMedia();
 
-	/** 线条绘制冷却结束，恢复 MyHitValid 为 true。 */
+
 	void MyRestoreLineDrawingAfterCooldown();
 
 protected:
-	/** 启动 TraceMesh 就绪检查。 */
+
 	virtual void BeginPlay() override;
 
-	/** 统一取消异步任务并释放本组件创建的运行时资源。 */
+
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** 执行 Unreal 原生 Tick 事件：先按 UseUnrealNativeEventTick 选择原生/循环 tick 分支，再驱动 AfterTickDelay 与 AfterReadyCheck。 */
+
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
 		FActorComponentTickFunction* ThisTickFunction) override;
 
-	/** 在安全延迟后写入 Painter v2 的输入缓冲。 */
+
 	void MySetPainterV2PaintbufferInput();
 
-	/** 在线条绘制冷却期结束后写入 Painter v2 的其余参数。 */
+
 	void MyFinalizePainterV2Setup();
 
-	/** 对应蓝图两条执行支路共用的 Painter v2 参数设置链。 */
+
 	void MyApplyPainterV2SharedParameters();
 
-	/** 对应 SetTraceMeshProperties 内未连接 Reset 引脚的 DoOnce 状态。 */
+
 	UPROPERTY(Transient)
 	bool bMyTraceMeshInitialRotationCaptured = false;
 
-	/** 外部 RT 导出节点首次执行后的数组校验状态。 */
+
 	UPROPERTY(Transient)
 	bool bMyExternalRenderTargetExportValidated = false;
 
-	/** 外部 RT 导出节点的 Gate 状态；首次校验失败后保持关闭。 */
+
 	UPROPERTY(Transient)
 	bool bMyExternalRenderTargetExportGateOpen = false;
+
+
+	TArray<FMaterialParameterInfo> MyPainterScalarParameterInfos;
+	TMap<FName, float> MyLastForwardedPainterScalarValues;
+	bool bMyPainterScalarParameterCacheInitialized = false;
+
+
+	TArray<FVector2D> MyLastSentPositionArray;
+	TArray<FVector2D> MyLastSentLastPositionArray;
+	TArray<FLinearColor> MyLastSentVelocityArray;
+	TArray<float> MyLastSentBrushSizeArray;
+	bool bMyPainterArraysSent = false;
+	bool bMyLastSentPosInterpolValid = false;
+	bool bMyLastSentPosInterpol = false;
 
 };

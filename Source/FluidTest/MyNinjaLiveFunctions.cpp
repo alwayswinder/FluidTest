@@ -1,4 +1,4 @@
-// MyNinjaLiveFunctions.cpp — UMyNinjaLiveFunctions 实现
+
 
 #include "MyNinjaLiveFunctions.h"
 
@@ -370,7 +370,6 @@ void UMyNinjaLiveFunctions::MyTraceMouse(
 		return;
 	}
 
-	// 原蓝图库始终查询鼠标与指定手指的命中，再按 TouchSensitive 选择其中一项。
 	FHitResult MouseHit;
 	FHitResult TouchHit;
 	MouseClickValid = PlayerController->GetHitResultUnderCursorByChannel(TraceChannel, true, MouseHit);
@@ -378,7 +377,6 @@ void UMyNinjaLiveFunctions::MyTraceMouse(
 		static_cast<ETouchIndex::Type>(FingerIndex), TraceChannel, true, TouchHit);
 	const FHitResult& SelectedHit = TouchSensitive ? TouchHit : MouseHit;
 
-	// 仅在所选命中组件就是目标模拟平面时进入原蓝图的追踪分支。
 	if (SelectedHit.GetComponent() != HitComponent)
 	{
 		return;
@@ -409,7 +407,6 @@ void UMyNinjaLiveFunctions::MyTraceMouse(
 	FVector2D UV = FVector2D::ZeroVector;
 	UGameplayStatics::FindCollisionUV(Hit, 0, UV);
 	HitUV = FLinearColor(UV.X, UV.Y, 0.0f, 1.0f);
-	// 到达蓝图库函数返回节点时，原节点输出此比较结果（此处必为 true）。
 	SimHitByMouse = true;
 }
 
@@ -425,34 +422,28 @@ void UMyNinjaLiveFunctions::MyTraceOverlap(
 	FVector& TracePosition,
 	bool& HitValid)
 {
-	// 输出默认值；无效命中分支会保持这些默认值。
 	HitUV = FLinearColor::Black;
 	TracePosition = FVector::ZeroVector;
 	HitValid = false;
 
-	// 追踪终点沿 Start→End 方向延长 TracelineOvershoot。
 	const FVector TraceEnd = End + (End - Start) * TracelineOvershoot;
 
-	// 单次线追踪：复杂碰撞、忽略传入的 Actor 列表、不忽略自身。
 	FHitResult Hit;
 	const bool bHit = UKismetSystemLibrary::LineTraceSingle(
 		WorldContextObject, Start, TraceEnd, TraceChannel,
 		true, FluidNinjaLIVEActors, EDrawDebugTrace::None, Hit, false);
 
-	// 命中且 HitActor 有效 → HitValidator=true，否则 false。
 	bool HitValidator = false;
 	if (bHit && IsValid(Hit.GetActor()))
 	{
 		HitValidator = true;
 	}
 
-	// HitValidator=false 时若 PainterV2=false，蓝图不走 Return 节点（输出保持默认）。
 	if (!HitValidator && !PainterV2)
 	{
 		return;
 	}
 
-	// 命中数据：碰撞 UV 转 LinearColor、命中位置、命中有效性。
 	FVector2D UV(0.0f, 0.0f);
 	UGameplayStatics::FindCollisionUV(Hit, 0, UV);
 	HitUV = FLinearColor(UV.X, UV.Y, 0.0f, 1.0f);

@@ -31,7 +31,8 @@
   或 `BlueprintReadWrite` 变量
 - **编译**：编辑器运行中无法命令行编译（Live Coding），需先关编辑器再 `Build.bat`；
   include 路径基于 `Source` 根，写 `"FluidTest/X.h"`
-- **注释**：只写功能说明（一句话即可），不粘贴蓝图节点还原；不确定的暂留大概，随迁移补充
+- **AI 维护**：项目完全由 AI 修改与维护；项目自有源码禁止添加任何注释。注释会干扰 AI 对当前实现的判断，
+  AI 必须完全通过代码本身获取信息，并把代码作为唯一的实现事实来源
 - 已迁移：`ResetTempArrays → MyResetTempArrays`、`GetTempArray → MyGetTempArray`、
   `MyAddToTempArray` / `MyClearTempArray` / `MyAppendToTempArray`、内部 40 槽临时数组与统一申请/释放 API、
   `CompareMapLength → MyCompareMapLength`、`VelocityHandlerForSimArea → MyVelocityHandlerForSimArea`、
@@ -107,6 +108,8 @@
   `BeginOverlapDetection > SimContainerCapacityFilter1（复合节点）→ MySimContainerCapacityFilter1`（返回是否走 then 出口：可用临时数组槽位 `MyListOfAvailableTempArrays` 至少存在一个、且（总数 - `MySkeletalMeshTempArrayPairs` 已占用）足够容纳 `MyContinuousInteractionSkeletalComponent` 全部骨骼网格；SKmesh ≤ 1 时直接通过）、
   `BeginOverlapDetection > CollisionTypeFilter2（复合节点）→ MyCollisionTypeFilter2`（逻辑同 `MyCollisionTypeFilter1`：非阻塞响应时在过滤对象类型数组中查找命中映射，首个命中输出 `ObjType` / `CollisionType`）、
   `BeginOverlapDetection（复合节点）→ MyBeginOverlapDetection`（+ `MyBeginOverlapComponent` 事件回调 / `MyProcessOverlapActor` 私有辅助，+ `MyInitialActorsProcessed` / `MyOverlapFilterInclusiveBoneNameExactTemp` / `MyOverlapFilterInclusiveBoneNameExactTemp2` / `MyOverlapFilterInclusiveBoneNamePartial` / `MyForceTrackBonesWithSimilarName`，对应蓝图变量同名项，对应蓝图变量 `OverlapFilterInclusiveBoneNameExactTemp2`/`OverlapFilterInclusiveBoneNamePartial`/`ForceTrackBonesWithSimilarName`/`InitialActorsProcessed`）
+
+- 运行时修正（2026-09-15）：LOD2 已作用于组件 Tick/自定义 Timer，Replay 会立即重置并同步 Tick 频率；接近激活可延迟初始化、在每次重新进入时重建跟踪并恢复 Painter V2；重播与 EndOverlap 统一释放骨骼槽位，EndOverlap 清理不再受当前碰撞状态阻断；Painter V2 跳过未变化的标量和数组上传；`RT_Output` 创建不再依赖 Density Input。
 
 ## 常用操作
 

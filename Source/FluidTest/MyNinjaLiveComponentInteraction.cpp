@@ -1,4 +1,4 @@
-// MyNinjaLiveComponentInteraction.cpp — 输入、追踪与画笔交互
+
 
 #include "MyNinjaLiveComponent.h"
 
@@ -40,7 +40,7 @@ void UMyNinjaLiveComponent::MyMuteBrush()
 
 bool UMyNinjaLiveComponent::MyBrushFadeOutTimer() const
 {
-	// Clamp(Feedback + Max(Feedback - 0.68, 0), 0, 1) 控制空闲衰减时间。
+
 	const double FeedbackAboveThreshold = FMath::Max(MyInputFeedback - 0.68, 0.0);
 	const double ClampedFeedback = FMath::Clamp(MyInputFeedback + FeedbackAboveThreshold, 0.0, 1.0);
 	const double FadeTime = 1.0 - ClampedFeedback;
@@ -130,7 +130,7 @@ void UMyNinjaLiveComponent::MySetBrushDensityParams3(double Value)
 
 bool UMyNinjaLiveComponent::MyBrushSwitch2(FLinearColor InLinearColor) const
 {
-	// 画笔位置是否落在画布边缘（R/G 通道接近 0 或 1）。
+
 	const auto IsAtCanvasEdge = [](const FLinearColor& Color)
 	{
 		return Color.R < 0.05 || Color.R > 0.95 || Color.G < 0.05 || Color.G > 0.95;
@@ -144,13 +144,13 @@ bool UMyNinjaLiveComponent::MyBrushSwitch2(FLinearColor InLinearColor) const
 
 bool UMyNinjaLiveComponent::MyBrushSwitch1(FLinearColor InLinearColor) const
 {
-	// 位置是否落在画布边缘（X/Y 接近 0 或 1）。
+
 	const auto IsAtEdge = [](const FVector& Pos)
 	{
 		return Pos.X < 0.05 || Pos.X > 0.95 || Pos.Y < 0.05 || Pos.Y > 0.95;
 	};
 
-	// LinearColor 按 R/G/B 转 Vector（与蓝图 Conv_LinearColorToVector 一致）；索引越界时按零点处理。
+
 	const FVector CurrentPos1(InLinearColor.R, InLinearColor.G, InLinearColor.B);
 	const FLinearColor LastColor = MyLastPosition3_2D.IsValidIndex(MyTouchLookupIndex)
 		? MyLastPosition3_2D[MyTouchLookupIndex]
@@ -171,7 +171,7 @@ FLinearColor UMyNinjaLiveComponent::MyBrushRnd3(const FLinearColor InColor) cons
 		return InColor;
 	}
 
-	// R/G 通道独立地加 [-0.5*MyBrushRnd, +0.5*MyBrushRnd] 内的随机抖动。
+
 	const double HalfRange = MyBrushRnd * 0.5;
 	const FLinearColor Randomized(
 		InColor.R + FMath::FRandRange(-HalfRange, HalfRange),
@@ -184,13 +184,13 @@ FLinearColor UMyNinjaLiveComponent::MyBrushRnd3(const FLinearColor InColor) cons
 
 FLinearColor UMyNinjaLiveComponent::MyBrushRnd2(const FLinearColor InColor) const
 {
-	// 对应 BrushRnd2：随机抖动逻辑与 BrushRnd3 相同，仅蓝图节点不同。
+
 	return MyBrushRnd3(InColor);
 }
 
 FLinearColor UMyNinjaLiveComponent::MyBrushRnd1(const FLinearColor InColor) const
 {
-	// 对应 BrushRnd1：随机抖动逻辑与 BrushRnd3 相同，仅蓝图节点不同。
+
 	return MyBrushRnd3(InColor);
 }
 
@@ -219,7 +219,7 @@ TArray<FName>& UMyNinjaLiveComponent::MyGetTempArrayRef(int32 Index)
 		return MyTempArrays[Index];
 	}
 
-	// 越界访问保持原蓝图兼容行为：返回一个可写但不会进入有效槽位的空占位数组。
+
 	MyInvalidTempArray.Reset();
 	return MyInvalidTempArray;
 }
@@ -259,7 +259,7 @@ int32 UMyNinjaLiveComponent::MyAcquireTempArraySlot()
 
 void UMyNinjaLiveComponent::MyReleaseTempArraySlot(int32 ArrayIndex)
 {
-	// 越界或槽位本就空闲时直接返回，避免重复释放误删其他占用者的骨骼网格映射。
+
 	if (!MyListOfAvailableTempArrays.IsValidIndex(ArrayIndex) || MyListOfAvailableTempArrays[ArrayIndex])
 	{
 		return;
@@ -272,7 +272,7 @@ void UMyNinjaLiveComponent::MyReleaseTempArraySlot(int32 ArrayIndex)
 
 void UMyNinjaLiveComponent::MyVelocityHandlerForSimArea(double CoEff, double& X, double& Y, double& Z) const
 {
-	// VeloFromSimAreaMotion 非零时：TraceMesh 前后帧位移 ×20 → 局部方向 × (速度×系数)
+
 	FVector Velocity = FVector::ZeroVector;
 
 	if (MyVeloFromSimAreaMotion != 0.0)
@@ -289,13 +289,13 @@ void UMyNinjaLiveComponent::MyVelocityHandlerForSimArea(double CoEff, double& X,
 	}
 
 	X = Velocity.X;
-	Y = Velocity.Y * -1.0;   // Y 取反
+	Y = Velocity.Y * -1.0;
 	Z = Velocity.Z;
 }
 
 void UMyNinjaLiveComponent::MyEnableOwnerInput()
 {
-	// 输入方式为"无输入"时不处理
+
 	if (MyUserInputBasedInteraction == EMyUserInput::None)
 	{
 		return;
@@ -307,7 +307,7 @@ void UMyNinjaLiveComponent::MyEnableOwnerInput()
 		return;
 	}
 
-	// Owner 必须是 NinjaLive 类
+
 	if (!OwnerActor->IsA<AMyNinjaLiveActor>())
 	{
 		return;
@@ -353,7 +353,7 @@ void UMyNinjaLiveComponent::MySingleTargetVelocity()
 		PreviousPosition = MyLastPosition3_2D[MyTouchLookupIndex];
 	}
 
-	// 原节点将位置色转换为向量、相减后乘以 15，并交由材质侧做范围限制。
+
 	const FVector Velocity = (FVector(CurrentPosition.R, CurrentPosition.G, CurrentPosition.B) -
 		FVector(PreviousPosition.R, PreviousPosition.G, PreviousPosition.B)) * 15.0;
 	if (IsValid(MyMICollisionPainterLine))
@@ -407,7 +407,7 @@ void UMyNinjaLiveComponent::MyMultiObjectVelocity(FLinearColor& Velocity)
 
 FVector UMyNinjaLiveComponent::MyDefineLineTracingSource() const
 {
-	// 默认描线源：玩家相机位置；不可用时回退到世界原点。
+
 	FVector TraceSource = FVector::ZeroVector;
 	if (const APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(this, 0))
 	{
@@ -416,8 +416,8 @@ FVector UMyNinjaLiveComponent::MyDefineLineTracingSource() const
 
 	if (MyUseCustomTraceSource)
 	{
-		// 自定义源：Owner 变换将 CustomTraceSourcePosition 转到世界空间；
-		// 任一轴为 0（未设置）时偏移 (100,100,100)，避免与世界原点重叠。
+
+
 		const AActor* OwnerActor = GetOwner();
 		const FTransform OwnerTransform = IsValid(OwnerActor) ? OwnerActor->GetTransform() : FTransform::Identity;
 		FVector CustomSourceWorld = OwnerTransform.TransformPosition(MyCustomTraceSourcePosition);
@@ -433,7 +433,7 @@ FVector UMyNinjaLiveComponent::MyDefineLineTracingSource() const
 
 void UMyNinjaLiveComponent::MyBuildTraceExcludeActors(TArray<AActor*>& Out) const
 {
-	// 排除同类 NinjaLive 实例，避免流体彼此追踪自身。
+
 	Out.Reset(MyNinjaLiveTraceExclude.Num());
 	for (const TObjectPtr<AActor>& Excluded : MyNinjaLiveTraceExclude)
 	{
@@ -446,18 +446,18 @@ void UMyNinjaLiveComponent::MyBuildTraceExcludeActors(TArray<AActor*>& Out) cons
 
 void UMyNinjaLiveComponent::MyOverlapArtifactWorkaround2(FVector In)
 {
-	// 越界修复入口：用 0.1 的容差判定物体是否在移动。
+
 	MyApplyTraceArtifactBrushMute(In, 0.1f);
 }
 
 void UMyNinjaLiveComponent::MyApplyTraceArtifactBrushMute(FVector TracePosition, float ObjectMoveTolerance)
 {
-	// 保存上一帧追踪位置（此时 TracePositionTemp 仍是旧值），再更新为本帧输入。
+
 	MyLastTracePositionTemp = MyTracePositionTemp;
 	MyTracePositionTemp = TracePosition;
 
-	// 越界判定：追踪位置未变（物体停在边缘）、物体自身在移动、且非持续交互模式时，
-	// FluidTrace 无法生成有效 UV，静音画笔避免伪影。
+
+
 	const bool bTraceNotMoving = MyTracePositionTemp.Equals(MyLastTracePositionTemp, 0.1f);
 	const bool bObjectMoving = !MyPosition1_3D.Equals(MyLastPosition1_3D, ObjectMoveTolerance);
 	const bool bNotContinuousInteraction = !MyContinuousInteractionWithOwnerActor;
@@ -471,7 +471,7 @@ void UMyNinjaLiveComponent::MyTraceObjects2(FVector Start, FLinearColor& HitUV, 
 	ThenExec = false;
 	NoHitExec = false;
 
-	// 从 Start 到物体位置做追踪；命中输出 UV 并走 then 分支，否则走 NoHit 分支。
+
 	FVector TracePosition = FVector::ZeroVector;
 	bool HitValid = false;
 	TArray<AActor*> TraceExclude;
@@ -487,7 +487,7 @@ void UMyNinjaLiveComponent::MyTraceObjects2(FVector Start, FLinearColor& HitUV, 
 		return;
 	}
 
-	// 命中：Painter v2 直接使用画笔强度；否则走越界修复（可能静音画笔）。
+
 	if (MyUsePAINTER_V2_ToTrackObjects)
 	{
 		MyBrushStrengthTemp1 = MyBrushStrength;
@@ -506,14 +506,14 @@ void UMyNinjaLiveComponent::MyTraceObjects1(FVector Start, FLinearColor& HitUV)
 {
 	HitUV = FLinearColor::Black;
 
-	// 3D 位置是否静止：与上一帧相同，或上一帧为零（初始帧）。
+
 	MyPosition1_3D_Static =
 		MyPosition1_3D.Equals(MyLastPosition1_3D, 0.001f)
 		|| MyLastPosition1_3D.Equals(FVector::ZeroVector, 0.001f);
 
 	MyTimeSinceLastCollision = 0.0;
 
-	// 持续交互时不做重叠检查但仍须追踪物体位置；两种交互方式任一成立才执行追踪。
+
 	if (MyContinuousInteractionWithOwnerActor || MyOverlap1)
 	{
 		FVector TracePosition = FVector::ZeroVector;
@@ -525,7 +525,7 @@ void UMyNinjaLiveComponent::MyTraceObjects1(FVector Start, FLinearColor& HitUV)
 			TraceExclude, false,
 			HitUV, TracePosition, HitValid);
 
-		// 物体跨出模拟平面边缘仍保持重叠时 FluidTrace 失效、无法生成有效 UV，静音画笔避免伪影（此处用 0.001 容差）。
+
 		MyApplyTraceArtifactBrushMute(TracePosition, 0.001f);
 	}
 }
@@ -596,13 +596,13 @@ void UMyNinjaLiveComponent::MyMousePassTrue()
 
 	MyOverlappingMeshSizeCoeff = MyUserInputBrushScale;
 
-	// Painter v2 且非旧版单目标：鼠标命中点追加进 Niagara 追踪数组，与人物共用通道，
-	// 避免用 Line 画笔整幅覆盖 RT_Painter 清掉人物笔刷（原蓝图序列两路并行的意图）。
+
+
 	if (MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY)
 	{
 		const FLinearColor RandomColor = MyBrushRnd1(HitUV);
 		MyPositionArray.Add(FVector2D(RandomColor.R, RandomColor.G));
-		// 速度沿用上一帧鼠标位置差分（比例与 MySingleTargetVelocity 一致）。
+
 		const FLinearColor Gradient(RandomColor.R - MyLastMouseHitUV_2D.R,
 			RandomColor.G - MyLastMouseHitUV_2D.G, 0.0f, 0.0f);
 		MyVelocityArray.Add(Gradient * 15.0f);
@@ -616,7 +616,7 @@ void UMyNinjaLiveComponent::MyMousePassTrue()
 		return;
 	}
 
-	// 随机化色只求值一次（蓝图 MyBrushRnd1 单节点输出同时用于 Lerp.B 与 Position3_2D 写回）。
+
 	const FLinearColor RandomColor = MyBrushRnd1(HitUV);
 	MyLastPosition3_2D[MyTouchLookupIndex] = FMath::Lerp(
 		MyPosition3_2D[MyTouchLookupIndex],
@@ -662,7 +662,7 @@ void UMyNinjaLiveComponent::MySingleTargetMode()
 		FLinearColor HitUV = FLinearColor::Black;
 		MyTraceObjects1(MyDefineLineTracingSource(), HitUV);
 
-		// 保留蓝图中两个独立 BrushRnd2 节点的随机采样。
+
 		const FLinearColor LastPositionCandidate = MyBrushRnd2(HitUV);
 		MyLastPosition2_2D = FMath::Lerp(
 			MyPosition2_2D,
@@ -695,7 +695,7 @@ void UMyNinjaLiveComponent::MySingleTargetMode()
 
 	if (MySingleTargetType_LEGACY == EMySingleObjectType::SkeletalMeshBone)
 	{
-		// Map_Length != 0 后才读取 Map_Values[Index]；越界索引和无效对象均不进入追踪分支。
+
 		if (!MySkeletalMeshTempArrayPairs.IsEmpty())
 		{
 			TArray<TObjectPtr<UPrimitiveComponent>> SkeletalMeshValues;
@@ -704,7 +704,7 @@ void UMyNinjaLiveComponent::MySingleTargetMode()
 				IsValid(SkeletalMeshValues[MySingleTargetModeSkeletalMeshIndex_LEGACY]))
 			{
 				MyCalcPos1(SkeletalMeshValues[MySingleTargetModeSkeletalMeshIndex_LEGACY]);
-				// CalcPos1 的 Owner/Cast Failed 分支没有连接输出执行引脚。
+
 				if (DidCalcPos1ReachOutput())
 				{
 					TraceSingleTarget();
@@ -725,7 +725,7 @@ void UMyNinjaLiveComponent::MySingleTargetMode()
 		}
 	}
 
-	// ExecutionSequence 的 then_1：无论单目标分支是否得到有效对象，都推进一次流体模拟。
+
 	MyFluidCoreStep();
 }
 
@@ -736,13 +736,13 @@ void UMyNinjaLiveComponent::MyTraceObj2()
 	bool bNoHit = false;
 	MyTraceObjects2(MyDefineLineTracingSource(), HitUV, bHit, bNoHit);
 
-	// ExecutionSequence 的 then_0：仅命中时更新点画笔和本帧 Painter v2 数据。
+
 	if (bHit)
 	{
 		MyPosition1_2D = MyBrushRnd3(HitUV);
 		MySetBrushDensityParams3(MyBrushSizeCoEff());
 
-		// 条件为真时先写入画笔尺寸；两条分支随后汇合到速度计算。
+
 		const bool bUsePainterV2Arrays = MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY;
 		if (bUsePainterV2Arrays)
 		{
@@ -760,7 +760,7 @@ void UMyNinjaLiveComponent::MyTraceObj2()
 		MyFinalDealRTAndBrush();
 	}
 
-	// ExecutionSequence 的 then_1：追踪失败时进入线条绘制冷却，不继续画笔收尾流程。
+
 	if (bNoHit)
 	{
 		MyTemporarilySwitchOffLineDrawingIFTracerFails();
@@ -769,7 +769,7 @@ void UMyNinjaLiveComponent::MyTraceObj2()
 
 void UMyNinjaLiveComponent::MyMultiObjectProcessorCycle3()
 {
-	// 蓝图分别取 Map 的 Keys/Values 并以相同索引配对；直接遍历 TMap 可保留每个临时数组索引与组件的对应关系。
+
 	for (const TPair<int32, TObjectPtr<UPrimitiveComponent>>& SkeletalMeshTempArrayPair : MySkeletalMeshTempArrayPairs)
 	{
 		const TArray<FName>& Bones = MyGetTempArrayRef(SkeletalMeshTempArrayPair.Key);
@@ -783,7 +783,7 @@ void UMyNinjaLiveComponent::MyMultiObjectProcessorCycle3()
 		}
 	}
 
-	// 外层 ForEachLoop Completed：每轮多物体追踪结束后仅推进一次流体模拟。
+
 	MyFluidCoreStep();
 }
 
@@ -801,18 +801,18 @@ void UMyNinjaLiveComponent::MyForLoopOverlapping()
 			MyPrimitivesArray.Add(MyOverlappingComponent);
 		}
 
-		// 条件的 true/false 分支均在此汇合，始终继续位置计算和追踪。
+
 		MyCalcPos3();
 		MyTraceObj2();
 	}
 
-	// 外层 ForEachLoop Completed：继续处理骨骼重叠组件，后者负责推进流体核心步骤。
+
 	MyMultiObjectProcessorCycle3();
 }
 
 void UMyNinjaLiveComponent::MyNoInteraction()
 {
-	// ExecutionSequence 的 then_0：清零两种画笔材质的强度。
+
 	for (UMaterialInstanceDynamic* PainterMaterial : { MyMICollisionPainterLine.Get(), MyMICollisionPainterDot.Get() })
 	{
 		if (IsValid(PainterMaterial))
@@ -821,19 +821,19 @@ void UMyNinjaLiveComponent::MyNoInteraction()
 		}
 	}
 
-	// 未达到空闲 Canvas 停用阈值时，仍需完成本帧画笔收尾。
+
 	if (!MyBrushFadeOutTimer())
 	{
 		MyFinalDealRTAndBrush();
 	}
 
-	// ExecutionSequence 的 then_1：无论画笔是否收尾，均推进流体核心步骤。
+
 	MyFluidCoreStep();
 }
 
 void UMyNinjaLiveComponent::MyTemporarilySwitchOffLineDrawingIFTracerFails()
 {
-	// 仅 Painter v2 追踪、非旧版单目标且连接追踪点画线时，暂停线条绘制。
+
 	const bool bShouldSwitchOff = MyUsePAINTER_V2_ToTrackObjects
 		&& !MySingleTargetMode_LEGACY
 		&& MyPV2_Connect_TrackpointsWithLines;
@@ -844,7 +844,7 @@ void UMyNinjaLiveComponent::MyTemporarilySwitchOffLineDrawingIFTracerFails()
 
 	MyHitValid = false;
 
-	// 冷却期后恢复线条绘制（对应蓝图 RetriggerableDelay：每次触发重置计时）。
+
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(MyLineDrawingFailCooldownTimer);
@@ -864,7 +864,7 @@ void UMyNinjaLiveComponent::MyRestoreLineDrawingAfterCooldown()
 
 void UMyNinjaLiveComponent::MyBuildOverlapSKMArray(UPrimitiveComponent* In)
 {
-	// 仅 Painter v2 追踪、非旧版单目标且连接追踪点画线时，把重叠组件加入 SK 网格数组。
+
 	if (MyUsePAINTER_V2_ToTrackObjects && !MySingleTargetMode_LEGACY && MyPV2_Connect_TrackpointsWithLines)
 	{
 		MySKmeshesArray.Add(In);
@@ -878,7 +878,7 @@ double UMyNinjaLiveComponent::MyBrushSizeCoEff() const
 
 void UMyNinjaLiveComponent::MyCalculateBrushSizeCoEffFromBoneDistance(FVector In, double BrushScaleMult, double& Out)
 {
-	// 重叠骨骼网格无效时保持 Out 默认（对应蓝图 Cast Failed 无连接分支）。
+
 	Out = 0.0;
 	USkeletalMeshComponent* SkeletalMesh = Cast<USkeletalMeshComponent>(MyOverlappingSkeletalMesh.Get());
 	if (!IsValid(SkeletalMesh))
@@ -886,7 +886,7 @@ void UMyNinjaLiveComponent::MyCalculateBrushSizeCoEffFromBoneDistance(FVector In
 		return;
 	}
 
-	// 距离 = |In - 父骨骼 Socket 位置|，×0.01 转米，×BrushScaleMult。
+
 	const FName ParentBone = SkeletalMesh->GetParentBone(MyOverlappingBone);
 	const FVector ParentBoneWorldPos = SkeletalMesh->GetSocketLocation(ParentBone);
 	const double BoneDistance = FMath::Abs((In - ParentBoneWorldPos).Size());
@@ -895,13 +895,13 @@ void UMyNinjaLiveComponent::MyCalculateBrushSizeCoEffFromBoneDistance(FVector In
 
 void UMyNinjaLiveComponent::MyCalcPos5()
 {
-	// 保存上一帧位置，再刷新为重叠骨骼的 Socket 位置。
+
 	MyLastPosition1_3D = MyPosition1_3D;
 	MyPosition1_3D = IsValid(MyOverlappingSkeletalMesh.Get())
 		? MyOverlappingSkeletalMesh->GetSocketLocation(MyOverlappingBone)
 		: FVector::ZeroVector;
 
-	// 按交互物体尺寸缩放画笔：开则按骨骼距离计算，关则直接用骨骼画笔缩放系数。
+
 	if (MyBrushScaledByInteractingObjSize)
 	{
 		double Out = 0.0;
@@ -918,13 +918,13 @@ void UMyNinjaLiveComponent::MyCalcPos5()
 
 void UMyNinjaLiveComponent::MyCalcPos3()
 {
-	// 保存上一帧位置，再刷新为重叠组件的世界位置。
+
 	MyLastPosition1_3D = MyPosition1_3D;
 	MyPosition1_3D = IsValid(MyOverlappingComponent.Get())
 		? MyOverlappingComponent->K2_GetComponentLocation()
 		: FVector::ZeroVector;
 
-	// 按重叠物体边界或缩放计算画笔尺寸系数。
+
 	MyOverlappingMeshSizeCoeff = MyCalculateBrushSizeCoFromBounds1(MyOverlappingComponent.Get());
 
 	MyPosDataType = 0;
@@ -932,19 +932,19 @@ void UMyNinjaLiveComponent::MyCalcPos3()
 
 void UMyNinjaLiveComponent::MyCalcPos2(UObject* In)
 {
-	// 输入对象无效时不更新任何数据（IsValid 的 Is Not Valid 分支在蓝图中未连线）。
+
 	if (!IsValid(In))
 	{
 		return;
 	}
 
-	// 保存上一帧位置，再刷新为重叠组件的世界位置。
+
 	MyLastPosition1_3D = MyPosition1_3D;
 	MyPosition1_3D = IsValid(MyOverlappingComponent.Get())
 		? MyOverlappingComponent->K2_GetComponentLocation()
 		: FVector::ZeroVector;
 
-	// 更新按重叠物体边界/缩放计算的画笔尺寸系数（与 CalcPos3 共用计算）。
+
 	MyOverlappingMeshSizeCoeff = MyCalculateBrushSizeCoFromBounds1(MyOverlappingComponent.Get());
 }
 
@@ -967,7 +967,7 @@ void UMyNinjaLiveComponent::MyCalcPos1(USceneComponent* Component)
 		BoneNames = &NinjaLive->MyOverlapFilterInclusiveBoneNameExact;
 	}
 
-	// 蓝图 Get(Array Item 0) 在数组为空时返回 None，SocketLocation 随之回退到组件位置。
+
 	const FName BoneName = BoneNames->IsValidIndex(0) ? (*BoneNames)[0] : NAME_None;
 	MyLastPosition1_3D = MyPosition1_3D;
 	MyPosition1_3D = Component->GetSocketLocation(BoneName);
@@ -978,7 +978,7 @@ void UMyNinjaLiveComponent::MyCalcPos1(USceneComponent* Component)
 		return;
 	}
 
-	// Map Values[0] 与蓝图 Map_Values 接入 Get(Array Item 0) 保持一致。
+
 	TArray<TObjectPtr<UPrimitiveComponent>> SkeletalMeshValues;
 	MySkeletalMeshTempArrayPairs.GenerateValueArray(SkeletalMeshValues);
 	USkeletalMeshComponent* SkeletalMesh = SkeletalMeshValues.IsValidIndex(0)
@@ -997,13 +997,13 @@ void UMyNinjaLiveComponent::MyCalcPos1(USceneComponent* Component)
 
 double UMyNinjaLiveComponent::MyCalculateBrushSizeCoFromBounds1(USceneComponent* Component) const
 {
-	// 未按交互物体尺寸缩放时恒为 1.0（SelectFloat 的 B 分支）。
+
 	if (!MyBrushScaledByInteractingObjSize)
 	{
 		return 1.0;
 	}
 
-	// 数据源：用包围盒范围或组件缩放×50（SelectVector 的 B/A 分支）。
+
 	FVector DataSource = FVector::ZeroVector;
 	if (IsValid(Component))
 	{
@@ -1021,7 +1021,7 @@ double UMyNinjaLiveComponent::MyCalculateBrushSizeCoFromBounds1(USceneComponent*
 		}
 	}
 
-	// 最小分量 × PrimitiveObjBrushScale × 0.01。
+
 	const double MinElement = FMath::Min(DataSource.X, FMath::Min(DataSource.Y, DataSource.Z));
 	return MinElement * MyPrimitiveObjBrushScale * 0.01;
 }
@@ -1113,13 +1113,13 @@ void UMyNinjaLiveComponent::MyCheckValidity2(UPrimitiveComponent*& SingleTarget,
 	ThenExec = false;
 	SingleTarget = nullptr;
 
-	// 无重叠组件时没有有效目标（蓝图 IfThenElse 的 else 分支未连线）。
+
 	if (MyOverlappingComponents.Num() == 0)
 	{
 		return;
 	}
 
-	// 未启用精确组件名筛选时，直接取第一个重叠组件。
+
 	if (MyContinuousInteractionComponentNamesExact.Num() == 0)
 	{
 		SingleTarget = MyOverlappingComponents[0].Get();
@@ -1127,7 +1127,7 @@ void UMyNinjaLiveComponent::MyCheckValidity2(UPrimitiveComponent*& SingleTarget,
 		return;
 	}
 
-	// 遍历重叠组件，取对象名匹配第一个精确名称的组件；与蓝图 ForEachLoop 一致，每个匹配都会输出。
+
 	const FName FirstExactName = MyContinuousInteractionComponentNamesExact[0];
 	for (const TObjectPtr<UPrimitiveComponent>& Component : MyOverlappingComponents)
 	{

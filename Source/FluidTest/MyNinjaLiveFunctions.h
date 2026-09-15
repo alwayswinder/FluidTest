@@ -1,4 +1,4 @@
-// MyNinjaLiveFunctions.h — NinjaLiveFunctions 蓝图函数库的 C++ 占位父类
+
 
 #pragma once
 
@@ -14,14 +14,14 @@ class USceneComponent;
 class UPrimitiveComponent;
 class AActor;
 
-/** NinjaLiveFunctions 蓝图函数库的 C++ 迁移入口。 */
+
 UCLASS()
 class FLUIDTEST_API UMyNinjaLiveFunctions : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 
 public:
-	/** 创建并配置一个 2D RenderTarget，返回蓝图中的 RTout。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|RenderTarget", meta = (WorldContext = "WorldContextObject"))
 	static UTextureRenderTarget2D* MyCreateRenderTarget(
 		UObject* WorldContextObject,
@@ -32,7 +32,7 @@ public:
 		TEnumAsByte<TextureGroup> LODgroup = TEXTUREGROUP_World,
 		TEnumAsByte<TextureFilter> Filter = TF_Bilinear);
 
-	/** 按预设行的软对象引用（兼容 SourceString 回退）精确加载模板资源。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Template", meta = (WorldContext = "WorldContextObject"))
 	static void MyTemplateLoader(
 		UObject* WorldContextObject,
@@ -45,7 +45,7 @@ public:
 		FString& LoadedTemplateNameOnly,
 		bool& UsesAbsolutePath);
 
-	/** 加载指定预设的数据表，并将每行 SourceString 转换为预设数值。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Preset", meta = (WorldContext = "WorldContextObject"))
 	static void MyPresetLoader(
 		UObject* WorldContextObject,
@@ -58,7 +58,7 @@ public:
 		FString& LoadedDataTablePath,
 		TMap<FString, double>& PresetMap);
 
-	/** 按原蓝图的相机旋转、LookAt 与 LockY 分支设置组件世界旋转。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Camera", meta = (WorldContext = "WorldContextObject"))
 	static void MyCameraFacing(
 		UObject* WorldContextObject,
@@ -67,7 +67,7 @@ public:
 		bool LockY,
 		FRotator TraceMeshInitRot);
 
-	/** 从鼠标或指定触摸点向屏幕投射射线，命中指定组件时输出其碰撞 UV。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace", meta = (WorldContext = "WorldContextObject"))
 	static void MyTraceMouse(
 		UObject* WorldContextObject,
@@ -81,7 +81,7 @@ public:
 		bool& MouseClickValid,
 		bool& TouchValid);
 
-	/** 从 Start 追踪到 End 生成画笔命中信息（占位：内部实现待补全）。 */
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Trace", meta = (WorldContext = "WorldContextObject"))
 	static void MyTraceOverlap(
 		UObject* WorldContextObject,
@@ -94,5 +94,5 @@ public:
 		FLinearColor& HitUV,
 		FVector& TracePosition,
 		bool& HitValid);
-	
+
 };
