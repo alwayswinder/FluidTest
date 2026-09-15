@@ -100,6 +100,8 @@ void UMyNinjaLiveComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	MyDivergenceScalarParameterIndices.Reset();
 	MyRDGOutputComparisonTarget = nullptr;
 	MyRDGOutputTargetCreatedForValidation = false;
+	MyRDGAdvectionComparisonTarget = nullptr;
+	MyRDGDivergenceComparisonTarget = nullptr;
 
 	MyMICompositeAndGradient = nullptr;
 	MyMIAdvection = nullptr;

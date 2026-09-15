@@ -116,6 +116,7 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 	const bool bOutputRequired =
 		MyMake1stOutputAvailableFor2ndOutput || MyMake1stOutputAvailableForNiagara;
 	const bool bValidateOutput = FMyNinjaFluidRenderPipeline::MyIsOutputValidationEnabled();
+	const bool bValidateCore = FMyNinjaFluidRenderPipeline::MyIsCoreValidationEnabled();
 
 	auto FindRenderTarget = [this](const TCHAR* Name) -> UTextureRenderTarget2D*
 	{
@@ -136,6 +137,11 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 	UTextureRenderTarget2D* const PressureTempTarget = FindRenderTarget(TEXT("RT_PressureDivergenceTemp"));
 	UTextureRenderTarget2D* const DensityInputTarget = FindRenderTarget(TEXT("RT_DensityInputMaterial"));
 	UTextureRenderTarget2D* OutputTarget = FindRenderTarget(TEXT("RT_Output"));
+	if (!bValidateCore)
+	{
+		MyRDGAdvectionComparisonTarget = nullptr;
+		MyRDGDivergenceComparisonTarget = nullptr;
+	}
 	if (bOutputRequired)
 	{
 		MyRDGOutputTargetCreatedForValidation = false;
@@ -317,8 +323,55 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 
 	if (!MySimplePainterMode)
 	{
-		Draw(AdvectionTarget, MyMIAdvection);
-		Draw(PressureTarget, MyMIDivergence);
+		const uint64 CoreFrameIndex = MyRDGCoreFrameIndex++;
+		UTextureRenderTarget2D* ComparisonAdvectionTarget = nullptr;
+		UTextureRenderTarget2D* ComparisonDivergenceTarget = nullptr;
+		UMaterialInstanceDynamic* ComparisonAdvectionMaterial = nullptr;
+		UMaterialInstanceDynamic* ComparisonDivergenceMaterial = nullptr;
+		if (FMyNinjaFluidRenderPipeline::MyShouldValidateCore(CoreFrameIndex) &&
+			IsValid(AdvectionTarget) && IsValid(PressureTarget) &&
+			IsValid(MyMIAdvection) && IsValid(MyMIDivergence))
+		{
+			auto EnsureComparisonTarget = [this](
+				TObjectPtr<UTextureRenderTarget2D>& ComparisonTarget,
+				UTextureRenderTarget2D* SourceTarget)
+			{
+				if (!IsValid(ComparisonTarget) ||
+					ComparisonTarget->SizeX != SourceTarget->SizeX ||
+					ComparisonTarget->SizeY != SourceTarget->SizeY ||
+					ComparisonTarget->RenderTargetFormat != SourceTarget->RenderTargetFormat)
+				{
+					ComparisonTarget = UMyNinjaLiveFunctions::MyCreateRenderTarget(
+						this,
+						SourceTarget->SizeX,
+						SourceTarget->SizeY,
+						SourceTarget->RenderTargetFormat,
+						MySimAreaClamp,
+						SourceTarget->LODGroup,
+						SourceTarget->Filter);
+				}
+			};
+			EnsureComparisonTarget(MyRDGAdvectionComparisonTarget, AdvectionTarget);
+			EnsureComparisonTarget(MyRDGDivergenceComparisonTarget, PressureTarget);
+
+			ComparisonAdvectionTarget = MyRDGAdvectionComparisonTarget;
+			ComparisonDivergenceTarget = MyRDGDivergenceComparisonTarget;
+			ComparisonAdvectionMaterial = MyMIAdvection;
+			ComparisonDivergenceMaterial = MyMIDivergence;
+		}
+
+		FMyNinjaFluidRenderPipeline::MyDrawAdvectionDivergence(
+			this,
+			AdvectionTarget,
+			MyMIAdvection,
+			PressureTarget,
+			MyMIDivergence,
+			ComparisonAdvectionTarget,
+			ComparisonAdvectionMaterial,
+			ComparisonDivergenceTarget,
+			ComparisonDivergenceMaterial,
+			this,
+			CoreFrameIndex);
 
 		const int32 Solver1Iterations = MyLOD1ReduceSimQuality
 			? FMath::Min(MyFluidSolver1Iterations, MyPressureSolver1MaxIterations)
@@ -380,6 +433,41 @@ void UMyNinjaLiveComponent::MyApplyRDGOutputDiffResult(
 
 	UE_LOG(LogTemp, Display,
 		TEXT("FluidTest NinjaLive RT_Output GPU diff sample=%lld max=(%.9g, %.9g, %.9g, %.9g) exceeded=%d/%d tolerance=%.9g"),
+		SampleId,
+		MaxDifference.R,
+		MaxDifference.G,
+		MaxDifference.B,
+		MaxDifference.A,
+		ExceededPixelCount,
+		ComparedPixelCount,
+		Tolerance);
+}
+
+void UMyNinjaLiveComponent::MyApplyRDGCoreDiffResult(
+	EMyNinjaRDGDiffTarget DiffTarget,
+	int64 SampleId,
+	FLinearColor MaxDifference,
+	int32 ExceededPixelCount,
+	int32 ComparedPixelCount,
+	float Tolerance)
+{
+	FMyNinjaRDGTextureDiffDiagnostics& Diagnostics =
+		DiffTarget == EMyNinjaRDGDiffTarget::Advection
+			? MyRDGAdvectionDiff
+			: MyRDGDivergenceDiff;
+	Diagnostics.SampleId = SampleId;
+	Diagnostics.MaxDifference = MaxDifference;
+	Diagnostics.ExceededPixelCount = ExceededPixelCount;
+	Diagnostics.ComparedPixelCount = ComparedPixelCount;
+	Diagnostics.Tolerance = Tolerance;
+	Diagnostics.WithinTolerance = ExceededPixelCount == 0;
+
+	const TCHAR* TargetName = DiffTarget == EMyNinjaRDGDiffTarget::Advection
+		? TEXT("Advection")
+		: TEXT("Divergence");
+	UE_LOG(LogTemp, Display,
+		TEXT("FluidTest NinjaLive %s GPU diff sample=%lld max=(%.9g, %.9g, %.9g, %.9g) exceeded=%d/%d tolerance=%.9g"),
+		TargetName,
 		SampleId,
 		MaxDifference.R,
 		MaxDifference.G,
@@ -862,6 +950,9 @@ void UMyNinjaLiveComponent::MyCreateOrAcquireRenderTargets()
 	MyRenderTargetsMap.Empty();
 	MyRDGOutputComparisonTarget = nullptr;
 	MyRDGOutputTargetCreatedForValidation = false;
+	MyRDGAdvectionComparisonTarget = nullptr;
+	MyRDGDivergenceComparisonTarget = nullptr;
+	MyRDGCoreFrameIndex = 0;
 	MyMapLengthTmp = MyRenderTargetsMap.Num();
 
 	const int32 FullWidth = FMath::Max(1, MyResolutionX);

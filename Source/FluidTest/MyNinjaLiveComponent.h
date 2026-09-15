@@ -31,9 +31,34 @@ class UNiagaraSystem;
 class UTexture2D;
 class UBoxComponent;
 class USceneComponent;
+enum class EMyNinjaRDGDiffTarget : uint8;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FMyComponentRePlayEvent);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMyWorldSpaceOffsetEvent, FVector, TraceMeshPos);
+
+USTRUCT(BlueprintType)
+struct FMyNinjaRDGTextureDiffDiagnostics
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	FLinearColor MaxDifference = FLinearColor::Black;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	int32 ExceededPixelCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	int32 ComparedPixelCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	float Tolerance = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	int64 SampleId = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	bool WithinTolerance = true;
+};
 
 
 UCLASS(Blueprintable, BlueprintType, ClassGroup = (FluidSim), meta = (BlueprintSpawnableComponent))
@@ -160,6 +185,12 @@ public:
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
 	bool MyRDGOutputDiffWithinTolerance = true;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	FMyNinjaRDGTextureDiffDiagnostics MyRDGAdvectionDiff;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	FMyNinjaRDGTextureDiffDiagnostics MyRDGDivergenceDiff;
 
 
 
@@ -957,6 +988,13 @@ public:
 		int32 ExceededPixelCount,
 		int32 ComparedPixelCount,
 		float Tolerance);
+	void MyApplyRDGCoreDiffResult(
+		EMyNinjaRDGDiffTarget DiffTarget,
+		int64 SampleId,
+		FLinearColor MaxDifference,
+		int32 ExceededPixelCount,
+		int32 ComparedPixelCount,
+		float Tolerance);
 
 
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
@@ -1548,6 +1586,11 @@ private:
 	TObjectPtr<UTextureRenderTarget2D> MyRDGOutputComparisonTarget = nullptr;
 	uint64 MyRDGOutputFrameIndex = 0;
 	bool MyRDGOutputTargetCreatedForValidation = false;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextureRenderTarget2D> MyRDGAdvectionComparisonTarget = nullptr;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextureRenderTarget2D> MyRDGDivergenceComparisonTarget = nullptr;
+	uint64 MyRDGCoreFrameIndex = 0;
 
 
 	FTimerHandle MyTimerCheckReady;

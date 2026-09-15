@@ -39,6 +39,24 @@ namespace
 		TEXT("Number of output frames between RDG validation samples."),
 		ECVF_Default);
 
+	TAutoConsoleVariable<int32> CVarMyNinjaCoreRenderPath(
+		TEXT("FluidTest.NinjaLive.CoreRenderPath"),
+		0,
+		TEXT("0 uses legacy core draws. 1 uses RDG for migrated core draws."),
+		ECVF_Default);
+
+	TAutoConsoleVariable<int32> CVarMyNinjaCoreRDGValidation(
+		TEXT("FluidTest.NinjaLive.CoreRDGValidation"),
+		0,
+		TEXT("Enables asynchronous GPU comparison for migrated core draws."),
+		ECVF_Default);
+
+	TAutoConsoleVariable<int32> CVarMyNinjaCoreRDGValidationInterval(
+		TEXT("FluidTest.NinjaLive.CoreRDGValidationInterval"),
+		30,
+		TEXT("Number of core frames between RDG validation samples."),
+		ECVF_Default);
+
 	class FMyNinjaOutputDiffCS : public FGlobalShader
 	{
 	public:
@@ -61,6 +79,11 @@ namespace
 
 	IMPLEMENT_GLOBAL_SHADER(FMyNinjaOutputDiffCS, "/Project/Private/MyNinjaOutputDiff.usf", "MainCS", SF_Compute);
 
+	BEGIN_SHADER_PARAMETER_STRUCT(FMyNinjaTextureAccessParameters, )
+		RDG_TEXTURE_ACCESS(Texture, ERHIAccess::SRVGraphics)
+		RENDER_TARGET_BINDING_SLOTS()
+	END_SHADER_PARAMETER_STRUCT()
+
 	struct FMyNinjaPendingOutputDiff
 	{
 		TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback;
@@ -68,6 +91,7 @@ namespace
 		int64 SampleId = 0;
 		int32 ComparedPixelCount = 0;
 		float Tolerance = 0.0f;
+		EMyNinjaRDGDiffTarget DiffTarget = EMyNinjaRDGDiffTarget::Output;
 	};
 
 	TArray<FMyNinjaPendingOutputDiff> GMyNinjaPendingOutputDiffs;
@@ -76,13 +100,15 @@ namespace
 	std::atomic_bool GMyNinjaOutputDiffShuttingDown = false;
 	constexpr int32 GMyNinjaMaxPendingOutputDiffs = 4;
 
-	float MyGetOutputTolerance(const UTextureRenderTarget2D* OutputTarget)
+	float MyGetTextureTolerance(const UTextureRenderTarget2D* Target)
 	{
-		if (OutputTarget->RenderTargetFormat == RTF_RGBA8)
+		if (Target->RenderTargetFormat == RTF_RGBA8)
 		{
 			return 0.0f;
 		}
-		return OutputTarget->RenderTargetFormat == RTF_RGBA32f ? 0.000001f : 0.001f;
+		return Target->RenderTargetFormat == RTF_RGBA32f || Target->RenderTargetFormat == RTF_RG32f
+			? 0.000001f
+			: 0.001f;
 	}
 
 	void MyProcessCompletedOutputDiffs()
@@ -109,15 +135,26 @@ namespace
 			const int64 SampleId = Pending.SampleId;
 			const int32 ComparedPixelCount = Pending.ComparedPixelCount;
 			const float Tolerance = Pending.Tolerance;
+			const EMyNinjaRDGDiffTarget DiffTarget = Pending.DiffTarget;
 			if (!GMyNinjaOutputDiffShuttingDown.load(std::memory_order_acquire))
 			{
 				AsyncTask(ENamedThreads::GameThread,
-					[Component, SampleId, MaxDifference, ExceededPixelCount, ComparedPixelCount, Tolerance]()
+					[Component, SampleId, MaxDifference, ExceededPixelCount, ComparedPixelCount, Tolerance,
+						DiffTarget]()
 					{
 						if (UMyNinjaLiveComponent* ValidComponent = Component.Get())
 						{
-							ValidComponent->MyApplyRDGOutputDiffResult(
-								SampleId, MaxDifference, ExceededPixelCount, ComparedPixelCount, Tolerance);
+							if (DiffTarget == EMyNinjaRDGDiffTarget::Output)
+							{
+								ValidComponent->MyApplyRDGOutputDiffResult(
+									SampleId, MaxDifference, ExceededPixelCount, ComparedPixelCount, Tolerance);
+							}
+							else
+							{
+								ValidComponent->MyApplyRDGCoreDiffResult(
+									DiffTarget, SampleId, MaxDifference, ExceededPixelCount,
+									ComparedPixelCount, Tolerance);
+							}
 						}
 					});
 			}
@@ -127,15 +164,17 @@ namespace
 		GMyNinjaPendingOutputDiffCount.store(GMyNinjaPendingOutputDiffs.Num(), std::memory_order_release);
 	}
 
-	FRDGTextureRef MyAddOutputMaterialPass(
+	FRDGTextureRef MyAddMaterialPass(
 		FRDGBuilder& GraphBuilder,
 		FTextureRenderTargetResource* TargetResource,
 		const FMaterialRenderProxy* MaterialRenderProxy,
 		FIntPoint Extent,
 		const FGameTime& Time,
 		ERHIFeatureLevel::Type FeatureLevel,
-		const TCHAR* TextureName)
+		const TCHAR* TextureName,
+		const TCHAR* PassName)
 	{
+		RDG_EVENT_SCOPE(GraphBuilder, "%s", PassName);
 		FRDGTextureRef TargetTexture = RegisterExternalTexture(
 			GraphBuilder, TargetResource->GetRenderTargetTexture(), TextureName);
 		FCanvas& Canvas = *FCanvas::Create(GraphBuilder, TargetTexture, nullptr, Time, FeatureLevel);
@@ -144,11 +183,29 @@ namespace
 		TileItem.SetColor(FLinearColor::White);
 		Canvas.DrawItem(TileItem);
 		Canvas.Flush_RenderThread(GraphBuilder, false);
-		GraphBuilder.SetTextureAccessFinal(TargetTexture, ERHIAccess::SRVMask);
 		return TargetTexture;
 	}
 
-	void MyAddOutputDiffPass(
+	void MyAddTextureReadBarrier(
+		FRDGBuilder& GraphBuilder,
+		FRDGTextureRef Texture,
+		FRDGTextureRef NextRenderTarget)
+	{
+		FMyNinjaTextureAccessParameters* PassParameters =
+			GraphBuilder.AllocParameters<FMyNinjaTextureAccessParameters>();
+		PassParameters->Texture = Texture;
+		PassParameters->RenderTargets[0] =
+			FRenderTargetBinding(NextRenderTarget, ERenderTargetLoadAction::ELoad);
+		GraphBuilder.AddPass(
+			RDG_EVENT_NAME("FluidTest.NinjaLive.TextureReadBarrier"),
+			PassParameters,
+			ERDGPassFlags::Raster | ERDGPassFlags::NeverCull,
+			[](FRHICommandList& RHICmdList)
+			{
+			});
+	}
+
+	void MyAddTextureDiffPass(
 		FRDGBuilder& GraphBuilder,
 		FRDGTextureRef ReferenceTexture,
 		FRDGTextureRef CandidateTexture,
@@ -156,7 +213,8 @@ namespace
 		float Tolerance,
 		ERHIFeatureLevel::Type FeatureLevel,
 		TWeakObjectPtr<UMyNinjaLiveComponent> Component,
-		int64 SampleId)
+		int64 SampleId,
+		EMyNinjaRDGDiffTarget DiffTarget)
 	{
 		MyProcessCompletedOutputDiffs();
 		if (GMyNinjaPendingOutputDiffs.Num() >= GMyNinjaMaxPendingOutputDiffs)
@@ -166,7 +224,7 @@ namespace
 
 		FRDGBufferDesc ResultDesc = FRDGBufferDesc::CreateBufferDesc(sizeof(uint32), 5);
 		ResultDesc.Usage = EBufferUsageFlags(ResultDesc.Usage | BUF_SourceCopy);
-		FRDGBufferRef ResultBuffer = GraphBuilder.CreateBuffer(ResultDesc, TEXT("FluidTest.NinjaLive.OutputDiffResult"));
+		FRDGBufferRef ResultBuffer = GraphBuilder.CreateBuffer(ResultDesc, TEXT("FluidTest.NinjaLive.TextureDiffResult"));
 		FRDGBufferUAVRef ResultUAV = GraphBuilder.CreateUAV(ResultBuffer, PF_R32_UINT);
 		AddClearUAVPass(GraphBuilder, ResultUAV, 0u);
 
@@ -181,15 +239,16 @@ namespace
 		TShaderMapRef<FMyNinjaOutputDiffCS> ComputeShader(GetGlobalShaderMap(FeatureLevel));
 		FComputeShaderUtils::AddPass(
 			GraphBuilder,
-			RDG_EVENT_NAME("FluidTest.NinjaLive.OutputDiff"),
+			RDG_EVENT_NAME("FluidTest.NinjaLive.TextureDiff.%d", static_cast<int32>(DiffTarget)),
 			ComputeShader,
 			PassParameters,
 			FIntVector(FMath::DivideAndRoundUp(Extent.X, 8), FMath::DivideAndRoundUp(Extent.Y, 8), 1));
 
 		TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback =
-			MakeShared<FRHIGPUBufferReadback, ESPMode::ThreadSafe>(TEXT("FluidTest.NinjaLive.OutputDiffReadback"));
+			MakeShared<FRHIGPUBufferReadback, ESPMode::ThreadSafe>(TEXT("FluidTest.NinjaLive.TextureDiffReadback"));
 		AddEnqueueCopyPass(GraphBuilder, Readback.Get(), ResultBuffer, sizeof(uint32) * 5);
-		GMyNinjaPendingOutputDiffs.Add({ Readback, Component, SampleId, Extent.X * Extent.Y, Tolerance });
+		GMyNinjaPendingOutputDiffs.Add(
+			{ Readback, Component, SampleId, Extent.X * Extent.Y, Tolerance, DiffTarget });
 		GMyNinjaPendingOutputDiffCount.store(GMyNinjaPendingOutputDiffs.Num(), std::memory_order_release);
 	}
 
@@ -212,7 +271,7 @@ namespace
 		const FIntPoint Extent(Target->SizeX, Target->SizeY);
 		const FGameTime Time = World->GetTime();
 		const ERHIFeatureLevel::Type FeatureLevel = World->GetFeatureLevel();
-		const float Tolerance = MyGetOutputTolerance(Target);
+		const float Tolerance = MyGetTextureTolerance(Target);
 		const TWeakObjectPtr<UMyNinjaLiveComponent> WeakComponent(Component);
 
 		ENQUEUE_RENDER_COMMAND(MyNinjaDrawOutputRDG)(
@@ -229,14 +288,15 @@ namespace
 				FRDGBuilder GraphBuilder(RHICmdList);
 				{
 					RDG_EVENT_SCOPE(GraphBuilder, "FluidTest.NinjaLive.OutputPipeline");
-					FRDGTextureRef CandidateTexture = MyAddOutputMaterialPass(
+					FRDGTextureRef CandidateTexture = MyAddMaterialPass(
 						GraphBuilder,
 						TargetResource,
 						MaterialRenderProxy,
 						Extent,
 						Time,
 						FeatureLevel,
-						TEXT("FluidTest.NinjaLive.RDGOutput"));
+						TEXT("FluidTest.NinjaLive.RDGOutput"),
+						TEXT("Output"));
 
 					if (ReferenceResource)
 					{
@@ -244,8 +304,7 @@ namespace
 							GraphBuilder,
 							ReferenceResource->GetRenderTargetTexture(),
 							TEXT("FluidTest.NinjaLive.LegacyOutput"));
-						GraphBuilder.SetTextureAccessFinal(ReferenceTexture, ERHIAccess::SRVMask);
-						MyAddOutputDiffPass(
+						MyAddTextureDiffPass(
 							GraphBuilder,
 							ReferenceTexture,
 							CandidateTexture,
@@ -253,13 +312,277 @@ namespace
 							Tolerance,
 							FeatureLevel,
 							WeakComponent,
-							SampleId);
+							SampleId,
+							EMyNinjaRDGDiffTarget::Output);
+						GraphBuilder.SetTextureAccessFinal(ReferenceTexture, ERHIAccess::SRVMask);
 					}
+					GraphBuilder.SetTextureAccessFinal(CandidateTexture, ERHIAccess::SRVMask);
 				}
 				GraphBuilder.Execute();
 			});
 
 		Target->UpdateResourceImmediate(false);
+	}
+
+	void MyDrawAdvectionDivergenceRDG(
+		UWorld* World,
+		UTextureRenderTarget2D* AdvectionTarget,
+		UMaterialInterface* AdvectionMaterial,
+		UTextureRenderTarget2D* DivergenceTarget,
+		UMaterialInterface* DivergenceMaterial,
+		UTextureRenderTarget2D* ReferenceAdvectionTarget,
+		UTextureRenderTarget2D* ReferenceDivergenceTarget,
+		UMyNinjaLiveComponent* Component,
+		int64 SampleId)
+	{
+		AdvectionMaterial->EnsureIsComplete();
+		DivergenceMaterial->EnsureIsComplete();
+		World->FlushDeferredParameterCollectionInstanceUpdates();
+
+		FTextureRenderTargetResource* AdvectionResource =
+			AdvectionTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* DivergenceResource =
+			DivergenceTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* ReferenceAdvectionResource = ReferenceAdvectionTarget
+			? ReferenceAdvectionTarget->GameThread_GetRenderTargetResource()
+			: nullptr;
+		FTextureRenderTargetResource* ReferenceDivergenceResource = ReferenceDivergenceTarget
+			? ReferenceDivergenceTarget->GameThread_GetRenderTargetResource()
+			: nullptr;
+		const FMaterialRenderProxy* AdvectionProxy = AdvectionMaterial->GetRenderProxy();
+		const FMaterialRenderProxy* DivergenceProxy = DivergenceMaterial->GetRenderProxy();
+		const FIntPoint AdvectionExtent(AdvectionTarget->SizeX, AdvectionTarget->SizeY);
+		const FIntPoint DivergenceExtent(DivergenceTarget->SizeX, DivergenceTarget->SizeY);
+		const FGameTime Time = World->GetTime();
+		const ERHIFeatureLevel::Type FeatureLevel = World->GetFeatureLevel();
+		const float AdvectionTolerance = MyGetTextureTolerance(AdvectionTarget);
+		const float DivergenceTolerance = MyGetTextureTolerance(DivergenceTarget);
+		const TWeakObjectPtr<UMyNinjaLiveComponent> WeakComponent(Component);
+
+		ENQUEUE_RENDER_COMMAND(MyNinjaDrawAdvectionDivergenceRDG)(
+			[AdvectionResource, DivergenceResource, ReferenceAdvectionResource,
+				ReferenceDivergenceResource, AdvectionProxy, DivergenceProxy, AdvectionExtent,
+				DivergenceExtent, Time, FeatureLevel, AdvectionTolerance, DivergenceTolerance,
+				WeakComponent, SampleId](FRHICommandListImmediate& RHICmdList)
+			{
+				MyProcessCompletedOutputDiffs();
+				AdvectionResource->FlushDeferredResourceUpdate(RHICmdList);
+				DivergenceResource->FlushDeferredResourceUpdate(RHICmdList);
+				if (ReferenceAdvectionResource)
+				{
+					ReferenceAdvectionResource->FlushDeferredResourceUpdate(RHICmdList);
+				}
+				if (ReferenceDivergenceResource)
+				{
+					ReferenceDivergenceResource->FlushDeferredResourceUpdate(RHICmdList);
+				}
+
+				FRDGBuilder GraphBuilder(RHICmdList);
+				{
+					RDG_EVENT_SCOPE(GraphBuilder, "FluidTest.NinjaLive.AdvectionDivergencePipeline");
+					FRDGTextureRef AdvectionTexture = MyAddMaterialPass(
+						GraphBuilder,
+						AdvectionResource,
+						AdvectionProxy,
+						AdvectionExtent,
+						Time,
+						FeatureLevel,
+						TEXT("FluidTest.NinjaLive.RDGAdvection"),
+						TEXT("Advection"));
+					FRDGTextureRef DivergenceTexture = RegisterExternalTexture(
+						GraphBuilder,
+						DivergenceResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.RDGDivergence"));
+					MyAddTextureReadBarrier(GraphBuilder, AdvectionTexture, DivergenceTexture);
+
+					DivergenceTexture = MyAddMaterialPass(
+						GraphBuilder,
+						DivergenceResource,
+						DivergenceProxy,
+						DivergenceExtent,
+						Time,
+						FeatureLevel,
+						TEXT("FluidTest.NinjaLive.RDGDivergence"),
+						TEXT("Divergence"));
+
+					if (ReferenceAdvectionResource && ReferenceDivergenceResource)
+					{
+						FRDGTextureRef ReferenceAdvectionTexture = RegisterExternalTexture(
+							GraphBuilder,
+							ReferenceAdvectionResource->GetRenderTargetTexture(),
+							TEXT("FluidTest.NinjaLive.ReferenceAdvection"));
+						FRDGTextureRef ReferenceDivergenceTexture = RegisterExternalTexture(
+							GraphBuilder,
+							ReferenceDivergenceResource->GetRenderTargetTexture(),
+							TEXT("FluidTest.NinjaLive.ReferenceDivergence"));
+						MyAddTextureDiffPass(
+							GraphBuilder,
+							ReferenceAdvectionTexture,
+							AdvectionTexture,
+							AdvectionExtent,
+							AdvectionTolerance,
+							FeatureLevel,
+							WeakComponent,
+							SampleId,
+							EMyNinjaRDGDiffTarget::Advection);
+						MyAddTextureDiffPass(
+							GraphBuilder,
+							ReferenceDivergenceTexture,
+							DivergenceTexture,
+							DivergenceExtent,
+							DivergenceTolerance,
+							FeatureLevel,
+							WeakComponent,
+							SampleId,
+							EMyNinjaRDGDiffTarget::Divergence);
+						GraphBuilder.SetTextureAccessFinal(
+							ReferenceAdvectionTexture, ERHIAccess::SRVMask);
+						GraphBuilder.SetTextureAccessFinal(
+							ReferenceDivergenceTexture, ERHIAccess::SRVMask);
+					}
+					GraphBuilder.SetTextureAccessFinal(AdvectionTexture, ERHIAccess::SRVMask);
+					GraphBuilder.SetTextureAccessFinal(DivergenceTexture, ERHIAccess::SRVMask);
+				}
+				GraphBuilder.Execute();
+			});
+
+		AdvectionTarget->UpdateResourceImmediate(false);
+		DivergenceTarget->UpdateResourceImmediate(false);
+	}
+
+	void MyCompareAdvectionDivergenceRDG(
+		UWorld* World,
+		UTextureRenderTarget2D* ReferenceAdvectionTarget,
+		UTextureRenderTarget2D* CandidateAdvectionTarget,
+		UTextureRenderTarget2D* ReferenceDivergenceTarget,
+		UTextureRenderTarget2D* CandidateDivergenceTarget,
+		UMyNinjaLiveComponent* Component,
+		int64 SampleId)
+	{
+		FTextureRenderTargetResource* ReferenceAdvectionResource =
+			ReferenceAdvectionTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* CandidateAdvectionResource =
+			CandidateAdvectionTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* ReferenceDivergenceResource =
+			ReferenceDivergenceTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* CandidateDivergenceResource =
+			CandidateDivergenceTarget->GameThread_GetRenderTargetResource();
+		const FIntPoint AdvectionExtent(CandidateAdvectionTarget->SizeX, CandidateAdvectionTarget->SizeY);
+		const FIntPoint DivergenceExtent(CandidateDivergenceTarget->SizeX, CandidateDivergenceTarget->SizeY);
+		const ERHIFeatureLevel::Type FeatureLevel = World->GetFeatureLevel();
+		const float AdvectionTolerance = MyGetTextureTolerance(CandidateAdvectionTarget);
+		const float DivergenceTolerance = MyGetTextureTolerance(CandidateDivergenceTarget);
+		const TWeakObjectPtr<UMyNinjaLiveComponent> WeakComponent(Component);
+
+		ENQUEUE_RENDER_COMMAND(MyNinjaCompareAdvectionDivergenceRDG)(
+			[ReferenceAdvectionResource, CandidateAdvectionResource, ReferenceDivergenceResource,
+				CandidateDivergenceResource, AdvectionExtent, DivergenceExtent, FeatureLevel,
+				AdvectionTolerance, DivergenceTolerance, WeakComponent,
+				SampleId](FRHICommandListImmediate& RHICmdList)
+			{
+				MyProcessCompletedOutputDiffs();
+				ReferenceAdvectionResource->FlushDeferredResourceUpdate(RHICmdList);
+				CandidateAdvectionResource->FlushDeferredResourceUpdate(RHICmdList);
+				ReferenceDivergenceResource->FlushDeferredResourceUpdate(RHICmdList);
+				CandidateDivergenceResource->FlushDeferredResourceUpdate(RHICmdList);
+
+				FRDGBuilder GraphBuilder(RHICmdList);
+				{
+					RDG_EVENT_SCOPE(GraphBuilder, "FluidTest.NinjaLive.AdvectionDivergenceValidation");
+					FRDGTextureRef ReferenceAdvectionTexture = RegisterExternalTexture(
+						GraphBuilder,
+						ReferenceAdvectionResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.ReferenceAdvection"));
+					FRDGTextureRef CandidateAdvectionTexture = RegisterExternalTexture(
+						GraphBuilder,
+						CandidateAdvectionResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.CandidateAdvection"));
+					FRDGTextureRef ReferenceDivergenceTexture = RegisterExternalTexture(
+						GraphBuilder,
+						ReferenceDivergenceResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.ReferenceDivergence"));
+					FRDGTextureRef CandidateDivergenceTexture = RegisterExternalTexture(
+						GraphBuilder,
+						CandidateDivergenceResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.CandidateDivergence"));
+					MyAddTextureDiffPass(
+						GraphBuilder,
+						ReferenceAdvectionTexture,
+						CandidateAdvectionTexture,
+						AdvectionExtent,
+						AdvectionTolerance,
+						FeatureLevel,
+						WeakComponent,
+						SampleId,
+						EMyNinjaRDGDiffTarget::Advection);
+					MyAddTextureDiffPass(
+						GraphBuilder,
+						ReferenceDivergenceTexture,
+						CandidateDivergenceTexture,
+						DivergenceExtent,
+						DivergenceTolerance,
+						FeatureLevel,
+						WeakComponent,
+						SampleId,
+						EMyNinjaRDGDiffTarget::Divergence);
+					GraphBuilder.SetTextureAccessFinal(ReferenceAdvectionTexture, ERHIAccess::SRVMask);
+					GraphBuilder.SetTextureAccessFinal(CandidateAdvectionTexture, ERHIAccess::SRVMask);
+					GraphBuilder.SetTextureAccessFinal(ReferenceDivergenceTexture, ERHIAccess::SRVMask);
+					GraphBuilder.SetTextureAccessFinal(CandidateDivergenceTexture, ERHIAccess::SRVMask);
+				}
+				GraphBuilder.Execute();
+			});
+	}
+
+	void MyCopyAdvectionDivergenceTargets(
+		UTextureRenderTarget2D* SourceAdvectionTarget,
+		UTextureRenderTarget2D* DestinationAdvectionTarget,
+		UTextureRenderTarget2D* SourceDivergenceTarget,
+		UTextureRenderTarget2D* DestinationDivergenceTarget)
+	{
+		FTextureRenderTargetResource* SourceAdvectionResource =
+			SourceAdvectionTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* DestinationAdvectionResource =
+			DestinationAdvectionTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* SourceDivergenceResource =
+			SourceDivergenceTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* DestinationDivergenceResource =
+			DestinationDivergenceTarget->GameThread_GetRenderTargetResource();
+
+		ENQUEUE_RENDER_COMMAND(MyNinjaCopyAdvectionDivergenceTargets)(
+			[SourceAdvectionResource, DestinationAdvectionResource, SourceDivergenceResource,
+				DestinationDivergenceResource](FRHICommandListImmediate& RHICmdList)
+			{
+				SourceAdvectionResource->FlushDeferredResourceUpdate(RHICmdList);
+				DestinationAdvectionResource->FlushDeferredResourceUpdate(RHICmdList);
+				SourceDivergenceResource->FlushDeferredResourceUpdate(RHICmdList);
+				DestinationDivergenceResource->FlushDeferredResourceUpdate(RHICmdList);
+
+				FRDGBuilder GraphBuilder(RHICmdList);
+				FRDGTextureRef SourceAdvectionTexture = RegisterExternalTexture(
+					GraphBuilder,
+					SourceAdvectionResource->GetRenderTargetTexture(),
+					TEXT("FluidTest.NinjaLive.SourceAdvectionSnapshot"));
+				FRDGTextureRef DestinationAdvectionTexture = RegisterExternalTexture(
+					GraphBuilder,
+					DestinationAdvectionResource->GetRenderTargetTexture(),
+					TEXT("FluidTest.NinjaLive.DestinationAdvectionSnapshot"));
+				FRDGTextureRef SourceDivergenceTexture = RegisterExternalTexture(
+					GraphBuilder,
+					SourceDivergenceResource->GetRenderTargetTexture(),
+					TEXT("FluidTest.NinjaLive.SourceDivergenceSnapshot"));
+				FRDGTextureRef DestinationDivergenceTexture = RegisterExternalTexture(
+					GraphBuilder,
+					DestinationDivergenceResource->GetRenderTargetTexture(),
+					TEXT("FluidTest.NinjaLive.DestinationDivergenceSnapshot"));
+				AddCopyTexturePass(GraphBuilder, SourceAdvectionTexture, DestinationAdvectionTexture);
+				AddCopyTexturePass(GraphBuilder, SourceDivergenceTexture, DestinationDivergenceTexture);
+				GraphBuilder.SetTextureAccessFinal(SourceAdvectionTexture, ERHIAccess::SRVMask);
+				GraphBuilder.SetTextureAccessFinal(DestinationAdvectionTexture, ERHIAccess::SRVMask);
+				GraphBuilder.SetTextureAccessFinal(SourceDivergenceTexture, ERHIAccess::SRVMask);
+				GraphBuilder.SetTextureAccessFinal(DestinationDivergenceTexture, ERHIAccess::SRVMask);
+				GraphBuilder.Execute();
+			});
 	}
 }
 
@@ -281,6 +604,27 @@ bool FMyNinjaFluidRenderPipeline::MyShouldValidateOutput(uint64 FrameIndex)
 	}
 	const uint64 Interval = static_cast<uint64>(
 		FMath::Max(CVarMyNinjaOutputRDGValidationInterval.GetValueOnGameThread(), 1));
+	return FrameIndex % Interval == 0;
+}
+
+bool FMyNinjaFluidRenderPipeline::MyUseRDGCore()
+{
+	return CVarMyNinjaCoreRenderPath.GetValueOnGameThread() != 0;
+}
+
+bool FMyNinjaFluidRenderPipeline::MyIsCoreValidationEnabled()
+{
+	return CVarMyNinjaCoreRDGValidation.GetValueOnGameThread() != 0;
+}
+
+bool FMyNinjaFluidRenderPipeline::MyShouldValidateCore(uint64 FrameIndex)
+{
+	if (!MyIsCoreValidationEnabled())
+	{
+		return false;
+	}
+	const uint64 Interval = static_cast<uint64>(
+		FMath::Max(CVarMyNinjaCoreRDGValidationInterval.GetValueOnGameThread(), 1));
 	return FrameIndex % Interval == 0;
 }
 
@@ -363,5 +707,111 @@ void FMyNinjaFluidRenderPipeline::MyDrawOutput(
 	{
 		UKismetRenderingLibrary::DrawMaterialToRenderTarget(WorldContextObject, OutputTarget, OutputMaterial);
 		MyDrawOutputRDG(World, ComparisonTarget, OutputMaterial, OutputTarget, Component, static_cast<int64>(SampleId));
+	}
+}
+
+void FMyNinjaFluidRenderPipeline::MyDrawAdvectionDivergence(
+	UObject* WorldContextObject,
+	UTextureRenderTarget2D* AdvectionTarget,
+	UMaterialInterface* AdvectionMaterial,
+	UTextureRenderTarget2D* DivergenceTarget,
+	UMaterialInterface* DivergenceMaterial,
+	UTextureRenderTarget2D* ComparisonAdvectionTarget,
+	UMaterialInterface* ComparisonAdvectionMaterial,
+	UTextureRenderTarget2D* ComparisonDivergenceTarget,
+	UMaterialInterface* ComparisonDivergenceMaterial,
+	UMyNinjaLiveComponent* Component,
+	uint64 SampleId)
+{
+	if (!FApp::CanEverRender() || !IsValid(WorldContextObject) || !IsValid(AdvectionTarget) ||
+		!IsValid(AdvectionMaterial) || !IsValid(DivergenceTarget) || !IsValid(DivergenceMaterial) ||
+		!AdvectionTarget->GetResource() || !DivergenceTarget->GetResource())
+	{
+		return;
+	}
+
+	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World)
+	{
+		return;
+	}
+
+	const bool bUseRDG = MyUseRDGCore();
+	const bool bValidate =
+		IsValid(ComparisonAdvectionTarget) && ComparisonAdvectionTarget->GetResource() &&
+		IsValid(ComparisonAdvectionMaterial) && IsValid(ComparisonDivergenceTarget) &&
+		ComparisonDivergenceTarget->GetResource() && IsValid(ComparisonDivergenceMaterial);
+	if (!bValidate)
+	{
+		if (bUseRDG)
+		{
+			MyDrawAdvectionDivergenceRDG(
+				World,
+				AdvectionTarget,
+				AdvectionMaterial,
+				DivergenceTarget,
+				DivergenceMaterial,
+				nullptr,
+				nullptr,
+				Component,
+				static_cast<int64>(SampleId));
+		}
+		else
+		{
+			UKismetRenderingLibrary::DrawMaterialToRenderTarget(
+				WorldContextObject, AdvectionTarget, AdvectionMaterial);
+			UKismetRenderingLibrary::DrawMaterialToRenderTarget(
+				WorldContextObject, DivergenceTarget, DivergenceMaterial);
+		}
+		return;
+	}
+
+	MyCopyAdvectionDivergenceTargets(
+		AdvectionTarget,
+		ComparisonAdvectionTarget,
+		DivergenceTarget,
+		ComparisonDivergenceTarget);
+
+	if (bUseRDG)
+	{
+		MyDrawAdvectionDivergenceRDG(
+			World,
+			AdvectionTarget,
+			AdvectionMaterial,
+			DivergenceTarget,
+			DivergenceMaterial,
+			nullptr,
+			nullptr,
+			Component,
+			static_cast<int64>(SampleId));
+		UKismetRenderingLibrary::DrawMaterialToRenderTarget(
+			WorldContextObject, ComparisonAdvectionTarget, ComparisonAdvectionMaterial);
+		UKismetRenderingLibrary::DrawMaterialToRenderTarget(
+			WorldContextObject, ComparisonDivergenceTarget, ComparisonDivergenceMaterial);
+		MyCompareAdvectionDivergenceRDG(
+			World,
+			ComparisonAdvectionTarget,
+			AdvectionTarget,
+			ComparisonDivergenceTarget,
+			DivergenceTarget,
+			Component,
+			static_cast<int64>(SampleId));
+	}
+	else
+	{
+		UKismetRenderingLibrary::DrawMaterialToRenderTarget(
+			WorldContextObject, AdvectionTarget, AdvectionMaterial);
+		UKismetRenderingLibrary::DrawMaterialToRenderTarget(
+			WorldContextObject, DivergenceTarget, DivergenceMaterial);
+		MyDrawAdvectionDivergenceRDG(
+			World,
+			ComparisonAdvectionTarget,
+			ComparisonAdvectionMaterial,
+			ComparisonDivergenceTarget,
+			ComparisonDivergenceMaterial,
+			AdvectionTarget,
+			DivergenceTarget,
+			Component,
+			static_cast<int64>(SampleId));
 	}
 }

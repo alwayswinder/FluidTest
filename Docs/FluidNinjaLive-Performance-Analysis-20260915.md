@@ -218,3 +218,32 @@ tolerance=0.001
 ```
 
 异步 readback 队列限制为最多 4 个并发请求；组件 Tick 会继续回收已经提交的结果，模块退出时会等待 GPU 完成本轮工作并释放剩余 readback。验证关闭后，验证专用的输出 RT 和对照 RT 会释放引用。该结果证明 `RT_Output` 在当前材质、格式和测试场景中具备像素级等价性，但不代表其余模拟 pass 已迁移，也不代表 pass 数量已经减少。
+
+## 13. RDG `Advection → Divergence` 第二阶段验证
+
+第二阶段将 `Advection` 与 `Divergence` 放入同一个 RDG GraphBuilder，并在两者之间建立显式的只读依赖。默认仍使用 Legacy 核心路径，验证模式可在同一采样帧运行主路径和对照路径，通过第一阶段的异步 GPU Compute/readback 管线分别统计两个 RenderTarget 的差异。
+
+控制台变量：
+
+```text
+FluidTest.NinjaLive.CoreRenderPath 0
+FluidTest.NinjaLive.CoreRenderPath 1
+FluidTest.NinjaLive.CoreRDGValidation 1
+FluidTest.NinjaLive.CoreRDGValidationInterval 30
+```
+
+- `CoreRenderPath=0`：Legacy Advection/Divergence 主路径。
+- `CoreRenderPath=1`：RDG Advection/Divergence 主路径。
+- `CoreRDGValidation=1`：开启旧/新 GPU 差分。
+- `CoreRDGValidationInterval`：差分采样间隔，最小为 1 帧。
+
+初版验证中 Advection 始终零误差，但 Divergence 从第二帧开始在 G 通道产生持续扩大的差异。原因不是 RDG pass 或 RG16f 格式，而是验证临时 RT 没有真实 `RT_PressureDivergence` 的历史内容：真实 RT 的压力通道会被后续求解器迭代更新，Divergence 写入又会保留目标中的该通道，因此两条验证路径的写入前状态并不相同。验证流程现已在执行两条路径前，用 GPU copy 将 Advection 和 Divergence 的真实目标内容复制到对照 RT，确保输入纹理、材质参数和目标历史完全一致。
+
+在 D3D12、SM6、`/Game/_MyTest/M_Start`、2048×2048 下按每帧采样重新完成双向验证：
+
+| 主路径 | 采样范围 | Advection | Divergence |
+|---|---:|---:|---:|
+| Legacy + RDG 对照 | 0–117 | `max=0`，`exceeded=0/4194304` | `max=0`，`exceeded=0/4194304` |
+| RDG + Legacy 对照 | 0–117 | `max=0`，`exceeded=0/4194304` | `max=0`，`exceeded=0/4194304` |
+
+两轮均正常退出，未出现断言、GPU 崩溃或设备移除。验证用目标快照和额外绘制只在 `CoreRDGValidation=1` 的采样帧启用；默认关闭验证时不会产生这部分开销。当前结果证明 `Advection → Divergence` 在该测试场景和格式下达到像素级等价，下一步可迁移压力迭代 ping-pong，并继续保持独立开关、目标历史快照和双向 GPU 差分。
