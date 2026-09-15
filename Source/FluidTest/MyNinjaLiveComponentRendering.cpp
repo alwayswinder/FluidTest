@@ -117,6 +117,7 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 		MyMake1stOutputAvailableFor2ndOutput || MyMake1stOutputAvailableForNiagara;
 	const bool bValidateOutput = FMyNinjaFluidRenderPipeline::MyIsOutputValidationEnabled();
 	const bool bValidateCore = FMyNinjaFluidRenderPipeline::MyIsCoreValidationEnabled();
+	const bool bValidatePressure = FMyNinjaFluidRenderPipeline::MyIsPressureValidationEnabled();
 
 	auto FindRenderTarget = [this](const TCHAR* Name) -> UTextureRenderTarget2D*
 	{
@@ -141,6 +142,13 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 	{
 		MyRDGAdvectionComparisonTarget = nullptr;
 		MyRDGDivergenceComparisonTarget = nullptr;
+	}
+	if (!bValidatePressure)
+	{
+		MyRDGPressureComparisonTarget = nullptr;
+		MyRDGPressureTempComparisonTarget = nullptr;
+		MyMIPressureCycle1Comparison = nullptr;
+		MyMIPressureCycle2Comparison = nullptr;
 	}
 	if (bOutputRequired)
 	{
@@ -379,6 +387,65 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 		const int32 LastIteration = MyUsePressureSolver1DefaultIs2
 			? FMath::Max(Solver1Iterations - 2, 0)
 			: MyPressureSolver2MaxIterations - 1;
+		const uint64 PressureFrameIndex = MyRDGPressureFrameIndex++;
+		const bool bUseRDGPressure = FMyNinjaFluidRenderPipeline::MyUseRDGPressure();
+		bool bValidatePressureFrame =
+			FMyNinjaFluidRenderPipeline::MyShouldValidatePressure(PressureFrameIndex) &&
+			IsValid(PressureTarget) && IsValid(PressureTempTarget) &&
+			IsValid(MyMIPressureCycle1) && IsValid(MyMIPressureCycle2);
+		if (bValidatePressureFrame)
+		{
+			auto EnsureComparisonTarget = [this](
+				TObjectPtr<UTextureRenderTarget2D>& ComparisonTarget,
+				UTextureRenderTarget2D* SourceTarget)
+			{
+				if (!IsValid(ComparisonTarget) ||
+					ComparisonTarget->SizeX != SourceTarget->SizeX ||
+					ComparisonTarget->SizeY != SourceTarget->SizeY ||
+					ComparisonTarget->RenderTargetFormat != SourceTarget->RenderTargetFormat)
+				{
+					ComparisonTarget = UMyNinjaLiveFunctions::MyCreateRenderTarget(
+						this,
+						SourceTarget->SizeX,
+						SourceTarget->SizeY,
+						SourceTarget->RenderTargetFormat,
+						MySimAreaClamp,
+						SourceTarget->LODGroup,
+						SourceTarget->Filter);
+				}
+			};
+			EnsureComparisonTarget(MyRDGPressureComparisonTarget, PressureTarget);
+			EnsureComparisonTarget(MyRDGPressureTempComparisonTarget, PressureTempTarget);
+
+			auto EnsureComparisonMaterial = [this](
+				TObjectPtr<UMaterialInstanceDynamic>& ComparisonMaterial,
+				UMaterialInstanceDynamic* SourceMaterial)
+			{
+				UMaterialInterface* ParentMaterial = IsValid(SourceMaterial->Parent)
+					? SourceMaterial->Parent.Get()
+					: SourceMaterial;
+				if (!IsValid(ComparisonMaterial) || ComparisonMaterial->Parent != ParentMaterial)
+				{
+					ComparisonMaterial = UMaterialInstanceDynamic::Create(ParentMaterial, this);
+				}
+			};
+			EnsureComparisonMaterial(MyMIPressureCycle1Comparison, MyMIPressureCycle1);
+			EnsureComparisonMaterial(MyMIPressureCycle2Comparison, MyMIPressureCycle2);
+
+			bValidatePressureFrame =
+				IsValid(MyRDGPressureComparisonTarget) &&
+				IsValid(MyRDGPressureTempComparisonTarget) &&
+				IsValid(MyMIPressureCycle1Comparison) &&
+				IsValid(MyMIPressureCycle2Comparison);
+			if (bValidatePressureFrame)
+			{
+				FMyNinjaFluidRenderPipeline::MyCopyPressureTargets(
+					PressureTarget,
+					MyRDGPressureComparisonTarget,
+					PressureTempTarget,
+					MyRDGPressureTempComparisonTarget);
+			}
+		}
 		for (int32 Iteration = 0; Iteration <= LastIteration; ++Iteration)
 		{
 			const bool bLastIteration = Iteration == LastIteration;
@@ -392,7 +459,42 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 				}
 			}
 
-			Draw(PressureTempTarget, MyMIPressureCycle1);
+			if (IsValid(MyMIPressureCycle2))
+			{
+				MyMIPressureCycle2->SetScalarParameterValue(TEXT("KeepDivergenceBuffer"),
+					bLastIteration ? 0.0f : 1.0f);
+				MyMIPressureCycle2->SetScalarParameterValue(TEXT("WorldOffsetDeltaX"), 0.0f);
+				MyMIPressureCycle2->SetScalarParameterValue(TEXT("WorldOffsetDeltaY"), 0.0f);
+			}
+
+			if (bValidatePressureFrame)
+			{
+				MyMIPressureCycle1Comparison->CopyParameterOverrides(MyMIPressureCycle1);
+				MyMIPressureCycle1Comparison->SetTextureParameterValue(
+					TEXT("Texture"), MyRDGPressureComparisonTarget);
+				MyMIPressureCycle2Comparison->CopyParameterOverrides(MyMIPressureCycle2);
+				MyMIPressureCycle2Comparison->SetTextureParameterValue(
+					TEXT("Texture"), MyRDGPressureTempComparisonTarget);
+			}
+
+			FMyNinjaFluidRenderPipeline::MyDrawPressurePair(
+				this,
+				PressureTarget,
+				PressureTempTarget,
+				MyMIPressureCycle1,
+				MyMIPressureCycle2,
+				bUseRDGPressure);
+			if (bValidatePressureFrame)
+			{
+				FMyNinjaFluidRenderPipeline::MyDrawPressurePair(
+					this,
+					MyRDGPressureComparisonTarget,
+					MyRDGPressureTempComparisonTarget,
+					MyMIPressureCycle1Comparison,
+					MyMIPressureCycle2Comparison,
+					!bUseRDGPressure);
+			}
+
 			if (IsValid(MyMIPressureCycle1))
 			{
 				MyMIPressureCycle1->SetScalarParameterValue(TEXT("KernelMult"), static_cast<float>(KernelMultiplier));
@@ -401,16 +503,20 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 			}
 			if (IsValid(MyMIPressureCycle2))
 			{
-				MyMIPressureCycle2->SetScalarParameterValue(TEXT("KeepDivergenceBuffer"),
-					bLastIteration ? 0.0f : 1.0f);
-				MyMIPressureCycle2->SetScalarParameterValue(TEXT("WorldOffsetDeltaX"), 0.0f);
-				MyMIPressureCycle2->SetScalarParameterValue(TEXT("WorldOffsetDeltaY"), 0.0f);
-			}
-			Draw(PressureTarget, MyMIPressureCycle2);
-			if (IsValid(MyMIPressureCycle2))
-			{
 				MyMIPressureCycle2->SetScalarParameterValue(TEXT("KernelMult"), static_cast<float>(KernelMultiplier));
 			}
+		}
+
+		if (bValidatePressureFrame)
+		{
+			FMyNinjaFluidRenderPipeline::MyComparePressureTargets(
+				this,
+				bUseRDGPressure ? MyRDGPressureComparisonTarget.Get() : PressureTarget,
+				bUseRDGPressure ? PressureTarget : MyRDGPressureComparisonTarget.Get(),
+				bUseRDGPressure ? MyRDGPressureTempComparisonTarget.Get() : PressureTempTarget,
+				bUseRDGPressure ? PressureTempTarget : MyRDGPressureTempComparisonTarget.Get(),
+				this,
+				PressureFrameIndex);
 		}
 
 		ThenExec = true;
@@ -451,20 +557,36 @@ void UMyNinjaLiveComponent::MyApplyRDGCoreDiffResult(
 	int32 ComparedPixelCount,
 	float Tolerance)
 {
-	FMyNinjaRDGTextureDiffDiagnostics& Diagnostics =
-		DiffTarget == EMyNinjaRDGDiffTarget::Advection
-			? MyRDGAdvectionDiff
-			: MyRDGDivergenceDiff;
-	Diagnostics.SampleId = SampleId;
-	Diagnostics.MaxDifference = MaxDifference;
-	Diagnostics.ExceededPixelCount = ExceededPixelCount;
-	Diagnostics.ComparedPixelCount = ComparedPixelCount;
-	Diagnostics.Tolerance = Tolerance;
-	Diagnostics.WithinTolerance = ExceededPixelCount == 0;
+	FMyNinjaRDGTextureDiffDiagnostics* Diagnostics = nullptr;
+	const TCHAR* TargetName = TEXT("Unknown");
+	switch (DiffTarget)
+	{
+	case EMyNinjaRDGDiffTarget::Advection:
+		Diagnostics = &MyRDGAdvectionDiff;
+		TargetName = TEXT("Advection");
+		break;
+	case EMyNinjaRDGDiffTarget::Divergence:
+		Diagnostics = &MyRDGDivergenceDiff;
+		TargetName = TEXT("Divergence");
+		break;
+	case EMyNinjaRDGDiffTarget::Pressure:
+		Diagnostics = &MyRDGPressureDiff;
+		TargetName = TEXT("Pressure");
+		break;
+	case EMyNinjaRDGDiffTarget::PressureTemp:
+		Diagnostics = &MyRDGPressureTempDiff;
+		TargetName = TEXT("PressureTemp");
+		break;
+	default:
+		return;
+	}
+	Diagnostics->SampleId = SampleId;
+	Diagnostics->MaxDifference = MaxDifference;
+	Diagnostics->ExceededPixelCount = ExceededPixelCount;
+	Diagnostics->ComparedPixelCount = ComparedPixelCount;
+	Diagnostics->Tolerance = Tolerance;
+	Diagnostics->WithinTolerance = ExceededPixelCount == 0;
 
-	const TCHAR* TargetName = DiffTarget == EMyNinjaRDGDiffTarget::Advection
-		? TEXT("Advection")
-		: TEXT("Divergence");
 	UE_LOG(LogTemp, Display,
 		TEXT("FluidTest NinjaLive %s GPU diff sample=%lld max=(%.9g, %.9g, %.9g, %.9g) exceeded=%d/%d tolerance=%.9g"),
 		TargetName,
@@ -953,6 +1075,11 @@ void UMyNinjaLiveComponent::MyCreateOrAcquireRenderTargets()
 	MyRDGAdvectionComparisonTarget = nullptr;
 	MyRDGDivergenceComparisonTarget = nullptr;
 	MyRDGCoreFrameIndex = 0;
+	MyRDGPressureComparisonTarget = nullptr;
+	MyRDGPressureTempComparisonTarget = nullptr;
+	MyMIPressureCycle1Comparison = nullptr;
+	MyMIPressureCycle2Comparison = nullptr;
+	MyRDGPressureFrameIndex = 0;
 	MyMapLengthTmp = MyRenderTargetsMap.Num();
 
 	const int32 FullWidth = FMath::Max(1, MyResolutionX);
@@ -1028,6 +1155,8 @@ void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
 {
 	MyCompositeScalarParameterIndices.Reset();
 	MyDivergenceScalarParameterIndices.Reset();
+	MyMIPressureCycle1Comparison = nullptr;
+	MyMIPressureCycle2Comparison = nullptr;
 
 	auto CreateMaterialAt = [this](int32 MaterialIndex) -> UMaterialInstanceDynamic*
 	{

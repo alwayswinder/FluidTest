@@ -192,6 +192,12 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
 	FMyNinjaRDGTextureDiffDiagnostics MyRDGDivergenceDiff;
 
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	FMyNinjaRDGTextureDiffDiagnostics MyRDGPressureDiff;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "FluidSim|Runtime|Diagnostics")
+	FMyNinjaRDGTextureDiffDiagnostics MyRDGPressureTempDiff;
+
 
 
 
@@ -1591,6 +1597,15 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextureRenderTarget2D> MyRDGDivergenceComparisonTarget = nullptr;
 	uint64 MyRDGCoreFrameIndex = 0;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextureRenderTarget2D> MyRDGPressureComparisonTarget = nullptr;
+	UPROPERTY(Transient)
+	TObjectPtr<UTextureRenderTarget2D> MyRDGPressureTempComparisonTarget = nullptr;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> MyMIPressureCycle1Comparison = nullptr;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> MyMIPressureCycle2Comparison = nullptr;
+	uint64 MyRDGPressureFrameIndex = 0;
 
 
 	FTimerHandle MyTimerCheckReady;

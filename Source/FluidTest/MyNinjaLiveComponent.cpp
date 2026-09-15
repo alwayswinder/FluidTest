@@ -102,6 +102,10 @@ void UMyNinjaLiveComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	MyRDGOutputTargetCreatedForValidation = false;
 	MyRDGAdvectionComparisonTarget = nullptr;
 	MyRDGDivergenceComparisonTarget = nullptr;
+	MyRDGPressureComparisonTarget = nullptr;
+	MyRDGPressureTempComparisonTarget = nullptr;
+	MyMIPressureCycle1Comparison = nullptr;
+	MyMIPressureCycle2Comparison = nullptr;
 
 	MyMICompositeAndGradient = nullptr;
 	MyMIAdvection = nullptr;

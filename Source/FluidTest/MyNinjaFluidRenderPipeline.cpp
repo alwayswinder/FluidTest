@@ -57,6 +57,24 @@ namespace
 		TEXT("Number of core frames between RDG validation samples."),
 		ECVF_Default);
 
+	TAutoConsoleVariable<int32> CVarMyNinjaPressureRenderPath(
+		TEXT("FluidTest.NinjaLive.PressureRenderPath"),
+		0,
+		TEXT("0 uses legacy pressure draws. 1 uses RDG pressure pair draws."),
+		ECVF_Default);
+
+	TAutoConsoleVariable<int32> CVarMyNinjaPressureRDGValidation(
+		TEXT("FluidTest.NinjaLive.PressureRDGValidation"),
+		0,
+		TEXT("Enables asynchronous GPU comparison for pressure pair draws."),
+		ECVF_Default);
+
+	TAutoConsoleVariable<int32> CVarMyNinjaPressureRDGValidationInterval(
+		TEXT("FluidTest.NinjaLive.PressureRDGValidationInterval"),
+		30,
+		TEXT("Number of pressure frames between RDG validation samples."),
+		ECVF_Default);
+
 	class FMyNinjaOutputDiffCS : public FGlobalShader
 	{
 	public:
@@ -98,7 +116,7 @@ namespace
 	std::atomic<int32> GMyNinjaPendingOutputDiffCount = 0;
 	std::atomic_bool GMyNinjaOutputDiffPollQueued = false;
 	std::atomic_bool GMyNinjaOutputDiffShuttingDown = false;
-	constexpr int32 GMyNinjaMaxPendingOutputDiffs = 4;
+	constexpr int32 GMyNinjaMaxPendingOutputDiffs = 8;
 
 	float MyGetTextureTolerance(const UTextureRenderTarget2D* Target)
 	{
@@ -584,6 +602,163 @@ namespace
 				GraphBuilder.Execute();
 			});
 	}
+
+	void MyDrawPressurePairRDG(
+		UWorld* World,
+		UTextureRenderTarget2D* PressureTarget,
+		UTextureRenderTarget2D* PressureTempTarget,
+		UMaterialInterface* PressureCycle1Material,
+		UMaterialInterface* PressureCycle2Material)
+	{
+		PressureCycle1Material->EnsureIsComplete();
+		PressureCycle2Material->EnsureIsComplete();
+		World->FlushDeferredParameterCollectionInstanceUpdates();
+
+		FTextureRenderTargetResource* PressureResource =
+			PressureTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* PressureTempResource =
+			PressureTempTarget->GameThread_GetRenderTargetResource();
+		const FMaterialRenderProxy* PressureCycle1Proxy = PressureCycle1Material->GetRenderProxy();
+		const FMaterialRenderProxy* PressureCycle2Proxy = PressureCycle2Material->GetRenderProxy();
+		const FIntPoint PressureExtent(PressureTarget->SizeX, PressureTarget->SizeY);
+		const FIntPoint PressureTempExtent(PressureTempTarget->SizeX, PressureTempTarget->SizeY);
+		const FGameTime Time = World->GetTime();
+		const ERHIFeatureLevel::Type FeatureLevel = World->GetFeatureLevel();
+
+		ENQUEUE_RENDER_COMMAND(MyNinjaDrawPressurePairRDG)(
+			[PressureResource, PressureTempResource, PressureCycle1Proxy, PressureCycle2Proxy,
+				PressureExtent, PressureTempExtent, Time,
+				FeatureLevel](FRHICommandListImmediate& RHICmdList)
+			{
+				MyProcessCompletedOutputDiffs();
+				PressureResource->FlushDeferredResourceUpdate(RHICmdList);
+				PressureTempResource->FlushDeferredResourceUpdate(RHICmdList);
+
+				FRDGBuilder GraphBuilder(RHICmdList);
+				{
+					RDG_EVENT_SCOPE(GraphBuilder, "FluidTest.NinjaLive.PressurePairPipeline");
+					FRDGTextureRef PressureTexture = RegisterExternalTexture(
+						GraphBuilder,
+						PressureResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.RDGPressure"));
+					FRDGTextureRef PressureTempTexture = RegisterExternalTexture(
+						GraphBuilder,
+						PressureTempResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.RDGPressureTemp"));
+					MyAddTextureReadBarrier(GraphBuilder, PressureTexture, PressureTempTexture);
+					PressureTempTexture = MyAddMaterialPass(
+						GraphBuilder,
+						PressureTempResource,
+						PressureCycle1Proxy,
+						PressureTempExtent,
+						Time,
+						FeatureLevel,
+						TEXT("FluidTest.NinjaLive.RDGPressureTemp"),
+						TEXT("PressureCycle1"));
+					MyAddTextureReadBarrier(GraphBuilder, PressureTempTexture, PressureTexture);
+					PressureTexture = MyAddMaterialPass(
+						GraphBuilder,
+						PressureResource,
+						PressureCycle2Proxy,
+						PressureExtent,
+						Time,
+						FeatureLevel,
+						TEXT("FluidTest.NinjaLive.RDGPressure"),
+						TEXT("PressureCycle2"));
+					GraphBuilder.SetTextureAccessFinal(PressureTexture, ERHIAccess::SRVMask);
+					GraphBuilder.SetTextureAccessFinal(PressureTempTexture, ERHIAccess::SRVMask);
+				}
+				GraphBuilder.Execute();
+			});
+
+		PressureTarget->UpdateResourceImmediate(false);
+		PressureTempTarget->UpdateResourceImmediate(false);
+	}
+
+	void MyComparePressureTargetsRDG(
+		UWorld* World,
+		UTextureRenderTarget2D* ReferencePressureTarget,
+		UTextureRenderTarget2D* CandidatePressureTarget,
+		UTextureRenderTarget2D* ReferencePressureTempTarget,
+		UTextureRenderTarget2D* CandidatePressureTempTarget,
+		UMyNinjaLiveComponent* Component,
+		int64 SampleId)
+	{
+		FTextureRenderTargetResource* ReferencePressureResource =
+			ReferencePressureTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* CandidatePressureResource =
+			CandidatePressureTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* ReferencePressureTempResource =
+			ReferencePressureTempTarget->GameThread_GetRenderTargetResource();
+		FTextureRenderTargetResource* CandidatePressureTempResource =
+			CandidatePressureTempTarget->GameThread_GetRenderTargetResource();
+		const FIntPoint PressureExtent(CandidatePressureTarget->SizeX, CandidatePressureTarget->SizeY);
+		const FIntPoint PressureTempExtent(
+			CandidatePressureTempTarget->SizeX, CandidatePressureTempTarget->SizeY);
+		const ERHIFeatureLevel::Type FeatureLevel = World->GetFeatureLevel();
+		const float PressureTolerance = MyGetTextureTolerance(CandidatePressureTarget);
+		const float PressureTempTolerance = MyGetTextureTolerance(CandidatePressureTempTarget);
+		const TWeakObjectPtr<UMyNinjaLiveComponent> WeakComponent(Component);
+
+		ENQUEUE_RENDER_COMMAND(MyNinjaComparePressureTargetsRDG)(
+			[ReferencePressureResource, CandidatePressureResource, ReferencePressureTempResource,
+				CandidatePressureTempResource, PressureExtent, PressureTempExtent, FeatureLevel,
+				PressureTolerance, PressureTempTolerance, WeakComponent,
+				SampleId](FRHICommandListImmediate& RHICmdList)
+			{
+				MyProcessCompletedOutputDiffs();
+				ReferencePressureResource->FlushDeferredResourceUpdate(RHICmdList);
+				CandidatePressureResource->FlushDeferredResourceUpdate(RHICmdList);
+				ReferencePressureTempResource->FlushDeferredResourceUpdate(RHICmdList);
+				CandidatePressureTempResource->FlushDeferredResourceUpdate(RHICmdList);
+
+				FRDGBuilder GraphBuilder(RHICmdList);
+				{
+					RDG_EVENT_SCOPE(GraphBuilder, "FluidTest.NinjaLive.PressureValidation");
+					FRDGTextureRef ReferencePressureTexture = RegisterExternalTexture(
+						GraphBuilder,
+						ReferencePressureResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.ReferencePressure"));
+					FRDGTextureRef CandidatePressureTexture = RegisterExternalTexture(
+						GraphBuilder,
+						CandidatePressureResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.CandidatePressure"));
+					FRDGTextureRef ReferencePressureTempTexture = RegisterExternalTexture(
+						GraphBuilder,
+						ReferencePressureTempResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.ReferencePressureTemp"));
+					FRDGTextureRef CandidatePressureTempTexture = RegisterExternalTexture(
+						GraphBuilder,
+						CandidatePressureTempResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.CandidatePressureTemp"));
+					MyAddTextureDiffPass(
+						GraphBuilder,
+						ReferencePressureTexture,
+						CandidatePressureTexture,
+						PressureExtent,
+						PressureTolerance,
+						FeatureLevel,
+						WeakComponent,
+						SampleId,
+						EMyNinjaRDGDiffTarget::Pressure);
+					MyAddTextureDiffPass(
+						GraphBuilder,
+						ReferencePressureTempTexture,
+						CandidatePressureTempTexture,
+						PressureTempExtent,
+						PressureTempTolerance,
+						FeatureLevel,
+						WeakComponent,
+						SampleId,
+						EMyNinjaRDGDiffTarget::PressureTemp);
+					GraphBuilder.SetTextureAccessFinal(ReferencePressureTexture, ERHIAccess::SRVMask);
+					GraphBuilder.SetTextureAccessFinal(CandidatePressureTexture, ERHIAccess::SRVMask);
+					GraphBuilder.SetTextureAccessFinal(ReferencePressureTempTexture, ERHIAccess::SRVMask);
+					GraphBuilder.SetTextureAccessFinal(CandidatePressureTempTexture, ERHIAccess::SRVMask);
+				}
+				GraphBuilder.Execute();
+			});
+	}
 }
 
 bool FMyNinjaFluidRenderPipeline::MyUseRDGOutput()
@@ -625,6 +800,27 @@ bool FMyNinjaFluidRenderPipeline::MyShouldValidateCore(uint64 FrameIndex)
 	}
 	const uint64 Interval = static_cast<uint64>(
 		FMath::Max(CVarMyNinjaCoreRDGValidationInterval.GetValueOnGameThread(), 1));
+	return FrameIndex % Interval == 0;
+}
+
+bool FMyNinjaFluidRenderPipeline::MyUseRDGPressure()
+{
+	return CVarMyNinjaPressureRenderPath.GetValueOnGameThread() != 0;
+}
+
+bool FMyNinjaFluidRenderPipeline::MyIsPressureValidationEnabled()
+{
+	return CVarMyNinjaPressureRDGValidation.GetValueOnGameThread() != 0;
+}
+
+bool FMyNinjaFluidRenderPipeline::MyShouldValidatePressure(uint64 FrameIndex)
+{
+	if (!MyIsPressureValidationEnabled())
+	{
+		return false;
+	}
+	const uint64 Interval = static_cast<uint64>(
+		FMath::Max(CVarMyNinjaPressureRDGValidationInterval.GetValueOnGameThread(), 1));
 	return FrameIndex % Interval == 0;
 }
 
@@ -814,4 +1010,105 @@ void FMyNinjaFluidRenderPipeline::MyDrawAdvectionDivergence(
 			Component,
 			static_cast<int64>(SampleId));
 	}
+}
+
+void FMyNinjaFluidRenderPipeline::MyCopyPressureTargets(
+	UTextureRenderTarget2D* SourcePressureTarget,
+	UTextureRenderTarget2D* DestinationPressureTarget,
+	UTextureRenderTarget2D* SourcePressureTempTarget,
+	UTextureRenderTarget2D* DestinationPressureTempTarget)
+{
+	if (!IsValid(SourcePressureTarget) || !SourcePressureTarget->GetResource() ||
+		!IsValid(DestinationPressureTarget) || !DestinationPressureTarget->GetResource() ||
+		!IsValid(SourcePressureTempTarget) || !SourcePressureTempTarget->GetResource() ||
+		!IsValid(DestinationPressureTempTarget) || !DestinationPressureTempTarget->GetResource())
+	{
+		return;
+	}
+
+	MyCopyAdvectionDivergenceTargets(
+		SourcePressureTarget,
+		DestinationPressureTarget,
+		SourcePressureTempTarget,
+		DestinationPressureTempTarget);
+}
+
+void FMyNinjaFluidRenderPipeline::MyDrawPressurePair(
+	UObject* WorldContextObject,
+	UTextureRenderTarget2D* PressureTarget,
+	UTextureRenderTarget2D* PressureTempTarget,
+	UMaterialInterface* PressureCycle1Material,
+	UMaterialInterface* PressureCycle2Material,
+	bool bUseRDG)
+{
+	if (!FApp::CanEverRender() || !IsValid(WorldContextObject))
+	{
+		return;
+	}
+
+	const bool bCanDrawPair =
+		IsValid(PressureTarget) && PressureTarget->GetResource() &&
+		IsValid(PressureTempTarget) && PressureTempTarget->GetResource() &&
+		IsValid(PressureCycle1Material) && IsValid(PressureCycle2Material);
+	if (bUseRDG && bCanDrawPair)
+	{
+		if (UWorld* World = GEngine->GetWorldFromContextObject(
+			WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
+		{
+			MyDrawPressurePairRDG(
+				World,
+				PressureTarget,
+				PressureTempTarget,
+				PressureCycle1Material,
+				PressureCycle2Material);
+			return;
+		}
+	}
+
+	if (IsValid(PressureTempTarget) && PressureTempTarget->GetResource() &&
+		IsValid(PressureCycle1Material))
+	{
+		UKismetRenderingLibrary::DrawMaterialToRenderTarget(
+			WorldContextObject, PressureTempTarget, PressureCycle1Material);
+	}
+	if (IsValid(PressureTarget) && PressureTarget->GetResource() &&
+		IsValid(PressureCycle2Material))
+	{
+		UKismetRenderingLibrary::DrawMaterialToRenderTarget(
+			WorldContextObject, PressureTarget, PressureCycle2Material);
+	}
+}
+
+void FMyNinjaFluidRenderPipeline::MyComparePressureTargets(
+	UObject* WorldContextObject,
+	UTextureRenderTarget2D* ReferencePressureTarget,
+	UTextureRenderTarget2D* CandidatePressureTarget,
+	UTextureRenderTarget2D* ReferencePressureTempTarget,
+	UTextureRenderTarget2D* CandidatePressureTempTarget,
+	UMyNinjaLiveComponent* Component,
+	uint64 SampleId)
+{
+	if (!FApp::CanEverRender() || !IsValid(WorldContextObject) ||
+		!IsValid(ReferencePressureTarget) || !ReferencePressureTarget->GetResource() ||
+		!IsValid(CandidatePressureTarget) || !CandidatePressureTarget->GetResource() ||
+		!IsValid(ReferencePressureTempTarget) || !ReferencePressureTempTarget->GetResource() ||
+		!IsValid(CandidatePressureTempTarget) || !CandidatePressureTempTarget->GetResource())
+	{
+		return;
+	}
+
+	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World)
+	{
+		return;
+	}
+
+	MyComparePressureTargetsRDG(
+		World,
+		ReferencePressureTarget,
+		CandidatePressureTarget,
+		ReferencePressureTempTarget,
+		CandidatePressureTempTarget,
+		Component,
+		static_cast<int64>(SampleId));
 }

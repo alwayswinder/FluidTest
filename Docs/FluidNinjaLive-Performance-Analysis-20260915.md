@@ -217,7 +217,7 @@ exceeded=0/4194304
 tolerance=0.001
 ```
 
-异步 readback 队列限制为最多 4 个并发请求；组件 Tick 会继续回收已经提交的结果，模块退出时会等待 GPU 完成本轮工作并释放剩余 readback。验证关闭后，验证专用的输出 RT 和对照 RT 会释放引用。该结果证明 `RT_Output` 在当前材质、格式和测试场景中具备像素级等价性，但不代表其余模拟 pass 已迁移，也不代表 pass 数量已经减少。
+异步 readback 队列限制为最多 8 个并发请求；组件 Tick 会继续回收已经提交的结果，模块退出时会等待 GPU 完成本轮工作并释放剩余 readback。验证关闭后，验证专用的输出 RT 和对照 RT 会释放引用。该结果证明 `RT_Output` 在当前材质、格式和测试场景中具备像素级等价性，但不代表其余模拟 pass 已迁移，也不代表 pass 数量已经减少。
 
 ## 13. RDG `Advection → Divergence` 第二阶段验证
 
@@ -247,3 +247,33 @@ FluidTest.NinjaLive.CoreRDGValidationInterval 30
 | RDG + Legacy 对照 | 0–117 | `max=0`，`exceeded=0/4194304` | `max=0`，`exceeded=0/4194304` |
 
 两轮均正常退出，未出现断言、GPU 崩溃或设备移除。验证用目标快照和额外绘制只在 `CoreRDGValidation=1` 的采样帧启用；默认关闭验证时不会产生这部分开销。当前结果证明 `Advection → Divergence` 在该测试场景和格式下达到像素级等价，下一步可迁移压力迭代 ping-pong，并继续保持独立开关、目标历史快照和双向 GPU 差分。
+
+## 14. RDG 压力求解器第三阶段验证
+
+第三阶段将每一轮 `PressureCycle1 → PressureCycle2` ping-pong 放入同一个 RDG GraphBuilder。每轮仍单独提交，避免共享 MID 的 `SingleIterationFlag`、`KeepDivergenceBuffer`、`KernelMult` 和世界偏移跨轮更新被折叠成最终状态；两次材质绘制之间通过显式纹理只读依赖连接 `Pressure → PressureTemp → Pressure`。默认仍使用 Legacy 压力路径。
+
+控制台变量：
+
+```text
+FluidTest.NinjaLive.PressureRenderPath 0
+FluidTest.NinjaLive.PressureRenderPath 1
+FluidTest.NinjaLive.PressureRDGValidation 1
+FluidTest.NinjaLive.PressureRDGValidationInterval 30
+```
+
+- `PressureRenderPath=0`：Legacy 压力主路径。
+- `PressureRenderPath=1`：每轮两次绘制共用一个 GraphBuilder 的 RDG 主路径。
+- `PressureRDGValidation=1`：开启 Legacy/RDG 双向 GPU 差分。
+- `PressureRDGValidationInterval`：压力差分采样间隔，最小为 1 帧。
+
+压力求解器具有跨轮历史，验证模式因此维护独立的 `Pressure`、`PressureTemp` 对照 RT 和两份对照 MID。每个采样帧在压力循环开始前复制真实双 RT 历史，每轮再从主 MID 同步全部动态 override，并将 `Texture` 重新绑定到对照链；循环结束后同时比较两张最终 RT。验证关闭时这些资源会释放引用，默认路径没有额外复制、对照绘制或 readback 开销。
+
+在 D3D12、SM6、`/Game/_MyTest/M_Start` 下完成以下逐帧验证：
+
+| 配置 | 主路径与对照 | 采样范围 | Pressure | PressureTemp |
+|---|---|---:|---:|---:|
+| RG16f，2048×2048，关卡默认迭代 | Legacy + RDG | 0–117 | `max=0`，`exceeded=0/4194304` | `max=0`，`exceeded=0/4194304` |
+| RG16f，2048×2048，关卡默认迭代 | RDG + Legacy | 0–117 | `max=0`，`exceeded=0/4194304` | `max=0`，`exceeded=0/4194304` |
+| RG32f，1024×1024，半分辨率，三轮迭代 | RDG + Legacy | 0–117 | `max=0`，`exceeded=0/1048576` | `max=0`，`exceeded=0/1048576` |
+
+RG16f 容差为 `0.001`，RG32f 容差为 `0.000001`。三轮均正常退出，未出现断言、GPU 崩溃或设备移除；UE 5.7 Development 编译成功，`FluidTest.NinjaLive` 两个自动化测试全部通过。当前结果证明单轮压力配对在覆盖的格式、分辨率和迭代数下达到像素级等价，并把每轮两个独立 Canvas/RDG 提交收敛为一个 GraphBuilder；下一步可评估将相邻压力轮次批量入图，但必须先解决共享 MID 参数快照问题。
