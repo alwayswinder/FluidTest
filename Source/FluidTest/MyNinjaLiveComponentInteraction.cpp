@@ -1032,20 +1032,42 @@ double UMyNinjaLiveComponent::MyCalculateBrushSizeCoFromBounds1(USceneComponent*
 
 void UMyNinjaLiveComponent::MyManageContinuousInteractions()
 {
-	if (!MyContinuousInteractionWithOwnerActor)
-	{
-		return;
-	}
-
 	AActor* OwnerActor = GetOwner();
 	if (!IsValid(OwnerActor))
 	{
 		return;
 	}
 
-	MyOverlappingComponents.Reset();
+	const bool HadContinuousInteraction = !MyContinuousInteractionSkeletalComponent.IsEmpty();
+	if (!MyContinuousInteractionWithOwnerActor && !HadContinuousInteraction)
+	{
+		return;
+	}
+
+	TArray<int32> OwnerSlots;
+	for (const TPair<int32, TObjectPtr<UPrimitiveComponent>>& Pair : MySkeletalMeshTempArrayPairs)
+	{
+		if (IsValid(Pair.Value) && Pair.Value->GetOwner() == OwnerActor)
+		{
+			OwnerSlots.Add(Pair.Key);
+		}
+	}
+	for (const int32 OwnerSlot : OwnerSlots)
+	{
+		MyReleaseTempArraySlot(OwnerSlot);
+	}
+
+	MyOverlappingComponents.RemoveAll(
+		[OwnerActor](const TObjectPtr<UPrimitiveComponent>& Component)
+		{
+			return !IsValid(Component) || Component->GetOwner() == OwnerActor;
+		});
 	MyContinuousInteractionSkeletalComponent.Reset();
-	MyResetTempArraySlots();
+
+	if (!MyContinuousInteractionWithOwnerActor)
+	{
+		return;
+	}
 
 	TArray<UPrimitiveComponent*> OwnerComponents;
 	OwnerActor->GetComponents<UPrimitiveComponent>(OwnerComponents);

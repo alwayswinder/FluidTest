@@ -81,6 +81,10 @@ void AMyNinjaLiveActor::BeginPlay()
 {
 	Super::BeginPlay();
 
+	MyActivatorSetupDone = false;
+	MyInactiveShownOnce = false;
+	MyBeginPlaySupressed = false;
+	MyPawnInsideActivationBounds = false;
 
 	if (MyDisableBlueprint)
 	{
@@ -309,6 +313,9 @@ void AMyNinjaLiveActor::MyProximityCheck()
 			&& MyOverlapFilterInclusiveCollisionType.Contains(TEnumAsByte<ECollisionChannel>(ECC_Pawn)))
 		{
 			NinjaLive->MyResetTempArraySlots();
+			MyOverlappingActors.Reset();
+			NinjaLive->MyOverlappingComponents.Reset();
+			NinjaLive->MyOverlap1 = false;
 		}
 		return;
 	}
@@ -580,9 +587,9 @@ void AMyNinjaLiveActor::MySetInteractionVolumeCollisionResponse()
 
 	const UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
 	const int32 QuantizerStepSize = IsValid(NinjaLive) ? NinjaLive->MyQuantizerStepSize : 0;
-	const int32 AxisLocked = IsValid(NinjaLive)
-		? static_cast<int32>(NinjaLive->MyMovementIsLockedOnThisAxis) : 0;
-	if (QuantizerStepSize <= 0 && AxisLocked == 4)
+	const EMyQuantizerAxisIgnore AxisLocked = IsValid(NinjaLive)
+		? NinjaLive->MyMovementIsLockedOnThisAxis : EMyQuantizerAxisIgnore::None;
+	if (QuantizerStepSize <= 0 && AxisLocked == EMyQuantizerAxisIgnore::None)
 	{
 		return;
 	}
@@ -671,6 +678,10 @@ void AMyNinjaLiveActor::MyBeginOverlapComponent(UPrimitiveComponent* OverlappedC
 	{
 		return;
 	}
+	if (OtherActor == this && NinjaLive->MyContinuousInteractionWithOwnerActor)
+	{
+		return;
+	}
 
 
 	if (MyExcludeSpecificActorsFromOverlap.Contains(OtherActor))
@@ -741,6 +752,10 @@ void AMyNinjaLiveActor::MyProcessOverlapActor(AActor* Actor)
 {
 	UMyNinjaLiveComponent* NinjaLive = GetNinjaLiveComponent();
 	if (!IsValid(NinjaLive) || !IsValid(Actor))
+	{
+		return;
+	}
+	if (Actor == this && NinjaLive->MyContinuousInteractionWithOwnerActor)
 	{
 		return;
 	}

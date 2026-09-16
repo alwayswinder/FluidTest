@@ -2,6 +2,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "GameFramework/Actor.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/AutomationTest.h"
@@ -53,6 +54,34 @@ bool FMyNinjaLiveTempArraySlotsTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("完整重置后全部槽位都应可用"), Component->MyListOfAvailableTempArrays[Index]);
 		TestTrue(TEXT("完整重置后全部槽位内容都应为空"), Component->MyGetTempArray(Index).IsEmpty());
 	}
+
+	AActor* OwnerActor = NewObject<AActor>();
+	UMyNinjaLiveComponent* OwnedComponent = NewObject<UMyNinjaLiveComponent>(OwnerActor);
+	AActor* ExternalActor = NewObject<AActor>();
+	USkeletalMeshComponent* OwnerMesh = NewObject<USkeletalMeshComponent>(OwnerActor);
+	USkeletalMeshComponent* ExternalMesh = NewObject<USkeletalMeshComponent>(ExternalActor);
+	TestNotNull(TEXT("应能创建带所有者的 NinjaLive 组件"), OwnedComponent);
+	if (!OwnedComponent)
+	{
+		return false;
+	}
+
+	const int32 OwnerSlot = OwnedComponent->MyAcquireTempArraySlot();
+	const int32 ExternalSlot = OwnedComponent->MyAcquireTempArraySlot();
+	OwnedComponent->MySkeletalMeshTempArrayPairs.Add(OwnerSlot, OwnerMesh);
+	OwnedComponent->MySkeletalMeshTempArrayPairs.Add(ExternalSlot, ExternalMesh);
+	OwnedComponent->MyContinuousInteractionSkeletalComponent.Add(OwnerMesh);
+	OwnedComponent->MyOverlappingComponents.Add(OwnerMesh);
+	OwnedComponent->MyOverlappingComponents.Add(ExternalMesh);
+	OwnedComponent->MyManageContinuousInteractions();
+	TestFalse(TEXT("关闭持续交互时应释放 owner 槽位"),
+		OwnedComponent->MySkeletalMeshTempArrayPairs.Contains(OwnerSlot));
+	TestTrue(TEXT("重建持续交互时应保留外部重叠槽位"),
+		OwnedComponent->MySkeletalMeshTempArrayPairs.Contains(ExternalSlot));
+	TestFalse(TEXT("关闭持续交互时应移除 owner 重叠组件"),
+		OwnedComponent->MyOverlappingComponents.Contains(OwnerMesh));
+	TestTrue(TEXT("重建持续交互时应保留外部重叠组件"),
+		OwnedComponent->MyOverlappingComponents.Contains(ExternalMesh));
 
 	return true;
 }

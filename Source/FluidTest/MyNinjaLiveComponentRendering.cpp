@@ -1805,6 +1805,7 @@ void UMyNinjaLiveComponent::MyCreateOutputMaterialAndSetItOnTargetsStep03()
 
 			if (MyForceMaxSamplingFPSToNiagara)
 			{
+				MyCaptureExternalNiagaraState(NiagaraComponent);
 				NiagaraComponent->SetForceSolo(true);
 				NiagaraComponent->SetComponentTickInterval(1.0 / static_cast<double>(FMath::Max(MyMaxSamplingFPS, 1)));
 				NiagaraComponent->ReinitializeSystem();
@@ -1813,8 +1814,35 @@ void UMyNinjaLiveComponent::MyCreateOutputMaterialAndSetItOnTargetsStep03()
 	}
 }
 
+void UMyNinjaLiveComponent::MyCaptureExternalNiagaraState(UNiagaraComponent* NiagaraComponent)
+{
+	if (!IsValid(NiagaraComponent) || MyExternalNiagaraStates.Contains(NiagaraComponent))
+	{
+		return;
+	}
+
+	FMyExternalNiagaraState State;
+	State.ForceSolo = NiagaraComponent->GetForceSolo();
+	State.TickInterval = NiagaraComponent->GetComponentTickInterval();
+	MyExternalNiagaraStates.Add(NiagaraComponent, State);
+}
+
+void UMyNinjaLiveComponent::MyRestoreExternalNiagaraStates()
+{
+	for (const TPair<TWeakObjectPtr<UNiagaraComponent>, FMyExternalNiagaraState>& Pair : MyExternalNiagaraStates)
+	{
+		if (UNiagaraComponent* NiagaraComponent = Pair.Key.Get(); IsValid(NiagaraComponent))
+		{
+			NiagaraComponent->SetForceSolo(Pair.Value.ForceSolo);
+			NiagaraComponent->SetComponentTickInterval(Pair.Value.TickInterval);
+		}
+	}
+	MyExternalNiagaraStates.Reset();
+}
+
 void UMyNinjaLiveComponent::MyAfterCreateRT()
 {
+	MyRestoreExternalNiagaraStates();
 	MyNiagaraSystemsToDrive.Reset();
 	MyNiagaraSystemsPresent = false;
 	bMyExternalRenderTargetExportValidated = false;

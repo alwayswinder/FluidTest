@@ -1558,6 +1558,11 @@ public:
 	bool MyRGBInputMaterial = false;
 
 private:
+	struct FMyExternalNiagaraState
+	{
+		bool ForceSolo = false;
+		float TickInterval = 0.0f;
+	};
 
 	static constexpr int32 MyTempArrayCount = 40;
 	TStaticArray<TArray<FName>, MyTempArrayCount> MyTempArrays;
@@ -1584,6 +1589,15 @@ private:
 	void MyApplyPresetAndInputTextures();
 
 
+	void MyResetRuntimeState();
+
+
+	void MyCaptureExternalNiagaraState(UNiagaraComponent* NiagaraComponent);
+
+
+	void MyRestoreExternalNiagaraStates();
+
+
 	void MySetCompositeEraserSwitch();
 	void MyRefreshTraceExcludeActors();
 
@@ -1594,6 +1608,7 @@ private:
 	uint64 MyTraceExcludeRefreshFrame = MAX_uint64;
 	TMap<FName, int32> MyCompositeScalarParameterIndices;
 	TMap<FName, int32> MyDivergenceScalarParameterIndices;
+	TMap<TWeakObjectPtr<UNiagaraComponent>, FMyExternalNiagaraState> MyExternalNiagaraStates;
 	UPROPERTY(Transient)
 	TObjectPtr<UTextureRenderTarget2D> MyRDGOutputComparisonTarget = nullptr;
 	uint64 MyRDGOutputFrameIndex = 0;

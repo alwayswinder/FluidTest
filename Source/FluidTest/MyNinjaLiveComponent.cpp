@@ -56,13 +56,7 @@ void UMyNinjaLiveComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	MyNativeTickLimiterDoOnceClosed = false;
-	MyCustomTickLoopStarted = false;
-	MyLODDoOnceClosed = false;
-	MyAfterTickDelayDeactivateDoOnceClosed = false;
-	MyAfterTickDelayRearmDoOnceClosed = false;
-	bMyExternalRenderTargetExportValidated = false;
-	bMyExternalRenderTargetExportGateOpen = false;
+	MyResetRuntimeState();
 
 	if (UWorld* World = GetWorld())
 	{
@@ -70,6 +64,27 @@ void UMyNinjaLiveComponent::BeginPlay()
 		World->GetTimerManager().SetTimer(MyTimerCheckReady, this,
 			&UMyNinjaLiveComponent::MyCheckReady, 0.2f, true, 0.0f);
 	}
+}
+
+void UMyNinjaLiveComponent::MyResetRuntimeState()
+{
+	MyNativeTickLimiterDoOnceClosed = false;
+	MyCustomTickLoopStarted = false;
+	MyLODDoOnceClosed = false;
+	MyAfterTickDelayDeactivateDoOnceClosed = false;
+	MyAfterTickDelayRearmDoOnceClosed = false;
+	MySimSpeedAdjustmentPending = false;
+	MyCheckTouchOptionsDoOnceClosed = false;
+	MyInitDone = false;
+	MyMaterialInstacesDone = false;
+	MyDynamicSimPositionInitialized = false;
+	bMyTraceMeshInitialRotationCaptured = false;
+	bMyExternalRenderTargetExportValidated = false;
+	bMyExternalRenderTargetExportGateOpen = false;
+	MyRDGOutputFrameIndex = 0;
+	MyRDGCoreFrameIndex = 0;
+	MyRDGPressureFrameIndex = 0;
+	MyRDGPainterFrameIndex = 0;
 }
 
 void UMyNinjaLiveComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -88,11 +103,16 @@ void UMyNinjaLiveComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		TimerManager.ClearTimer(MyCustomTickLoopTimer);
 	}
 
+	MyRestoreExternalNiagaraStates();
 	MyDestroyPainterV2();
 	MyComponentRePlayEvent.Clear();
 	MyWorldSpaceOffset.Clear();
 	MyRenderTargetsMap.Reset();
 	MyNiagaraSystemsToDrive.Reset();
+	MyOverlappingComponents.Reset();
+	MyContinuousInteractionSkeletalComponent.Reset();
+	MyOverlap1 = false;
+	MyResetTempArraySlots();
 	MyNinjaLiveTraceExclude.Reset();
 	MyNinjaLiveTraceExcludeRaw.Reset();
 	MyTraceExcludeRefreshFrame = MAX_uint64;
@@ -126,6 +146,7 @@ void UMyNinjaLiveComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	MyMIOutput = nullptr;
 	MyMISecondaryOutput = nullptr;
 	MyMITertiaryOutput = nullptr;
+	MyResetRuntimeState();
 
 	Super::EndPlay(EndPlayReason);
 }

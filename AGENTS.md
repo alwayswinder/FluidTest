@@ -110,8 +110,9 @@
   `BeginOverlapDetection（复合节点）→ MyBeginOverlapDetection`（+ `MyBeginOverlapComponent` 事件回调 / `MyProcessOverlapActor` 私有辅助，+ `MyInitialActorsProcessed` / `MyOverlapFilterInclusiveBoneNameExactTemp` / `MyOverlapFilterInclusiveBoneNameExactTemp2` / `MyOverlapFilterInclusiveBoneNamePartial` / `MyForceTrackBonesWithSimilarName`，对应蓝图变量同名项，对应蓝图变量 `OverlapFilterInclusiveBoneNameExactTemp2`/`OverlapFilterInclusiveBoneNamePartial`/`ForceTrackBonesWithSimilarName`/`InitialActorsProcessed`）
 
 - 运行时修正（2026-09-15）：LOD2 已作用于组件 Tick/自定义 Timer，Replay 会立即重置并同步 Tick 频率；接近激活可延迟初始化、在每次重新进入时重建跟踪并恢复 Painter V2；重播与 EndOverlap 统一释放骨骼槽位，EndOverlap 清理不再受当前碰撞状态阻断；Painter V2 跳过未变化的标量和数组上传；`RT_Output` 创建不再依赖 Density Input。
+- 运行时修正（2026-09-16）：BeginPlay/EndPlay 共用运行态门闩复位；离开接近激活区域会同步清理重叠状态；外部 Niagara 的 Solo/Tick 修改会按原值恢复；连续 owner 交互只重建 owner 自身槽位，不再清空其他重叠对象的槽位。
 - 性能修正（2026-09-15）：追踪排除 Actor 数组改为按帧复用；无命中追踪跳过 UV 查询；附加流体标量通过 MID 参数索引更新；Niagara Grid2D 旧枚举包名通过 `CoreRedirects` 指向现有资产。
-- RDG 试迁移（2026-09-15）：`RT_Output` 已接入可切换的 RDG Canvas raster 路径，默认保留旧路径；支持异步 GPU Compute 差分和旧/新双向对照，2048×2048 双路径验证最大误差为 0、超阈值像素为 0；验证 readback 限制为最多 4 个并发请求，退出时安全回收，验证关闭后释放临时 RT。
+- RDG 试迁移（2026-09-15）：`RT_Output` 已接入可切换的 RDG Canvas raster 路径，默认保留旧路径；支持异步 GPU Compute 差分和旧/新双向对照，2048×2048 双路径验证最大误差为 0、超阈值像素为 0；验证 readback 限制为最多 8 个并发请求，退出时安全回收，验证关闭后释放临时 RT。
 - RDG 核心管线第二阶段（2026-09-15）：`Advection → Divergence` 已合入同一个 RDG GraphBuilder，默认仍保留 Legacy；支持按帧旧/新双向 GPU 差分，验证前会复制真实目标历史以覆盖 Divergence 保留压力通道的写入语义；D3D12/SM6、2048×2048 下双向连续 117 帧最大误差为 0、超阈值像素为 0。
 - RDG 压力管线第三阶段（2026-09-15）：每轮 `PressureCycle1 → PressureCycle2` 已合入同一个 RDG GraphBuilder，默认仍保留 Legacy；独立压力开关和双 RT/MID ping-pong 对照支持双向 GPU 差分；RG16f 2048×2048 双向及 RG32f 半分辨率三轮迭代验证均为零误差。
 - RDG Painter 管线第四阶段（2026-09-15）：双缓冲 `Painter → Composite → Painter → Composite` 三次绘制已合入同一个 RDG GraphBuilder，首 pass 使用独立 MID 参数快照保留世界偏移时序；默认仍保留 Legacy，独立 Painter 开关和双 RT/MID 对照支持双向 GPU 差分；RGBA16f 2048×2048 双向连续 118 帧均为零误差。
