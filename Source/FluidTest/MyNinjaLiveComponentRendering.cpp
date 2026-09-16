@@ -118,8 +118,23 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 	const bool bValidateOutput = FMyNinjaFluidRenderPipeline::MyIsOutputValidationEnabled();
 	const bool bValidateCore = FMyNinjaFluidRenderPipeline::MyIsCoreValidationEnabled();
 	const bool bValidatePressure = FMyNinjaFluidRenderPipeline::MyIsPressureValidationEnabled();
-	const bool bUseRDGPainter = FMyNinjaFluidRenderPipeline::MyUseRDGPainter();
 	const bool bValidatePainter = FMyNinjaFluidRenderPipeline::MyIsPainterValidationEnabled();
+	const auto ResolveRDGMode = [this](bool bConsoleVariableValue)
+	{
+		switch (MyRenderPipelineMode)
+		{
+		case EMyRenderPipelineMode::Legacy:
+			return false;
+		case EMyRenderPipelineMode::RDG:
+			return true;
+		default:
+			return bConsoleVariableValue;
+		}
+	};
+	const bool bUseRDGOutput = ResolveRDGMode(FMyNinjaFluidRenderPipeline::MyUseRDGOutput());
+	const bool bUseRDGCore = ResolveRDGMode(FMyNinjaFluidRenderPipeline::MyUseRDGCore());
+	const bool bUseRDGPressure = ResolveRDGMode(FMyNinjaFluidRenderPipeline::MyUseRDGPressure());
+	const bool bUseRDGPainter = ResolveRDGMode(FMyNinjaFluidRenderPipeline::MyUseRDGPainter());
 
 	auto FindRenderTarget = [this](const TCHAR* Name) -> UTextureRenderTarget2D*
 	{
@@ -509,7 +524,8 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 			MyMIOutput,
 			ComparisonTarget,
 			this,
-			OutputFrameIndex);
+			OutputFrameIndex,
+			bUseRDGOutput);
 	}
 
 	if (!MySimplePainterMode)
@@ -562,7 +578,8 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 			ComparisonDivergenceTarget,
 			ComparisonDivergenceMaterial,
 			this,
-			CoreFrameIndex);
+			CoreFrameIndex,
+			bUseRDGCore);
 
 		const int32 Solver1Iterations = MyLOD1ReduceSimQuality
 			? FMath::Min(MyFluidSolver1Iterations, MyPressureSolver1MaxIterations)
@@ -571,7 +588,6 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 			? FMath::Max(Solver1Iterations - 2, 0)
 			: MyPressureSolver2MaxIterations - 1;
 		const uint64 PressureFrameIndex = MyRDGPressureFrameIndex++;
-		const bool bUseRDGPressure = FMyNinjaFluidRenderPipeline::MyUseRDGPressure();
 		bool bValidatePressureFrame =
 			FMyNinjaFluidRenderPipeline::MyShouldValidatePressure(PressureFrameIndex) &&
 			IsValid(PressureTarget) && IsValid(PressureTempTarget) &&

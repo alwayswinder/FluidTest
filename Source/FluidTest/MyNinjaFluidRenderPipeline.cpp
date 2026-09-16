@@ -1069,7 +1069,8 @@ void FMyNinjaFluidRenderPipeline::MyDrawOutput(
 	UMaterialInterface* OutputMaterial,
 	UTextureRenderTarget2D* ComparisonTarget,
 	UMyNinjaLiveComponent* Component,
-	uint64 SampleId)
+	uint64 SampleId,
+	bool bUseRDG)
 {
 	if (!FApp::CanEverRender() || !IsValid(WorldContextObject) || !IsValid(OutputTarget) ||
 		!IsValid(OutputMaterial) || !OutputTarget->GetResource())
@@ -1083,7 +1084,6 @@ void FMyNinjaFluidRenderPipeline::MyDrawOutput(
 		return;
 	}
 
-	const bool bUseRDG = MyUseRDGOutput();
 	const bool bValidate = IsValid(ComparisonTarget) && ComparisonTarget->GetResource();
 	if (!bValidate)
 	{
@@ -1121,7 +1121,8 @@ void FMyNinjaFluidRenderPipeline::MyDrawAdvectionDivergence(
 	UTextureRenderTarget2D* ComparisonDivergenceTarget,
 	UMaterialInterface* ComparisonDivergenceMaterial,
 	UMyNinjaLiveComponent* Component,
-	uint64 SampleId)
+	uint64 SampleId,
+	bool bUseRDG)
 {
 	if (!FApp::CanEverRender() || !IsValid(WorldContextObject) || !IsValid(AdvectionTarget) ||
 		!IsValid(AdvectionMaterial) || !IsValid(DivergenceTarget) || !IsValid(DivergenceMaterial) ||
@@ -1136,7 +1137,6 @@ void FMyNinjaFluidRenderPipeline::MyDrawAdvectionDivergence(
 		return;
 	}
 
-	const bool bUseRDG = MyUseRDGCore();
 	const bool bValidate =
 		IsValid(ComparisonAdvectionTarget) && ComparisonAdvectionTarget->GetResource() &&
 		IsValid(ComparisonAdvectionMaterial) && IsValid(ComparisonDivergenceTarget) &&

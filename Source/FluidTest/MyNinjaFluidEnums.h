@@ -85,6 +85,15 @@ enum class EMySimPrecision : uint8
 
 
 UENUM(BlueprintType)
+enum class EMyRenderPipelineMode : uint8
+{
+	ConsoleVariables = 0 UMETA(DisplayName = "Follow Console Variables"),
+	Legacy = 1 UMETA(DisplayName = "Legacy"),
+	RDG = 2 UMETA(DisplayName = "RDG")
+};
+
+
+UENUM(BlueprintType)
 enum class EMySingleObjectType : uint8
 {
 	SkeletalMeshBone = 0 UMETA(DisplayName = "Skeletal Mesh Bone"),

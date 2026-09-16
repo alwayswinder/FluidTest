@@ -20,6 +20,8 @@ bool FMyNinjaLiveTempArraySlotsTest::RunTest(const FString& Parameters)
 	{
 		return false;
 	}
+	TestEqual(TEXT("默认应跟随控制台管线设置"), Component->MyRenderPipelineMode,
+		EMyRenderPipelineMode::ConsoleVariables);
 
 	Component->MyResetTempArraySlots();
 	TestEqual(TEXT("临时数组槽位数量固定为 40"), Component->MyListOfAvailableTempArrays.Num(), 40);

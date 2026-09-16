@@ -116,6 +116,8 @@
 - RDG 核心管线第二阶段（2026-09-15）：`Advection → Divergence` 已合入同一个 RDG GraphBuilder，默认仍保留 Legacy；支持按帧旧/新双向 GPU 差分，验证前会复制真实目标历史以覆盖 Divergence 保留压力通道的写入语义；D3D12/SM6、2048×2048 下双向连续 117 帧最大误差为 0、超阈值像素为 0。
 - RDG 压力管线第三阶段（2026-09-15）：每轮 `PressureCycle1 → PressureCycle2` 已合入同一个 RDG GraphBuilder，默认仍保留 Legacy；独立压力开关和双 RT/MID ping-pong 对照支持双向 GPU 差分；RG16f 2048×2048 双向及 RG32f 半分辨率三轮迭代验证均为零误差。
 - RDG Painter 管线第四阶段（2026-09-15）：双缓冲 `Painter → Composite → Painter → Composite` 三次绘制已合入同一个 RDG GraphBuilder，首 pass 使用独立 MID 参数快照保留世界偏移时序；默认仍保留 Legacy，独立 Painter 开关和双 RT/MID 对照支持双向 GPU 差分；RGBA16f 2048×2048 双向连续 118 帧均为零误差。
+- RDG 管线选择（2026-09-16）：组件新增 `MyRenderPipelineMode` 蓝图枚举，可按实例统一选择跟随控制台变量、Legacy 或 RDG；默认跟随控制台变量以保持现有行为。
+- RDG 性能复测（2026-09-16）：Standalone 稳态下 RDG 平均 14.280 ms、Legacy 13.698 ms、无模拟 12.197 ms；当前 RDG 相对 Legacy 回退 0.582 ms/帧，暂不替换默认路径。主要线索是 7 次/帧 `CanvasDrawTiles` 未减少，材质 pass 仍通过 `FCanvas` flush，且三组独立 Graph 与空 Raster barrier 增加额外边界；详见 `Docs/FluidNinjaLive-RDG-vs-Default-20260916.md`。
 
 ## 常用操作
 

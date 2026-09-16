@@ -110,6 +110,10 @@ public:
 	FVector MyCorrectExtremes(FVector DeltaPos, FVector Scale, FVector Composite) const;
 
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Performance")
+	EMyRenderPipelineMode MyRenderPipelineMode = EMyRenderPipelineMode::ConsoleVariables;
+
+
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyDynamicSimspeedAndWorldOffsetAdjustmentFinal();
 

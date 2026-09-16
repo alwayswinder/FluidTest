@@ -40,7 +40,8 @@ public:
 		UMaterialInterface* OutputMaterial,
 		UTextureRenderTarget2D* ComparisonTarget,
 		UMyNinjaLiveComponent* Component,
-		uint64 SampleId);
+		uint64 SampleId,
+		bool bUseRDG);
 	static void MyDrawAdvectionDivergence(
 		UObject* WorldContextObject,
 		UTextureRenderTarget2D* AdvectionTarget,
@@ -52,7 +53,8 @@ public:
 		UTextureRenderTarget2D* ComparisonDivergenceTarget,
 		UMaterialInterface* ComparisonDivergenceMaterial,
 		UMyNinjaLiveComponent* Component,
-		uint64 SampleId);
+		uint64 SampleId,
+		bool bUseRDG);
 	static void MyCopyPressureTargets(
 		UTextureRenderTarget2D* SourcePressureTarget,
 		UTextureRenderTarget2D* DestinationPressureTarget,
