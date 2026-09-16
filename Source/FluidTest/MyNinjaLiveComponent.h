@@ -113,6 +113,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Performance")
 	EMyRenderPipelineMode MyRenderPipelineMode = EMyRenderPipelineMode::ConsoleVariables;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FluidSim|Performance")
+	EMyFluidSimulationBackend MySimulationBackend = EMyFluidSimulationBackend::Material;
+
 
 	UFUNCTION(BlueprintCallable, Category = "FluidSim|Simulation")
 	void MyDynamicSimspeedAndWorldOffsetAdjustmentFinal();
@@ -1562,6 +1565,11 @@ public:
 	bool MyRGBInputMaterial = false;
 
 private:
+	void MyDrawFluidMaterialToRenderTarget(
+		UTextureRenderTarget2D* Target,
+		UMaterialInterface* Material,
+		TConstArrayView<UTextureRenderTarget2D*> Inputs = {});
+
 	struct FMyExternalNiagaraState
 	{
 		bool ForceSolo = false;
@@ -1630,6 +1638,10 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> MyMIPressureCycle1Comparison = nullptr;
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> MyMIPressureCycle2Comparison = nullptr;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> MyMIPressureCycle1RDGSnapshots;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> MyMIPressureCycle2RDGSnapshots;
 	uint64 MyRDGPressureFrameIndex = 0;
 	UPROPERTY(Transient)
 	TObjectPtr<UTextureRenderTarget2D> MyRDGPainterComparisonTarget = nullptr;

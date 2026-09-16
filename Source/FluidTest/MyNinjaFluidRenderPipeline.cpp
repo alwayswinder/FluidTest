@@ -10,12 +10,20 @@
 #include "HAL/IConsoleManager.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialRenderProxy.h"
+#include "MaterialShader.h"
+#include "MaterialShaderType.h"
 #include "RenderGraphBuilder.h"
 #include "RenderGraphUtils.h"
 #include "RenderingThread.h"
 #include "RHI.h"
 #include "RHIGPUReadback.h"
+#include "SceneRenderTargetParameters.h"
+#include "SceneView.h"
 #include "ShaderParameterStruct.h"
+#include "ShaderParameterUtils.h"
+#include "SystemTextures.h"
+#include "TextureResource.h"
 
 #include <atomic>
 
@@ -93,6 +101,65 @@ namespace
 		TEXT("Number of painter frames between RDG validation samples."),
 		ECVF_Default);
 
+	class FMyNinjaMaterialCS : public FMaterialShader
+	{
+		DECLARE_SHADER_TYPE(FMyNinjaMaterialCS, Material);
+
+	public:
+		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+			SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
+			SHADER_PARAMETER_RDG_UNIFORM_BUFFER(FSceneTextureUniformParameters, SceneTextures)
+			SHADER_PARAMETER(FIntPoint, OutputExtent)
+			SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, OutputTexture)
+			RDG_TEXTURE_ACCESS_ARRAY(InputTextures)
+		END_SHADER_PARAMETER_STRUCT()
+
+		FMyNinjaMaterialCS() = default;
+
+		FMyNinjaMaterialCS(const FMaterialShaderType::CompiledShaderInitializerType& Initializer)
+			: FMaterialShader(Initializer)
+		{
+			Bindings.BindForLegacyShaderParameters(
+				this,
+				Initializer.PermutationId,
+				Initializer.ParameterMap,
+				*FParameters::FTypeInfo::GetStructMetadata(),
+				false);
+		}
+
+		static bool ShouldCompilePermutation(const FMaterialShaderPermutationParameters& Parameters)
+		{
+			const FMaterialShaderParameters& Material = Parameters.MaterialParameters;
+			const bool bSupportedDomain =
+				Material.MaterialDomain == MD_PostProcess ||
+				(Material.MaterialDomain == MD_Surface &&
+					Material.ShadingModels.HasShadingModel(MSM_Unlit) &&
+					Material.bHasEmissiveColorConnected);
+			return bSupportedDomain &&
+				IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
+		}
+
+		static void ModifyCompilationEnvironment(
+			const FMaterialShaderPermutationParameters& Parameters,
+			FShaderCompilerEnvironment& OutEnvironment)
+		{
+			FMaterialShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
+			OutEnvironment.SetDefine(TEXT("THREADGROUP_SIZE_X"), 8);
+			OutEnvironment.SetDefine(TEXT("THREADGROUP_SIZE_Y"), 8);
+			OutEnvironment.CompilerFlags.Add(CFLAG_ForceDXC);
+			OutEnvironment.CompilerFlags.Add(CFLAG_HLSL2021);
+			OutEnvironment.CompilerFlags.Add(CFLAG_CheckForDerivativeOps);
+			OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
+		}
+	};
+
+	IMPLEMENT_MATERIAL_SHADER_TYPE(
+		,
+		FMyNinjaMaterialCS,
+		TEXT("/Project/Private/MyNinjaMaterialCompute.usf"),
+		TEXT("MainCS"),
+		SF_Compute);
+
 	class FMyNinjaOutputDiffCS : public FGlobalShader
 	{
 	public:
@@ -115,9 +182,8 @@ namespace
 
 	IMPLEMENT_GLOBAL_SHADER(FMyNinjaOutputDiffCS, "/Project/Private/MyNinjaOutputDiff.usf", "MainCS", SF_Compute);
 
-	BEGIN_SHADER_PARAMETER_STRUCT(FMyNinjaTextureAccessParameters, )
-		RDG_TEXTURE_ACCESS(Texture, ERHIAccess::SRVGraphics)
-		RENDER_TARGET_BINDING_SLOTS()
+	BEGIN_SHADER_PARAMETER_STRUCT(FMyNinjaMaterialInputParameters, )
+		RDG_TEXTURE_ACCESS_ARRAY(Textures)
 	END_SHADER_PARAMETER_STRUCT()
 
 	struct FMyNinjaPendingOutputDiff
@@ -130,9 +196,71 @@ namespace
 		EMyNinjaRDGDiffTarget DiffTarget = EMyNinjaRDGDiffTarget::Output;
 	};
 
+	struct FMyNinjaUnifiedRenderPass
+	{
+		FTextureRenderTargetResource* TargetResource = nullptr;
+		const FMaterialRenderProxy* MaterialRenderProxy = nullptr;
+		TArray<FTextureRenderTargetResource*> InputResources;
+		FIntPoint Extent = FIntPoint::ZeroValue;
+		FString Name;
+	};
+
+	TUniformBufferRef<FViewUniformShaderParameters> MyCreateMaterialComputeView(
+		FIntPoint Extent,
+		const FGameTime& Time)
+	{
+		const FIntRect ViewRect(FIntPoint::ZeroValue, Extent);
+		FViewMatrices::FMinimalInitializer Initializer;
+		Initializer.ProjectionMatrix = FCanvas::CalcBaseTransform2D(Extent.X, Extent.Y);
+		Initializer.ConstrainedViewRect = ViewRect;
+		const FViewMatrices ViewMatrices(Initializer);
+		const FEngineShowFlags ShowFlags(ESFIM_Game);
+		FSetupViewUniformParametersInputs Inputs;
+		Inputs.EngineShowFlags = &ShowFlags;
+		Inputs.UnscaledViewRect = ViewRect;
+		Inputs.Time = Time;
+		Inputs.FrameCounter = GFrameCounter;
+		Inputs.FrameNumber = GFrameNumberRenderThread;
+		FViewUniformShaderParameters ViewParameters;
+		SetupCommonViewUniformBufferParameters(
+			ViewParameters,
+			Extent,
+			1,
+			ViewRect,
+			ViewMatrices,
+			ViewMatrices,
+			Inputs);
+		return TUniformBufferRef<FViewUniformShaderParameters>::CreateUniformBufferImmediate(
+			ViewParameters,
+			UniformBuffer_SingleFrame);
+	}
+
 	TArray<FMyNinjaPendingOutputDiff> GMyNinjaPendingOutputDiffs;
 	std::atomic<int32> GMyNinjaPendingOutputDiffCount = 0;
 	std::atomic_bool GMyNinjaOutputDiffPollQueued = false;
+	TSet<FString> GMyNinjaLoggedComputePasses;
+	TSet<FString> GMyNinjaLoggedComputeFallbacks;
+
+	void MyLogComputePass(const TCHAR* PassName)
+	{
+		const FString Name(PassName);
+		if (!GMyNinjaLoggedComputePasses.Contains(Name))
+		{
+			GMyNinjaLoggedComputePasses.Add(Name);
+			UE_LOG(LogTemp, Display, TEXT("FluidTest NinjaLive Compute pass active: %s"), PassName);
+		}
+	}
+
+	void MyLogComputeFallback(const TCHAR* PassName, const TCHAR* Reason)
+	{
+		const FString Key = FString::Printf(TEXT("%s:%s"), PassName, Reason);
+		if (!GMyNinjaLoggedComputeFallbacks.Contains(Key))
+		{
+			GMyNinjaLoggedComputeFallbacks.Add(Key);
+			UE_LOG(LogTemp, Warning,
+				TEXT("FluidTest NinjaLive Compute pass fallback: %s (%s)"), PassName, Reason);
+		}
+	}
 	std::atomic_bool GMyNinjaOutputDiffShuttingDown = false;
 	constexpr int32 GMyNinjaMaxPendingOutputDiffs = 8;
 
@@ -202,17 +330,14 @@ namespace
 
 	FRDGTextureRef MyAddMaterialPass(
 		FRDGBuilder& GraphBuilder,
-		FTextureRenderTargetResource* TargetResource,
+		FRDGTextureRef TargetTexture,
 		const FMaterialRenderProxy* MaterialRenderProxy,
 		FIntPoint Extent,
 		const FGameTime& Time,
 		ERHIFeatureLevel::Type FeatureLevel,
-		const TCHAR* TextureName,
 		const TCHAR* PassName)
 	{
 		RDG_EVENT_SCOPE(GraphBuilder, "%s", PassName);
-		FRDGTextureRef TargetTexture = RegisterExternalTexture(
-			GraphBuilder, TargetResource->GetRenderTargetTexture(), TextureName);
 		FCanvas& Canvas = *FCanvas::Create(GraphBuilder, TargetTexture, nullptr, Time, FeatureLevel);
 		Canvas.SetRenderTargetRect(FIntRect(FIntPoint::ZeroValue, Extent));
 		FCanvasTileItem TileItem(FVector2D::ZeroVector, MaterialRenderProxy, FVector2D(Extent));
@@ -222,20 +347,120 @@ namespace
 		return TargetTexture;
 	}
 
-	void MyAddTextureReadBarrier(
+	bool MyAddComputeMaterialPass(
 		FRDGBuilder& GraphBuilder,
-		FRDGTextureRef Texture,
-		FRDGTextureRef NextRenderTarget)
+		FRDGTextureRef TargetTexture,
+		TConstArrayView<FRDGTextureRef> InputTextures,
+		const FMaterialRenderProxy* MaterialRenderProxy,
+		FIntPoint Extent,
+		const FGameTime& Time,
+		ERHIFeatureLevel::Type FeatureLevel,
+		FSceneInterface* SceneInterface,
+		const TCHAR* PassName)
 	{
-		FMyNinjaTextureAccessParameters* PassParameters =
-			GraphBuilder.AllocParameters<FMyNinjaTextureAccessParameters>();
-		PassParameters->Texture = Texture;
-		PassParameters->RenderTargets[0] =
-			FRenderTargetBinding(NextRenderTarget, ERenderTargetLoadAction::ELoad);
+		FMaterialShaderTypes ShaderTypes;
+		ShaderTypes.AddShaderType<FMyNinjaMaterialCS>();
+		const FMaterialRenderProxy* EffectiveMaterialRenderProxy = MaterialRenderProxy;
+		const FMaterial* MaterialPointer = nullptr;
+		TShaderRef<FMyNinjaMaterialCS> ComputeShader;
+		while (EffectiveMaterialRenderProxy)
+		{
+			const FMaterial* Material = EffectiveMaterialRenderProxy->UpdateUniformExpressionCacheIfNeeded(
+				GraphBuilder.RHICmdList,
+				FeatureLevel);
+			FMaterialShaders Shaders;
+			if (Material && Material->TryGetShaders(ShaderTypes, nullptr, Shaders) &&
+				Shaders.TryGetComputeShader(ComputeShader))
+			{
+				MaterialPointer = Material;
+				break;
+			}
+			EffectiveMaterialRenderProxy = EffectiveMaterialRenderProxy->GetFallback(FeatureLevel);
+		}
+		if (!MaterialPointer || !ComputeShader.IsValid())
+		{
+			MyLogComputeFallback(PassName, TEXT("shader permutation unavailable"));
+			return false;
+		}
+
+		const EPixelFormat Format = TargetTexture->Desc.Format;
+		const EBlendMode BlendMode = MaterialPointer->GetBlendMode();
+		const bool bNeedsTypedLoad =
+			BlendMode == BLEND_Translucent || BlendMode == BLEND_Additive;
+		if (!EnumHasAnyFlags(TargetTexture->Desc.Flags, TexCreate_UAV) ||
+			!RHIIsTypedUAVStoreSupported(Format) ||
+			(bNeedsTypedLoad && !RHIIsTypedUAVLoadSupported(Format)))
+		{
+			MyLogComputeFallback(PassName, TEXT("typed UAV access unavailable"));
+			return false;
+		}
+
+		FMyNinjaMaterialCS::FParameters* PassParameters =
+			GraphBuilder.AllocParameters<FMyNinjaMaterialCS::FParameters>();
+		PassParameters->View = MyCreateMaterialComputeView(Extent, Time);
+		if (!FRDGSystemTextures::IsValid(GraphBuilder))
+		{
+			FRDGSystemTextures::Create(GraphBuilder);
+		}
+		PassParameters->SceneTextures = CreateSceneTextureUniformBuffer(
+			GraphBuilder,
+			nullptr,
+			FeatureLevel,
+			ESceneTextureSetupMode::None);
+		PassParameters->OutputExtent = Extent;
+		PassParameters->OutputTexture = GraphBuilder.CreateUAV(TargetTexture);
+		for (FRDGTextureRef InputTexture : InputTextures)
+		{
+			PassParameters->InputTextures.Emplace(InputTexture, ERHIAccess::SRVCompute);
+		}
+
 		GraphBuilder.AddPass(
-			RDG_EVENT_NAME("FluidTest.NinjaLive.TextureReadBarrier"),
+			RDG_EVENT_NAME("%s.Compute", PassName),
 			PassParameters,
-			ERDGPassFlags::Raster | ERDGPassFlags::NeverCull,
+			ERDGPassFlags::Compute,
+			[PassParameters, ComputeShader, EffectiveMaterialRenderProxy, MaterialPointer, SceneInterface, Extent]
+			(FRHIComputeCommandList& RHICmdList)
+			{
+				FRHIComputeShader* ShaderRHI = ComputeShader.GetComputeShader();
+				SetComputePipelineState(RHICmdList, ShaderRHI);
+				FRHIBatchedShaderParameters& BatchedParameters = RHICmdList.GetScratchShaderParameters();
+				ComputeShader->SetParameters(
+					BatchedParameters,
+					EffectiveMaterialRenderProxy,
+					*MaterialPointer,
+					SceneInterface);
+				SetShaderParameters(BatchedParameters, ComputeShader, *PassParameters);
+				RHICmdList.SetBatchedShaderParameters(ShaderRHI, BatchedParameters);
+				RHICmdList.DispatchComputeShader(
+					FMath::DivideAndRoundUp(Extent.X, 8),
+					FMath::DivideAndRoundUp(Extent.Y, 8),
+					1);
+				UnsetShaderUAVs(RHICmdList, ComputeShader, ShaderRHI);
+			});
+		MyLogComputePass(PassName);
+		return true;
+	}
+
+	void MyAddMaterialInputAccess(
+		FRDGBuilder& GraphBuilder,
+		TConstArrayView<FRDGTextureRef> Textures,
+		const TCHAR* PassName)
+	{
+		if (Textures.IsEmpty())
+		{
+			return;
+		}
+
+		FMyNinjaMaterialInputParameters* PassParameters =
+			GraphBuilder.AllocParameters<FMyNinjaMaterialInputParameters>();
+		for (FRDGTextureRef Texture : Textures)
+		{
+			PassParameters->Textures.Emplace(Texture, ERHIAccess::SRVGraphics);
+		}
+		GraphBuilder.AddPass(
+			RDG_EVENT_NAME("%s.InputAccess", PassName),
+			PassParameters,
+			ERDGPassFlags::Raster | ERDGPassFlags::SkipRenderPass | ERDGPassFlags::NeverCull,
 			[](FRHICommandList& RHICmdList)
 			{
 			});
@@ -315,23 +540,29 @@ namespace
 				Tolerance, WeakComponent, SampleId](FRHICommandListImmediate& RHICmdList)
 			{
 				MyProcessCompletedOutputDiffs();
-				TargetResource->FlushDeferredResourceUpdate(RHICmdList);
-				if (ReferenceResource)
+				if (FDeferredUpdateResource::IsUpdateNeeded())
 				{
-					ReferenceResource->FlushDeferredResourceUpdate(RHICmdList);
+					TargetResource->FlushDeferredResourceUpdate(RHICmdList);
+					if (ReferenceResource)
+					{
+						ReferenceResource->FlushDeferredResourceUpdate(RHICmdList);
+					}
 				}
 
 				FRDGBuilder GraphBuilder(RHICmdList);
 				{
 					RDG_EVENT_SCOPE(GraphBuilder, "FluidTest.NinjaLive.OutputPipeline");
-					FRDGTextureRef CandidateTexture = MyAddMaterialPass(
+					FRDGTextureRef CandidateTexture = RegisterExternalTexture(
 						GraphBuilder,
-						TargetResource,
+						TargetResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.RDGOutput"));
+					CandidateTexture = MyAddMaterialPass(
+						GraphBuilder,
+						CandidateTexture,
 						MaterialRenderProxy,
 						Extent,
 						Time,
 						FeatureLevel,
-						TEXT("FluidTest.NinjaLive.RDGOutput"),
 						TEXT("Output"));
 
 					if (ReferenceResource)
@@ -357,7 +588,10 @@ namespace
 				GraphBuilder.Execute();
 			});
 
-		Target->UpdateResourceImmediate(false);
+		if (Target->bAutoGenerateMips)
+		{
+			Target->UpdateResourceImmediate(false);
+		}
 	}
 
 	void MyDrawAdvectionDivergenceRDG(
@@ -402,43 +636,49 @@ namespace
 				WeakComponent, SampleId](FRHICommandListImmediate& RHICmdList)
 			{
 				MyProcessCompletedOutputDiffs();
-				AdvectionResource->FlushDeferredResourceUpdate(RHICmdList);
-				DivergenceResource->FlushDeferredResourceUpdate(RHICmdList);
-				if (ReferenceAdvectionResource)
+				if (FDeferredUpdateResource::IsUpdateNeeded())
 				{
-					ReferenceAdvectionResource->FlushDeferredResourceUpdate(RHICmdList);
-				}
-				if (ReferenceDivergenceResource)
-				{
-					ReferenceDivergenceResource->FlushDeferredResourceUpdate(RHICmdList);
+					AdvectionResource->FlushDeferredResourceUpdate(RHICmdList);
+					DivergenceResource->FlushDeferredResourceUpdate(RHICmdList);
+					if (ReferenceAdvectionResource)
+					{
+						ReferenceAdvectionResource->FlushDeferredResourceUpdate(RHICmdList);
+					}
+					if (ReferenceDivergenceResource)
+					{
+						ReferenceDivergenceResource->FlushDeferredResourceUpdate(RHICmdList);
+					}
 				}
 
 				FRDGBuilder GraphBuilder(RHICmdList);
 				{
 					RDG_EVENT_SCOPE(GraphBuilder, "FluidTest.NinjaLive.AdvectionDivergencePipeline");
-					FRDGTextureRef AdvectionTexture = MyAddMaterialPass(
+					FRDGTextureRef AdvectionTexture = RegisterExternalTexture(
 						GraphBuilder,
-						AdvectionResource,
+						AdvectionResource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.RDGAdvection"));
+					AdvectionTexture = MyAddMaterialPass(
+						GraphBuilder,
+						AdvectionTexture,
 						AdvectionProxy,
 						AdvectionExtent,
 						Time,
 						FeatureLevel,
-						TEXT("FluidTest.NinjaLive.RDGAdvection"),
 						TEXT("Advection"));
 					FRDGTextureRef DivergenceTexture = RegisterExternalTexture(
 						GraphBuilder,
 						DivergenceResource->GetRenderTargetTexture(),
 						TEXT("FluidTest.NinjaLive.RDGDivergence"));
-					MyAddTextureReadBarrier(GraphBuilder, AdvectionTexture, DivergenceTexture);
+					MyAddMaterialInputAccess(
+						GraphBuilder, MakeArrayView(&AdvectionTexture, 1), TEXT("Divergence"));
 
 					DivergenceTexture = MyAddMaterialPass(
 						GraphBuilder,
-						DivergenceResource,
+						DivergenceTexture,
 						DivergenceProxy,
 						DivergenceExtent,
 						Time,
 						FeatureLevel,
-						TEXT("FluidTest.NinjaLive.RDGDivergence"),
 						TEXT("Divergence"));
 
 					if (ReferenceAdvectionResource && ReferenceDivergenceResource)
@@ -482,8 +722,14 @@ namespace
 				GraphBuilder.Execute();
 			});
 
-		AdvectionTarget->UpdateResourceImmediate(false);
-		DivergenceTarget->UpdateResourceImmediate(false);
+		if (AdvectionTarget->bAutoGenerateMips)
+		{
+			AdvectionTarget->UpdateResourceImmediate(false);
+		}
+		if (DivergenceTarget->bAutoGenerateMips)
+		{
+			DivergenceTarget->UpdateResourceImmediate(false);
+		}
 	}
 
 	void MyCompareAdvectionDivergenceRDG(
@@ -649,8 +895,11 @@ namespace
 				FeatureLevel](FRHICommandListImmediate& RHICmdList)
 			{
 				MyProcessCompletedOutputDiffs();
-				PressureResource->FlushDeferredResourceUpdate(RHICmdList);
-				PressureTempResource->FlushDeferredResourceUpdate(RHICmdList);
+				if (FDeferredUpdateResource::IsUpdateNeeded())
+				{
+					PressureResource->FlushDeferredResourceUpdate(RHICmdList);
+					PressureTempResource->FlushDeferredResourceUpdate(RHICmdList);
+				}
 
 				FRDGBuilder GraphBuilder(RHICmdList);
 				{
@@ -663,25 +912,25 @@ namespace
 						GraphBuilder,
 						PressureTempResource->GetRenderTargetTexture(),
 						TEXT("FluidTest.NinjaLive.RDGPressureTemp"));
-					MyAddTextureReadBarrier(GraphBuilder, PressureTexture, PressureTempTexture);
+					MyAddMaterialInputAccess(
+						GraphBuilder, MakeArrayView(&PressureTexture, 1), TEXT("PressureCycle1"));
 					PressureTempTexture = MyAddMaterialPass(
 						GraphBuilder,
-						PressureTempResource,
+						PressureTempTexture,
 						PressureCycle1Proxy,
 						PressureTempExtent,
 						Time,
 						FeatureLevel,
-						TEXT("FluidTest.NinjaLive.RDGPressureTemp"),
 						TEXT("PressureCycle1"));
-					MyAddTextureReadBarrier(GraphBuilder, PressureTempTexture, PressureTexture);
+					MyAddMaterialInputAccess(
+						GraphBuilder, MakeArrayView(&PressureTempTexture, 1), TEXT("PressureCycle2"));
 					PressureTexture = MyAddMaterialPass(
 						GraphBuilder,
-						PressureResource,
+						PressureTexture,
 						PressureCycle2Proxy,
 						PressureExtent,
 						Time,
 						FeatureLevel,
-						TEXT("FluidTest.NinjaLive.RDGPressure"),
 						TEXT("PressureCycle2"));
 					GraphBuilder.SetTextureAccessFinal(PressureTexture, ERHIAccess::SRVMask);
 					GraphBuilder.SetTextureAccessFinal(PressureTempTexture, ERHIAccess::SRVMask);
@@ -689,8 +938,14 @@ namespace
 				GraphBuilder.Execute();
 			});
 
-		PressureTarget->UpdateResourceImmediate(false);
-		PressureTempTarget->UpdateResourceImmediate(false);
+		if (PressureTarget->bAutoGenerateMips)
+		{
+			PressureTarget->UpdateResourceImmediate(false);
+		}
+		if (PressureTempTarget->bAutoGenerateMips)
+		{
+			PressureTempTarget->UpdateResourceImmediate(false);
+		}
 	}
 
 	void MyComparePressureTargetsRDG(
@@ -814,8 +1069,11 @@ namespace
 				FeatureLevel](FRHICommandListImmediate& RHICmdList)
 			{
 				MyProcessCompletedOutputDiffs();
-				PainterResource->FlushDeferredResourceUpdate(RHICmdList);
-				CompositeResource->FlushDeferredResourceUpdate(RHICmdList);
+				if (FDeferredUpdateResource::IsUpdateNeeded())
+				{
+					PainterResource->FlushDeferredResourceUpdate(RHICmdList);
+					CompositeResource->FlushDeferredResourceUpdate(RHICmdList);
+				}
 
 				FRDGBuilder GraphBuilder(RHICmdList);
 				{
@@ -828,37 +1086,37 @@ namespace
 						GraphBuilder,
 						CompositeResource->GetRenderTargetTexture(),
 						TEXT("FluidTest.NinjaLive.RDGComposite"));
-					MyAddTextureReadBarrier(GraphBuilder, PainterTexture, CompositeTexture);
+					MyAddMaterialInputAccess(
+						GraphBuilder, MakeArrayView(&PainterTexture, 1), TEXT("PainterOffsetFirst"));
 					CompositeTexture = MyAddMaterialPass(
 						GraphBuilder,
-						CompositeResource,
+						CompositeTexture,
 						FirstOffsetProxy,
 						CompositeExtent,
 						Time,
 						FeatureLevel,
-						TEXT("FluidTest.NinjaLive.RDGComposite"),
 						TEXT("PainterOffsetFirst"));
-					MyAddTextureReadBarrier(GraphBuilder, CompositeTexture, PainterTexture);
+					MyAddMaterialInputAccess(
+						GraphBuilder, MakeArrayView(&CompositeTexture, 1), TEXT("PainterOffsetSecond"));
 					PainterTexture = MyAddMaterialPass(
 						GraphBuilder,
-						PainterResource,
+						PainterTexture,
 						SecondOffsetProxy,
 						PainterExtent,
 						Time,
 						FeatureLevel,
-						TEXT("FluidTest.NinjaLive.RDGPainter"),
 						TEXT("PainterOffsetSecond"));
 					if (CompositeProxy)
 					{
-						MyAddTextureReadBarrier(GraphBuilder, PainterTexture, CompositeTexture);
+						MyAddMaterialInputAccess(
+							GraphBuilder, MakeArrayView(&PainterTexture, 1), TEXT("CompositeAndGradient"));
 						CompositeTexture = MyAddMaterialPass(
 							GraphBuilder,
-							CompositeResource,
+							CompositeTexture,
 							CompositeProxy,
 							CompositeExtent,
 							Time,
 							FeatureLevel,
-							TEXT("FluidTest.NinjaLive.RDGComposite"),
 							TEXT("CompositeAndGradient"));
 					}
 					GraphBuilder.SetTextureAccessFinal(PainterTexture, ERHIAccess::SRVMask);
@@ -867,8 +1125,14 @@ namespace
 				GraphBuilder.Execute();
 			});
 
-		PainterTarget->UpdateResourceImmediate(false);
-		CompositeTarget->UpdateResourceImmediate(false);
+		if (PainterTarget->bAutoGenerateMips)
+		{
+			PainterTarget->UpdateResourceImmediate(false);
+		}
+		if (CompositeTarget->bAutoGenerateMips)
+		{
+			CompositeTarget->UpdateResourceImmediate(false);
+		}
 	}
 
 	void MyComparePainterCompositeTargetsRDG(
@@ -942,6 +1206,156 @@ namespace
 				GraphBuilder.Execute();
 			});
 	}
+}
+
+bool FMyNinjaFluidRenderPipeline::MyDrawUnifiedFluidStep(
+	UObject* WorldContextObject,
+	const TArray<FMyNinjaFluidRDGPass>& Passes,
+	bool bUseCompute)
+{
+	if (!FApp::CanEverRender() || !IsValid(WorldContextObject) || Passes.IsEmpty())
+	{
+		return false;
+	}
+
+	UWorld* World = GEngine->GetWorldFromContextObject(
+		WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
+	if (!World)
+	{
+		return false;
+	}
+
+	TArray<FMyNinjaUnifiedRenderPass> RenderPasses;
+	RenderPasses.Reserve(Passes.Num());
+	TSet<UTextureRenderTarget2D*> TargetsWithGeneratedMips;
+	for (const FMyNinjaFluidRDGPass& Pass : Passes)
+	{
+		if (!IsValid(Pass.Target) || !Pass.Target->GetResource() || !IsValid(Pass.Material))
+		{
+			return false;
+		}
+
+		Pass.Material->EnsureIsComplete();
+		FMyNinjaUnifiedRenderPass& RenderPass = RenderPasses.AddDefaulted_GetRef();
+		RenderPass.TargetResource = Pass.Target->GameThread_GetRenderTargetResource();
+		RenderPass.MaterialRenderProxy = Pass.Material->GetRenderProxy();
+		RenderPass.Extent = FIntPoint(Pass.Target->SizeX, Pass.Target->SizeY);
+		RenderPass.Name = Pass.Name.IsNone() ? Pass.Material->GetName() : Pass.Name.ToString();
+		for (UTextureRenderTarget2D* Input : Pass.Inputs)
+		{
+			if (IsValid(Input) && Input->GetResource())
+			{
+				RenderPass.InputResources.AddUnique(Input->GameThread_GetRenderTargetResource());
+			}
+		}
+		if (Pass.Target->bAutoGenerateMips)
+		{
+			TargetsWithGeneratedMips.Add(Pass.Target);
+		}
+	}
+
+	World->FlushDeferredParameterCollectionInstanceUpdates();
+	const FGameTime Time = World->GetTime();
+	const ERHIFeatureLevel::Type FeatureLevel = World->GetFeatureLevel();
+	FSceneInterface* SceneInterface = World->Scene;
+
+	ENQUEUE_RENDER_COMMAND(MyNinjaDrawUnifiedFluidStepRDG)(
+		[RenderPasses = MoveTemp(RenderPasses), Time, FeatureLevel, SceneInterface, bUseCompute]
+		(FRHICommandListImmediate& RHICmdList)
+		{
+			MyProcessCompletedOutputDiffs();
+			TSet<FTextureRenderTargetResource*> Resources;
+			for (const FMyNinjaUnifiedRenderPass& Pass : RenderPasses)
+			{
+				Resources.Add(Pass.TargetResource);
+				for (FTextureRenderTargetResource* InputResource : Pass.InputResources)
+				{
+					Resources.Add(InputResource);
+				}
+			}
+
+			if (FDeferredUpdateResource::IsUpdateNeeded())
+			{
+				for (FTextureRenderTargetResource* Resource : Resources)
+				{
+					Resource->FlushDeferredResourceUpdate(RHICmdList);
+				}
+			}
+
+			FRDGBuilder GraphBuilder(RHICmdList);
+			{
+				RDG_EVENT_SCOPE(GraphBuilder, "FluidTest.NinjaLive.UnifiedFluidStep");
+				TMap<FTextureRenderTargetResource*, FRDGTextureRef> Textures;
+				for (FTextureRenderTargetResource* Resource : Resources)
+				{
+					Textures.Add(Resource, RegisterExternalTexture(
+						GraphBuilder,
+						Resource->GetRenderTargetTexture(),
+						TEXT("FluidTest.NinjaLive.UnifiedTexture")));
+				}
+
+				for (const FMyNinjaUnifiedRenderPass& Pass : RenderPasses)
+				{
+					FRDGTextureRef TargetTexture = Textures.FindChecked(Pass.TargetResource);
+					TArray<FRDGTextureRef, TInlineAllocator<4>> InputTextures;
+					for (FTextureRenderTargetResource* InputResource : Pass.InputResources)
+					{
+						if (InputResource != Pass.TargetResource)
+						{
+							InputTextures.Add(Textures.FindChecked(InputResource));
+						}
+					}
+					const bool bAddedComputePass = bUseCompute && MyAddComputeMaterialPass(
+						GraphBuilder,
+						TargetTexture,
+						InputTextures,
+						Pass.MaterialRenderProxy,
+						Pass.Extent,
+						Time,
+						FeatureLevel,
+						SceneInterface,
+						*Pass.Name);
+					if (!bAddedComputePass)
+					{
+						MyAddMaterialInputAccess(GraphBuilder, InputTextures, *Pass.Name);
+						MyAddMaterialPass(
+							GraphBuilder,
+							TargetTexture,
+							Pass.MaterialRenderProxy,
+							Pass.Extent,
+							Time,
+							FeatureLevel,
+							*Pass.Name);
+					}
+				}
+
+				for (const TPair<FTextureRenderTargetResource*, FRDGTextureRef>& Texture : Textures)
+				{
+					GraphBuilder.SetTextureAccessFinal(Texture.Value, ERHIAccess::SRVMask);
+				}
+			}
+			GraphBuilder.Execute();
+		});
+
+	for (UTextureRenderTarget2D* Target : TargetsWithGeneratedMips)
+	{
+		Target->UpdateResourceImmediate(false);
+	}
+	return true;
+}
+
+bool FMyNinjaFluidRenderPipeline::MyDrawMaterialCompute(
+	UObject* WorldContextObject,
+	UTextureRenderTarget2D* Target,
+	UMaterialInterface* Material,
+	TConstArrayView<UTextureRenderTarget2D*> Inputs)
+{
+	FMyNinjaFluidRDGPass Pass;
+	Pass.Target = Target;
+	Pass.Material = Material;
+	Pass.Name = IsValid(Material) ? Material->GetFName() : NAME_None;
+	Pass.Inputs.Append(Inputs);
+	return MyDrawUnifiedFluidStep(WorldContextObject, { Pass }, true);
 }
 
 bool FMyNinjaFluidRenderPipeline::MyUseRDGOutput()

@@ -126,6 +126,8 @@ void UMyNinjaLiveComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	MyRDGPressureTempComparisonTarget = nullptr;
 	MyMIPressureCycle1Comparison = nullptr;
 	MyMIPressureCycle2Comparison = nullptr;
+	MyMIPressureCycle1RDGSnapshots.Reset();
+	MyMIPressureCycle2RDGSnapshots.Reset();
 	MyRDGPainterComparisonTarget = nullptr;
 	MyRDGCompositeComparisonTarget = nullptr;
 	MyMICollisionPainterOffsetFirstPass = nullptr;

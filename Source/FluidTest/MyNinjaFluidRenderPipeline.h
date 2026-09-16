@@ -17,6 +17,14 @@ enum class EMyNinjaRDGDiffTarget : uint8
 	Composite
 };
 
+struct FMyNinjaFluidRDGPass
+{
+	UTextureRenderTarget2D* Target = nullptr;
+	UMaterialInterface* Material = nullptr;
+	TArray<UTextureRenderTarget2D*> Inputs;
+	FName Name;
+};
+
 class FMyNinjaFluidRenderPipeline
 {
 public:
@@ -34,6 +42,15 @@ public:
 	static bool MyShouldValidatePainter(uint64 FrameIndex);
 	static void MyPollOutputDiffs();
 	static void MyShutdown();
+	static bool MyDrawUnifiedFluidStep(
+		UObject* WorldContextObject,
+		const TArray<FMyNinjaFluidRDGPass>& Passes,
+		bool bUseCompute = false);
+	static bool MyDrawMaterialCompute(
+		UObject* WorldContextObject,
+		UTextureRenderTarget2D* Target,
+		UMaterialInterface* Material,
+		TConstArrayView<UTextureRenderTarget2D*> Inputs = {});
 	static void MyDrawOutput(
 		UObject* WorldContextObject,
 		UTextureRenderTarget2D* OutputTarget,

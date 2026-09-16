@@ -118,6 +118,8 @@
 - RDG Painter 管线第四阶段（2026-09-15）：双缓冲 `Painter → Composite → Painter → Composite` 三次绘制已合入同一个 RDG GraphBuilder，首 pass 使用独立 MID 参数快照保留世界偏移时序；默认仍保留 Legacy，独立 Painter 开关和双 RT/MID 对照支持双向 GPU 差分；RGBA16f 2048×2048 双向连续 118 帧均为零误差。
 - RDG 管线选择（2026-09-16）：组件新增 `MyRenderPipelineMode` 蓝图枚举，可按实例统一选择跟随控制台变量、Legacy 或 RDG；默认跟随控制台变量以保持现有行为。
 - RDG 性能复测（2026-09-16）：Standalone 稳态下 RDG 平均 14.280 ms、Legacy 13.698 ms、无模拟 12.197 ms；当前 RDG 相对 Legacy 回退 0.582 ms/帧，暂不替换默认路径。主要线索是 7 次/帧 `CanvasDrawTiles` 未减少，材质 pass 仍通过 `FCanvas` flush，且三组独立 Graph 与空 Raster barrier 增加额外边界；详见 `Docs/FluidNinjaLive-RDG-vs-Default-20260916.md`。
+- RDG 统一 Graph 结构修正（2026-09-16）：Output、Painter/Composite、Advection/Divergence 与 Pressure 全部迭代已合入单个 `FRDGBuilder`，统一外部纹理注册与资源刷新，压力迭代使用逐轮 MID 快照，材质输入依赖使用无 RenderTarget 的显式 SRV access pass；D3D12/SM6 + RDG Debug 连续 200 帧无错误。三组交错 CSV 配对的 Unified − Legacy 平均帧差中位数为 -0.059 ms，已基本消除旧回退但未达到快 0.3 ms 的门槛；7 次/帧 `CanvasDrawTiles` 仍在，默认继续 Legacy，下一阶段需迁移到 Global Shader/Compute。
+- Compute 双后端迁移（2026-09-16）：新增独立 `MySimulationBackend`（Material/Compute），默认 Material；`MyRenderPipelineMode` 继续只管理 Material 内的 Legacy/RDG。Compute 使用 `FMaterialShader` permutation 复用原材质图与 MID 参数，统一 RDG Graph 已覆盖 Painter/Composite、Advection/Divergence、Pressure、Collision Painter、外部 RT 导出和 Output，不支持 typed UAV 时自动回退 Material；核心与 Output 数值对照均为零误差，正式性能复测前不调整默认值。
 
 ## 常用操作
 

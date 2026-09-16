@@ -94,6 +94,14 @@ enum class EMyRenderPipelineMode : uint8
 
 
 UENUM(BlueprintType)
+enum class EMyFluidSimulationBackend : uint8
+{
+	Material = 0 UMETA(DisplayName = "Material"),
+	Compute = 1 UMETA(DisplayName = "Compute")
+};
+
+
+UENUM(BlueprintType)
 enum class EMySingleObjectType : uint8
 {
 	SkeletalMeshBone = 0 UMETA(DisplayName = "Skeletal Mesh Bone"),

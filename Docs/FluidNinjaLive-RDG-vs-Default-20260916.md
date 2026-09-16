@@ -210,3 +210,115 @@ Legacy 的 GPU `DrawMaterialToRenderTarget` 由于动态 metadata 被拆成大�
 | 是否切换默认路径 | **否，继续使用 Legacy** |
 | 下一轮首要目标 | 移除 pass 内 FCanvas，并合并成单个真实 RDG Graph |
 
+## 10. 统一 Graph 结构优化复测
+
+2026-09-16 已完成第一阶段结构修正：Output、Painter、Composite、Advection、Divergence 与全部 Pressure ping-pong 合并到单个 `FRDGBuilder`；外部纹理只注册一次，材质参数集合只统一刷新一次，稳态下不再重复执行无效的 RenderTarget 资源更新。压力迭代使用逐轮 MID 参数快照，保留原有参数时序；材质输入依赖改为不绑定 RenderTarget 的 `SkipRenderPass` 显式 SRV 访问 pass，避免旧空 Raster RenderPass，同时弥补 `FCanvas` 材质读取对 RDG 不可见的问题。验证开关打开时仍回退到原逐段双路径比较流程。
+
+验证结果：
+
+- `FluidTestEditor Win64 Development` 完整编译成功。
+- `FluidTest.NinjaLive` 两项自动化测试均通过。
+- D3D12/SM6、四个 RDG 开关同时启用、`r.RDG.Debug=1` 连续运行 200 帧，无 RDG 断言、资源访问错误或退出异常。
+- RenderOffscreen 1280×720 下交错采集 3 组 Unified / Legacy CSV；每轮 1000 帧，丢弃前 200 帧后取 750 帧。相邻配对的 Unified − Legacy 平均帧时间差分别为 **-0.699 ms、+0.424 ms、-0.059 ms**，中位数为 **-0.059 ms**；P95 差值中位数为 **-0.024 ms**，P99 为 **-0.114 ms**。
+
+这说明三组独立 Graph、重复资源更新与旧空 RenderPass 导致的明显回退已基本消除，但结果仍受运行顺序影响，且没有达到平均至少快 0.3 ms 的验收门槛。`CanvasDrawTiles` 仍约为 7 次/帧；当前实现只是统一了 Graph 与依赖管理，并未完成材质逻辑到 Global Shader / Compute 的迁移，因此默认路径继续保持 Legacy。下一阶段应直接消除每个材质 pass 内的 `FCanvas`，不再继续微调 Canvas 外层包装。
+
+## 11. Material / Compute 双后端迁移
+
+2026-09-16 已新增独立的 `MySimulationBackend` 实例选项，包含 `Material` 与 `Compute` 两种模式，默认保持 `Material`。原有 `MyRenderPipelineMode` 继续只控制 Material 后端内部的 Legacy / RDG 选择，因此现有实现、现有控制台变量和回退路径均被保留，两个选项不会混用。
+
+Compute 后端使用 `FMaterialShader` Compute permutation 直接编译现有 Fluid 材质表达式，继续复用原材质的 Material Function、静态开关、纹理参数和 MID 参数。这样无需手工维护另一份约 600 节点的 HLSL 实现，同时移除了模拟 pass 内的 `FCanvas`。核心 `PainterOffsetFirst → PainterOffsetSecond → CompositeAndGradient → Advection → Divergence → PressureCycle1/2` 运行在同一个 RDG Compute Graph 中；Collision Painter Line/Dot、外部 RT 导出和 Output 也已接入 Compute。目标格式不支持所需 typed UAV load/store，或材质缺少 Compute permutation 时，会自动回退到原 Material raster 绘制。
+
+为支持独立 Graph 中可能由 Output 材质隐式请求的全局场景纹理，Compute pass 在创建 `SceneTexturesStruct` 前初始化 `FRDGSystemTextures`。RenderTarget 创建同时启用 UAV，Compute shader 按原材质 BlendMode 复现 Opaque、Translucent 与 Additive 写入语义，并保持 PostProcess/不透明材质的 Alpha 与 Canvas 路径一致。
+
+验证结果：
+
+- `FluidTestEditor Win64 Development` 完整编译成功，七个实际 Fluid 材质的 Compute permutation 均成功编译。
+- 干净编辑器进程中确认 PainterOffsetFirst、PainterOffsetSecond、CompositeAndGradient、Advection、Divergence、PressureCycle1、PressureCycle2、CollisionPainter Line、CollisionPainter Dot 与 Output 实际进入 Compute，未发生 fallback。
+- Composite、Advection、Painter 各抽检 262,144 像素，RGBA 最大误差均为 0；2048×2048 的 PressureDivergence 与 PressureDivergenceTemp 全图导出差异为 0。
+- Output 在 512×512 下对 Material 与 Compute 做 262,144 像素 raw readback，RGBA 最大误差为 `(0, 0, 0, 0)`，超出 `1e-5` 的像素为 0。
+- `FluidTest.NinjaLive.CachedMaterialParameters` 与 `FluidTest.NinjaLive.TempArraySlots` 自动化测试均通过。
+
+当前结论是迁移所需的双后端结构与数值一致性已经建立，但尚未完成 Compute 相对 Material 的正式稳态性能复测。因此默认后端仍为 `Material`；可在实例上把 `MySimulationBackend` 切到 `Compute` 做后续 A/B 性能采集，确认收益后再讨论是否调整默认值。
+
+## 12. Compute / Material / 无效果 Trace 复测
+
+2026-09-16 18:08–18:09 新增三份 Trace，继续使用 `ShallowWater_Enter` / `ShallowWater_Exit` Bookmark，并从区间首尾各裁掉 1 秒。身份不是按文件顺序猜测，而是由 Trace 事件确认：
+
+| 模式 | Trace | 身份依据 | 稳态窗口 | 帧数 |
+|---|---|---|---:|---:|
+| 优化后 Compute | `20260916_180830_3E6890.utrace` | 存在 `FluidTest.NinjaLive.UnifiedFluidStep`，`CanvasDrawTiles` 为 0 | 42.179–46.187 s | 301 |
+| 优化前 Material | `20260916_180910_2A6B60.utrace` | 每帧 7 次 `CanvasDrawTiles`、7 次 `DrawMaterialToRenderTarget` | 19.996–24.454 s | 351 |
+| 无效果基线 | `20260916_180945_0D9490.utrace` | 不存在 Fluid / NinjaLive 模拟事件 | 17.725–21.168 s | 292 |
+
+### 12.1 稳态帧时间
+
+| 指标 | Compute | Material | 无效果 |
+|---|---:|---:|---:|
+| 平均帧时间 | **13.244 ms** | 12.664 ms | 11.706 ms |
+| P50 | **13.072 ms** | 12.501 ms | 11.529 ms |
+| P95 | **15.000 ms** | 14.628 ms | 13.415 ms |
+| P99 | **15.614 ms** | 15.278 ms | 14.497 ms |
+| 最大值 | 16.183 ms | 15.844 ms | 15.434 ms |
+| 推算平均 FPS | **75.51** | 78.96 | 85.43 |
+| 超过 20 ms | 0 | 0 | 0 |
+
+Compute 相对 Material：
+
+| 指标 | 差值 | 相对变化 |
+|---|---:|---:|
+| 平均帧时间 | **+0.579 ms** | **+4.57%** |
+| P50 | +0.571 ms | +4.57% |
+| P95 | +0.371 ms | +2.54% |
+| P99 | +0.336 ms | +2.20% |
+| 平均 FPS | **-3.45 FPS** | -4.37% |
+
+模拟相对无效果基线：
+
+| 指标 | Material 增量 | Compute 增量 |
+|---|---:|---:|
+| 平均帧时间 | **+0.958 ms** | **+1.538 ms** |
+| P50 | +0.973 ms | +1.543 ms |
+| P95 | +1.213 ms | +1.585 ms |
+| P99 | +0.781 ms | +1.117 ms |
+| 平均 FPS | -6.46 FPS | -9.92 FPS |
+
+这一轮 Compute 的平均、P50、P95、P99 全部慢于 Material，方向一致，不能解释为单个离群帧。它也没有达到上一轮建议的“相对 Material 至少降低 0.3 ms/帧”验收线；实际结果反向回退 0.579 ms/帧。
+
+### 12.2 CPU 收益确实存在
+
+下表将每个 scope 在同一帧内的所有实例求和，再按稳态帧数归一化：
+
+| CPU Scope | Compute 平均/帧 | Material 平均/帧 | 变化 |
+|---|---:|---:|---:|
+| `NinjaLiveComponent` | **0.311 ms** | 0.364 ms | **-0.053 ms（-14.6%）** |
+| `FluidSim_MyCoreFluidsimOPs` | **0.164 ms** | 0.202 ms | **-0.038 ms（-18.8%）** |
+| `CanvasDrawTiles` | **0 ms** | 1.103 ms | **-1.103 ms** |
+| `DrawMaterialToRenderTarget` | **0 ms** | 0.087 ms | **-0.087 ms** |
+| `FluidTest.NinjaLive.UnifiedFluidStep` | 0.319 ms | 不存在 | Compute 每帧 3 个记录实例 |
+
+因此 Compute 后端已经完成上一轮最重要的 CPU 目标：7 次/帧 Canvas 绘制及其 Kismet 包装全部消失。`NinjaLiveComponent` 与核心模拟 CPU scope 也分别下降约 15% 和 19%。`UnifiedFluidStep` 与其他 scope 可能嵌套或跨线程，不能与表中其他行直接相加；这里只把它作为 Compute 路径已生效的身份和成本证据。
+
+### 12.3 回退来自 GPU / RenderThread 等待链
+
+| 等待/渲染 Scope 平均/帧 | Compute | Material | 无效果 |
+|---|---:|---:|---:|
+| `GPUBound_WaitingForGPUForOcclusionQueries_SeeGPUTrack` | **7.745 ms** | 5.571 ms | 6.583 ms |
+| `FDeferredShadingSceneRenderer_Render` | **10.594 ms** | 8.481 ms | 9.471 ms |
+| `GameThreadWaitForTask` | **10.291 ms** | 9.676 ms | 9.007 ms |
+
+Compute 相对 Material 的 GPU 等待平均增加 **2.175 ms**，RenderThread inclusive 时间增加 **2.113 ms**，最终传导为 GameThread 等待增加 **0.615 ms**，与整帧回退 **0.579 ms** 基本一致。三路最慢稳态帧也都由可见性任务、遮挡查询 GPU 等待和 RHI 提交等待主导，而不是 GameThread 计算热点。
+
+Compute Trace 的 GPU digest 中，`FluidTest.NinjaLive.UnifiedFluidStep` 共 1,810 次，单次平均 **1.641 ms**、P95 **1.643 ms**。该 GPU scope 是全 Trace 聚合而非 Bookmark 窗口值，不能与帧差严格相减，但它与 Compute 相对无效果的整帧增量 **1.538 ms** 数量级一致，是当前最强的 GPU 归因证据。
+
+### 12.4 判定与下一步
+
+本轮结论是：**Compute 后端消除了 Canvas CPU 成本，但 GPU 代价抵消并超过 CPU 收益；当前版本仍不应切为默认后端。** Material 相对无效果的持续成本约 0.96 ms/帧，Compute 约 1.54 ms/帧。
+
+下一步优先级：
+
+1. 在 `UnifiedFluidStep` 内为 Painter、Composite、Advection、Divergence、每轮 Pressure、RT 导出分别增加 GPU scope，直接定位 1.64 ms 的构成。
+2. 检查 Compute pass 是否都落在预期队列、是否存在不必要的 UAV barrier、外部 RT 拷贝/导出或串行化；不要再投入 Canvas CPU 外层微调。
+3. Shader 预热后按 Compute → Material → 无效果 → Material → Compute 的顺序交错采集，每种至少 3 轮，以相邻配对差值的中位数验收。当前每种只有一份、录制顺序固定，足以判定本次 Trace 没有显示收益，但不足以量化小于约 0.3 ms 的稳定差异。
+
+Trace 质量说明：三份都包含 CPU、GPU、Frame、Bookmark、RDG 与 RHICommands。Material/无效果 Trace 的解析日志有未启用 MemAlloc provider 的 tag 错误，和本轮 CPU/GPU/Frame 结论无关；无效果 Trace 另有最大约 0.2 ms 的 GPU 时间线交错警告，因此没有用其中的单个 GPU 事件做直接归因。

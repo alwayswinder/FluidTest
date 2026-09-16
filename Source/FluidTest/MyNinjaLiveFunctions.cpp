@@ -101,7 +101,7 @@ UTextureRenderTarget2D* UMyNinjaLiveFunctions::MyCreateRenderTarget(
 		Format,
 		FLinearColor::Black,
 		false,
-		false);
+		true);
 
 	if (!IsValid(RTout))
 	{

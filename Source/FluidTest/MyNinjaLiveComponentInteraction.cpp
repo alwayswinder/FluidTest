@@ -14,7 +14,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetMaterialLibrary.h"
-#include "Kismet/KismetRenderingLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
@@ -97,7 +96,7 @@ void UMyNinjaLiveComponent::MyPaintLine()
 	const TObjectPtr<UTextureRenderTarget2D>* PainterRT = MyRenderTargetsMap.Find(TEXT("RT_Painter"));
 	if (PainterRT && IsValid(PainterRT->Get()) && IsValid(MyMICollisionPainterLine))
 	{
-		UKismetRenderingLibrary::DrawMaterialToRenderTarget(this, PainterRT->Get(), MyMICollisionPainterLine);
+		MyDrawFluidMaterialToRenderTarget(PainterRT->Get(), MyMICollisionPainterLine);
 	}
 
 	for (UMaterialInstanceDynamic* PainterMaterial : {

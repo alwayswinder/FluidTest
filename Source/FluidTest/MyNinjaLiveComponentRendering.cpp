@@ -106,6 +106,23 @@ void UMyNinjaLiveComponent::MySetAdditionalFluidsimParams()
 	}
 }
 
+void UMyNinjaLiveComponent::MyDrawFluidMaterialToRenderTarget(
+	UTextureRenderTarget2D* Target,
+	UMaterialInterface* Material,
+	TConstArrayView<UTextureRenderTarget2D*> Inputs)
+{
+	if (!IsValid(Target) || !IsValid(Material))
+	{
+		return;
+	}
+	if (MySimulationBackend == EMyFluidSimulationBackend::Compute &&
+		FMyNinjaFluidRenderPipeline::MyDrawMaterialCompute(this, Target, Material, Inputs))
+	{
+		return;
+	}
+	UKismetRenderingLibrary::DrawMaterialToRenderTarget(this, Target, Material);
+}
+
 void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exec)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(FluidSim_MyCoreFluidsimOPs);
@@ -113,12 +130,13 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 
 	ThenExec = false;
 	PainterV2Exec = true;
+	const bool bUseCompute = MySimulationBackend == EMyFluidSimulationBackend::Compute;
 	const bool bOutputRequired =
 		MyMake1stOutputAvailableFor2ndOutput || MyMake1stOutputAvailableForNiagara;
-	const bool bValidateOutput = FMyNinjaFluidRenderPipeline::MyIsOutputValidationEnabled();
-	const bool bValidateCore = FMyNinjaFluidRenderPipeline::MyIsCoreValidationEnabled();
-	const bool bValidatePressure = FMyNinjaFluidRenderPipeline::MyIsPressureValidationEnabled();
-	const bool bValidatePainter = FMyNinjaFluidRenderPipeline::MyIsPainterValidationEnabled();
+	const bool bValidateOutput = !bUseCompute && FMyNinjaFluidRenderPipeline::MyIsOutputValidationEnabled();
+	const bool bValidateCore = !bUseCompute && FMyNinjaFluidRenderPipeline::MyIsCoreValidationEnabled();
+	const bool bValidatePressure = !bUseCompute && FMyNinjaFluidRenderPipeline::MyIsPressureValidationEnabled();
+	const bool bValidatePainter = !bUseCompute && FMyNinjaFluidRenderPipeline::MyIsPainterValidationEnabled();
 	const auto ResolveRDGMode = [this](bool bConsoleVariableValue)
 	{
 		switch (MyRenderPipelineMode)
@@ -143,10 +161,7 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 	};
 	auto Draw = [this](UTextureRenderTarget2D* Target, UMaterialInterface* Material)
 	{
-		if (IsValid(Target) && IsValid(Material))
-		{
-			UKismetRenderingLibrary::DrawMaterialToRenderTarget(this, Target, Material);
-		}
+		MyDrawFluidMaterialToRenderTarget(Target, Material);
 	};
 	UTextureRenderTarget2D* const CompositeTarget = FindRenderTarget(TEXT("RT_Composite"));
 	UTextureRenderTarget2D* const AdvectionTarget = FindRenderTarget(TEXT("RT_Advection"));
@@ -155,6 +170,53 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 	UTextureRenderTarget2D* const PressureTempTarget = FindRenderTarget(TEXT("RT_PressureDivergenceTemp"));
 	UTextureRenderTarget2D* const DensityInputTarget = FindRenderTarget(TEXT("RT_DensityInputMaterial"));
 	UTextureRenderTarget2D* OutputTarget = FindRenderTarget(TEXT("RT_Output"));
+	const int32 Solver1Iterations = MyLOD1ReduceSimQuality
+		? FMath::Min(MyFluidSolver1Iterations, MyPressureSolver1MaxIterations)
+		: MyPressureSolver1MaxIterations;
+	const int32 LastIteration = MyUsePressureSolver1DefaultIs2
+		? FMath::Max(Solver1Iterations - 2, 0)
+		: MyPressureSolver2MaxIterations - 1;
+	TArray<FMyNinjaFluidRDGPass> UnifiedPasses;
+	bool bUseUnifiedPipeline =
+		!MySimplePainterMode &&
+		(bUseCompute ||
+			(bUseRDGCore && bUseRDGPressure &&
+				(!bOutputRequired || bUseRDGOutput) &&
+				(!MyEnablePainterDoubleBuffering || bUseRDGPainter))) &&
+		!bValidateOutput && !bValidateCore && !bValidatePressure && !bValidatePainter &&
+		IsValid(CompositeTarget) && IsValid(AdvectionTarget) && IsValid(PainterTarget) &&
+		IsValid(PressureTarget) && IsValid(PressureTempTarget) &&
+		IsValid(MyMICompositeAndGradient) && IsValid(MyMIAdvection) && IsValid(MyMIDivergence) &&
+		IsValid(MyMIPressureCycle1) && IsValid(MyMIPressureCycle2) &&
+		(!MyEnablePainterDoubleBuffering || IsValid(MyMICollisionPainterOffset)) &&
+		(!bOutputRequired || (IsValid(OutputTarget) && IsValid(MyMIOutput)));
+	if (bUseUnifiedPipeline)
+	{
+		const int32 SnapshotCount = FMath::Max(LastIteration + 1, 0);
+		MyMIPressureCycle1RDGSnapshots.SetNum(SnapshotCount);
+		MyMIPressureCycle2RDGSnapshots.SetNum(SnapshotCount);
+		auto EnsureSnapshots = [this, SnapshotCount](
+			TArray<TObjectPtr<UMaterialInstanceDynamic>>& Snapshots,
+			UMaterialInstanceDynamic* Source)
+		{
+			UMaterialInterface* Parent = IsValid(Source->Parent) ? Source->Parent.Get() : Source;
+			for (int32 Index = 0; Index < SnapshotCount; ++Index)
+			{
+				if (!IsValid(Snapshots[Index]) || Snapshots[Index]->Parent != Parent)
+				{
+					Snapshots[Index] = UMaterialInstanceDynamic::Create(Parent, this);
+				}
+			}
+		};
+		EnsureSnapshots(MyMIPressureCycle1RDGSnapshots, MyMIPressureCycle1);
+		EnsureSnapshots(MyMIPressureCycle2RDGSnapshots, MyMIPressureCycle2);
+		for (int32 Index = 0; Index < SnapshotCount; ++Index)
+		{
+			bUseUnifiedPipeline = bUseUnifiedPipeline &&
+				IsValid(MyMIPressureCycle1RDGSnapshots[Index]) &&
+				IsValid(MyMIPressureCycle2RDGSnapshots[Index]);
+		}
+	}
 	if (!bValidateCore)
 	{
 		MyRDGAdvectionComparisonTarget = nullptr;
@@ -293,7 +355,7 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 
 	if (MyEnablePainterDoubleBuffering && IsValid(MyMICollisionPainterOffset))
 	{
-		if ((!bUseRDGPainter && !bValidatePainter) ||
+		if ((!bUseUnifiedPipeline && !bUseRDGPainter && !bValidatePainter) ||
 			!IsValid(PainterTarget) || !IsValid(CompositeTarget) ||
 			(!MySimplePainterMode && !IsValid(MyMICompositeAndGradient)))
 		{
@@ -457,14 +519,38 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 					}
 				}
 
-				FMyNinjaFluidRenderPipeline::MyDrawPainterComposite(
-					this,
-					PainterTarget,
-					CompositeTarget,
-					MyMICollisionPainterOffsetFirstPass,
-					MyMICollisionPainterOffset,
-					MySimplePainterMode ? nullptr : MyMICompositeAndGradient.Get(),
-					bUseRDGPainter);
+				if (bUseUnifiedPipeline)
+				{
+					UnifiedPasses.Add({
+						CompositeTarget,
+						MyMICollisionPainterOffsetFirstPass,
+						{ PainterTarget },
+						TEXT("PainterOffsetFirst") });
+					UnifiedPasses.Add({
+						PainterTarget,
+						MyMICollisionPainterOffset,
+						{ CompositeTarget },
+						TEXT("PainterOffsetSecond") });
+					if (!MySimplePainterMode)
+					{
+						UnifiedPasses.Add({
+							CompositeTarget,
+							MyMICompositeAndGradient,
+							{ PainterTarget, AdvectionTarget, PressureTarget },
+							TEXT("CompositeAndGradient") });
+					}
+				}
+				else
+				{
+					FMyNinjaFluidRenderPipeline::MyDrawPainterComposite(
+						this,
+						PainterTarget,
+						CompositeTarget,
+						MyMICollisionPainterOffsetFirstPass,
+						MyMICollisionPainterOffset,
+						MySimplePainterMode ? nullptr : MyMICompositeAndGradient.Get(),
+						bUseRDGPainter);
+				}
 				if (bValidatePainterFrame)
 				{
 					FMyNinjaFluidRenderPipeline::MyDrawPainterComposite(
@@ -489,7 +575,18 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 	}
 	else if (!MySimplePainterMode)
 	{
-		Draw(CompositeTarget, MyMICompositeAndGradient);
+		if (bUseUnifiedPipeline)
+		{
+			UnifiedPasses.Add({
+				CompositeTarget,
+				MyMICompositeAndGradient,
+				{ PainterTarget, AdvectionTarget, PressureTarget },
+				TEXT("CompositeAndGradient") });
+		}
+		else
+		{
+			Draw(CompositeTarget, MyMICompositeAndGradient);
+		}
 	}
 
 
@@ -518,14 +615,25 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 			}
 			ComparisonTarget = MyRDGOutputComparisonTarget;
 		}
-		FMyNinjaFluidRenderPipeline::MyDrawOutput(
-			this,
-			OutputTarget,
-			MyMIOutput,
-			ComparisonTarget,
-			this,
-			OutputFrameIndex,
-			bUseRDGOutput);
+		if (bUseUnifiedPipeline)
+		{
+			UnifiedPasses.Add({
+				OutputTarget,
+				MyMIOutput,
+				{ CompositeTarget, PressureTarget, PressureTempTarget, PainterTarget },
+				TEXT("Output") });
+		}
+		else
+		{
+			FMyNinjaFluidRenderPipeline::MyDrawOutput(
+				this,
+				OutputTarget,
+				MyMIOutput,
+				ComparisonTarget,
+				this,
+				OutputFrameIndex,
+				bUseRDGOutput);
+		}
 	}
 
 	if (!MySimplePainterMode)
@@ -567,26 +675,36 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 			ComparisonDivergenceMaterial = MyMIDivergence;
 		}
 
-		FMyNinjaFluidRenderPipeline::MyDrawAdvectionDivergence(
-			this,
-			AdvectionTarget,
-			MyMIAdvection,
-			PressureTarget,
-			MyMIDivergence,
-			ComparisonAdvectionTarget,
-			ComparisonAdvectionMaterial,
-			ComparisonDivergenceTarget,
-			ComparisonDivergenceMaterial,
-			this,
-			CoreFrameIndex,
-			bUseRDGCore);
+		if (bUseUnifiedPipeline)
+		{
+			UnifiedPasses.Add({
+				AdvectionTarget,
+				MyMIAdvection,
+				{ CompositeTarget },
+				TEXT("Advection") });
+			UnifiedPasses.Add({
+				PressureTarget,
+				MyMIDivergence,
+				{ AdvectionTarget, PainterTarget },
+				TEXT("Divergence") });
+		}
+		else
+		{
+			FMyNinjaFluidRenderPipeline::MyDrawAdvectionDivergence(
+				this,
+				AdvectionTarget,
+				MyMIAdvection,
+				PressureTarget,
+				MyMIDivergence,
+				ComparisonAdvectionTarget,
+				ComparisonAdvectionMaterial,
+				ComparisonDivergenceTarget,
+				ComparisonDivergenceMaterial,
+				this,
+				CoreFrameIndex,
+				bUseRDGCore);
+		}
 
-		const int32 Solver1Iterations = MyLOD1ReduceSimQuality
-			? FMath::Min(MyFluidSolver1Iterations, MyPressureSolver1MaxIterations)
-			: MyPressureSolver1MaxIterations;
-		const int32 LastIteration = MyUsePressureSolver1DefaultIs2
-			? FMath::Max(Solver1Iterations - 2, 0)
-			: MyPressureSolver2MaxIterations - 1;
 		const uint64 PressureFrameIndex = MyRDGPressureFrameIndex++;
 		bool bValidatePressureFrame =
 			FMyNinjaFluidRenderPipeline::MyShouldValidatePressure(PressureFrameIndex) &&
@@ -676,13 +794,37 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 					TEXT("Texture"), MyRDGPressureTempComparisonTarget);
 			}
 
-			FMyNinjaFluidRenderPipeline::MyDrawPressurePair(
-				this,
-				PressureTarget,
-				PressureTempTarget,
-				MyMIPressureCycle1,
-				MyMIPressureCycle2,
-				bUseRDGPressure);
+			if (bUseUnifiedPipeline)
+			{
+				UMaterialInstanceDynamic* PressureCycle1Snapshot =
+					MyMIPressureCycle1RDGSnapshots[Iteration];
+				UMaterialInstanceDynamic* PressureCycle2Snapshot =
+					MyMIPressureCycle2RDGSnapshots[Iteration];
+				PressureCycle1Snapshot->CopyParameterOverrides(MyMIPressureCycle1);
+				PressureCycle1Snapshot->SetTextureParameterValue(TEXT("Texture"), PressureTarget);
+				PressureCycle2Snapshot->CopyParameterOverrides(MyMIPressureCycle2);
+				PressureCycle2Snapshot->SetTextureParameterValue(TEXT("Texture"), PressureTempTarget);
+				UnifiedPasses.Add({
+					PressureTempTarget,
+					PressureCycle1Snapshot,
+					{ PressureTarget },
+					TEXT("PressureCycle1") });
+				UnifiedPasses.Add({
+					PressureTarget,
+					PressureCycle2Snapshot,
+					{ PressureTempTarget },
+					TEXT("PressureCycle2") });
+			}
+			else
+			{
+				FMyNinjaFluidRenderPipeline::MyDrawPressurePair(
+					this,
+					PressureTarget,
+					PressureTempTarget,
+					MyMIPressureCycle1,
+					MyMIPressureCycle2,
+					bUseRDGPressure);
+			}
 			if (bValidatePressureFrame)
 			{
 				FMyNinjaFluidRenderPipeline::MyDrawPressurePair(
@@ -716,6 +858,13 @@ void UMyNinjaLiveComponent::MyCoreFluidsimOPs(bool& ThenExec, bool& PainterV2Exe
 				bUseRDGPressure ? PressureTempTarget : MyRDGPressureTempComparisonTarget.Get(),
 				this,
 				PressureFrameIndex);
+		}
+		if (bUseUnifiedPipeline)
+		{
+			ensure(FMyNinjaFluidRenderPipeline::MyDrawUnifiedFluidStep(
+				this,
+				UnifiedPasses,
+				bUseCompute));
 		}
 
 		ThenExec = true;
@@ -1131,7 +1280,7 @@ void UMyNinjaLiveComponent::MyFinalDealRTAndBrush()
 		const TObjectPtr<UTextureRenderTarget2D>* PainterRT = MyRenderTargetsMap.Find(TEXT("RT_Painter"));
 		if (PainterRT && IsValid(PainterRT->Get()) && IsValid(MyMICollisionPainterDot))
 		{
-			UKismetRenderingLibrary::DrawMaterialToRenderTarget(this, PainterRT->Get(), MyMICollisionPainterDot);
+			MyDrawFluidMaterialToRenderTarget(PainterRT->Get(), MyMICollisionPainterDot);
 		}
 	}
 
@@ -1199,8 +1348,7 @@ void UMyNinjaLiveComponent::MyDrawInternalRenderTargetToExternal()
 
 		if (IsValid(SourceMaterial))
 		{
-			UKismetRenderingLibrary::DrawMaterialToRenderTarget(
-				this, MyExternalRenderTargets[Index], SourceMaterial);
+			MyDrawFluidMaterialToRenderTarget(MyExternalRenderTargets[Index], SourceMaterial);
 		}
 	}
 }
@@ -1371,6 +1519,8 @@ void UMyNinjaLiveComponent::MyCreateDynamicMaterialInstances()
 	MyDivergenceScalarParameterIndices.Reset();
 	MyMIPressureCycle1Comparison = nullptr;
 	MyMIPressureCycle2Comparison = nullptr;
+	MyMIPressureCycle1RDGSnapshots.Reset();
+	MyMIPressureCycle2RDGSnapshots.Reset();
 	MyMICollisionPainterOffsetFirstPass = nullptr;
 	MyMICollisionPainterOffsetComparisonFirstPass = nullptr;
 	MyMICollisionPainterOffsetComparisonSecondPass = nullptr;
